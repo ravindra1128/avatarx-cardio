@@ -1,0 +1,686 @@
+{
+ "WATERMARK": "VASCULAR MORPHOLOGY \u2014 RESEARCH ARTIFACT \u2014 NOT A MEASUREMENT",
+ "run_id": "fid-6b563550c01b",
+ "evidence": {
+  "fidelity_data": {
+   "signal_domain": "synthetic",
+   "participant_disjoint": true,
+   "session_disjoint": true,
+   "production_path": false,
+   "n_recordings": 7,
+   "dataset_dir": "/private/tmp/claude-501/-Users-pg-Documents-AvatarX-code-afib/971031ba-40cf-4fe6-95e6-4d8f5ff48e94/scratchpad/vascular_fixture_ds2"
+  },
+  "v0": {
+   "n_paired_participants": 6,
+   "per_feature": {
+    "rise_time_s": {
+     "n_participants": 6,
+     "n_recordings": 7,
+     "icc": 0.8671879889270793,
+     "bias": 0.001,
+     "loa_lower": -0.023,
+     "loa_upper": 0.025,
+     "n": 6,
+     "n_retest_pairs": 1,
+     "retest_icc": null,
+     "survives": false
+    },
+    "norm_upstroke_slope": {
+     "n_participants": 6,
+     "n_recordings": 7,
+     "icc": 0.4807417714454117,
+     "bias": -0.806,
+     "loa_lower": -1.6,
+     "loa_upper": -0.012,
+     "n": 6,
+     "n_retest_pairs": 1,
+     "retest_icc": null,
+     "survives": false
+    },
+    "pulse_width50_s": {
+     "n_participants": 6,
+     "n_recordings": 7,
+     "icc": 0.6947961407864446,
+     "bias": 0.015,
+     "loa_lower": 0.001,
+     "loa_upper": 0.028,
+     "n": 6,
+     "n_retest_pairs": 1,
+     "retest_icc": null,
+     "survives": false
+    },
+    "notch_present": {
+     "n_participants": 6,
+     "n_recordings": 7,
+     "icc": -3.58931634414363e-15,
+     "bias": -0.011,
+     "loa_lower": -0.049,
+     "loa_upper": 0.026,
+     "n": 6,
+     "n_retest_pairs": 1,
+     "retest_icc": null,
+     "survives": false
+    },
+    "notch_rel_amp": {
+     "n_participants": 6,
+     "n_recordings": 7,
+     "icc": 0.18025022074520666,
+     "bias": 0.069,
+     "loa_lower": 0.025,
+     "loa_upper": 0.112,
+     "n": 6,
+     "n_retest_pairs": 1,
+     "retest_icc": null,
+     "survives": false
+    },
+    "notch_time_frac": {
+     "n_participants": 6,
+     "n_recordings": 7,
+     "icc": 0.6728340515560798,
+     "bias": 0.003,
+     "loa_lower": -0.027,
+     "loa_upper": 0.033,
+     "n": 6,
+     "n_retest_pairs": 1,
+     "retest_icc": null,
+     "survives": false
+    },
+    "reflection_index": {
+     "n_participants": 6,
+     "n_recordings": 7,
+     "icc": 0.7668078262339392,
+     "bias": 0.045,
+     "loa_lower": 0.015,
+     "loa_upper": 0.076,
+     "n": 6,
+     "n_retest_pairs": 1,
+     "retest_icc": null,
+     "survives": false
+    },
+    "sdppg_b_over_a": {
+     "n_participants": 6,
+     "n_recordings": 7,
+     "icc": 0.45090795583378024,
+     "bias": -0.049,
+     "loa_lower": -1.131,
+     "loa_upper": 1.033,
+     "n": 6,
+     "n_retest_pairs": 1,
+     "retest_icc": null,
+     "survives": false
+    },
+    "sdppg_c_over_a": {
+     "n_participants": 2,
+     "n_recordings": 7,
+     "icc": null,
+     "n_retest_pairs": 1,
+     "retest_icc": null,
+     "survives": false
+    },
+    "sdppg_d_over_a": {
+     "n_participants": 2,
+     "n_recordings": 7,
+     "icc": null,
+     "n_retest_pairs": 1,
+     "retest_icc": null,
+     "survives": false
+    },
+    "sdppg_e_over_a": {
+     "n_participants": 2,
+     "n_recordings": 7,
+     "icc": null,
+     "n_retest_pairs": 1,
+     "retest_icc": null,
+     "survives": false
+    }
+   },
+   "surviving": [],
+   "strata": {
+    "fitzpatrick_group": {
+     "2": {
+      "n_recordings": 3,
+      "n_participants": 2,
+      "note": "under 3 participants \u2014 reported for coverage, no agreement statistic"
+     },
+     "3": {
+      "n_recordings": 1,
+      "n_participants": 1,
+      "note": "under 3 participants \u2014 reported for coverage, no agreement statistic"
+     },
+     "4": {
+      "n_recordings": 1,
+      "n_participants": 1,
+      "note": "under 3 participants \u2014 reported for coverage, no agreement statistic"
+     },
+     "5": {
+      "n_recordings": 1,
+      "n_participants": 1,
+      "note": "under 3 participants \u2014 reported for coverage, no agreement statistic"
+     },
+     "None": {
+      "n_recordings": 1,
+      "n_participants": 1,
+      "note": "under 3 participants \u2014 reported for coverage, no agreement statistic"
+     }
+    },
+    "device_label": {
+     "None": {
+      "n_recordings": 1,
+      "n_participants": 1,
+      "note": "under 3 participants \u2014 reported for coverage, no agreement statistic"
+     },
+     "rig-1": {
+      "n_recordings": 4,
+      "n_participants": 3,
+      "per_feature": {
+       "rise_time_s": {
+        "n_participants": 3,
+        "n_recordings": 4,
+        "icc": 0.8068889004765314,
+        "bias": 0.002,
+        "loa_lower": -0.035,
+        "loa_upper": 0.038,
+        "n": 3,
+        "n_retest_pairs": 1,
+        "retest_icc": null
+       },
+       "norm_upstroke_slope": {
+        "n_participants": 3,
+        "n_recordings": 4,
+        "icc": 0.6043812430653229,
+        "bias": -0.665,
+        "loa_lower": -1.586,
+        "loa_upper": 0.256,
+        "n": 3,
+        "n_retest_pairs": 1,
+        "retest_icc": null
+       },
+       "pulse_width50_s": {
+        "n_participants": 3,
+        "n_recordings": 4,
+        "icc": 0.7815565252288794,
+        "bias": 0.013,
+        "loa_lower": -0.006,
+        "loa_upper": 0.031,
+        "n": 3,
+        "n_retest_pairs": 1,
+        "retest_icc": null
+       },
+       "notch_present": {
+        "n_participants": 3,
+        "n_recordings": 4,
+        "icc": -1.5742615544489554e-16,
+        "bias": -0.015,
+        "loa_lower": -0.067,
+        "loa_upper": 0.036,
+        "n": 3,
+        "n_retest_pairs": 1,
+        "retest_icc": null
+       },
+       "notch_rel_amp": {
+        "n_participants": 3,
+        "n_recordings": 4,
+        "icc": 0.22275720748013225,
+        "bias": 0.064,
+        "loa_lower": 0.043,
+        "loa_upper": 0.084,
+        "n": 3,
+        "n_retest_pairs": 1,
+        "retest_icc": null
+       },
+       "notch_time_frac": {
+        "n_participants": 3,
+        "n_recordings": 4,
+        "icc": 0.6337715312607369,
+        "bias": 0.003,
+        "loa_lower": -0.037,
+        "loa_upper": 0.043,
+        "n": 3,
+        "n_retest_pairs": 1,
+        "retest_icc": null
+       },
+       "reflection_index": {
+        "n_participants": 3,
+        "n_recordings": 4,
+        "icc": 0.7473871655564387,
+        "bias": 0.051,
+        "loa_lower": 0.009,
+        "loa_upper": 0.094,
+        "n": 3,
+        "n_retest_pairs": 1,
+        "retest_icc": null
+       },
+       "sdppg_b_over_a": {
+        "n_participants": 3,
+        "n_recordings": 4,
+        "icc": 0.6578950695712971,
+        "bias": 0.256,
+        "loa_lower": -0.911,
+        "loa_upper": 1.422,
+        "n": 3,
+        "n_retest_pairs": 1,
+        "retest_icc": null
+       },
+       "sdppg_c_over_a": {
+        "n_participants": 2,
+        "n_recordings": 4,
+        "icc": null,
+        "n_retest_pairs": 1,
+        "retest_icc": null
+       },
+       "sdppg_d_over_a": {
+        "n_participants": 2,
+        "n_recordings": 4,
+        "icc": null,
+        "n_retest_pairs": 1,
+        "retest_icc": null
+       },
+       "sdppg_e_over_a": {
+        "n_participants": 2,
+        "n_recordings": 4,
+        "icc": null,
+        "n_retest_pairs": 1,
+        "retest_icc": null
+       }
+      }
+     },
+     "rig-2": {
+      "n_recordings": 2,
+      "n_participants": 2,
+      "note": "under 3 participants \u2014 reported for coverage, no agreement statistic"
+     }
+    }
+   }
+  }
+ },
+ "gates": [
+  {
+   "gate": "v0",
+   "title": "V0 \u2014 signal fidelity (facial vs contact reference)",
+   "status": "RED",
+   "reasons": [
+    "evidence domain 'synthetic' is not 'facial_rppg' \u2014 machinery evidence only, can never open a gate",
+    "evidence is not production-path",
+    "6 paired participants < 60",
+    "only 0 feature(s) met ICC >= 0.75 and retest ICC >= 0.7 (< 1) \u2014 no morphology signal survives the camera at fidelity grade"
+   ],
+   "metrics": {
+    "n_paired_participants": 6,
+    "per_feature": {
+     "rise_time_s": {
+      "n_participants": 6,
+      "n_recordings": 7,
+      "icc": 0.8671879889270793,
+      "bias": 0.001,
+      "loa_lower": -0.023,
+      "loa_upper": 0.025,
+      "n": 6,
+      "n_retest_pairs": 1,
+      "retest_icc": null,
+      "survives": false
+     },
+     "norm_upstroke_slope": {
+      "n_participants": 6,
+      "n_recordings": 7,
+      "icc": 0.4807417714454117,
+      "bias": -0.806,
+      "loa_lower": -1.6,
+      "loa_upper": -0.012,
+      "n": 6,
+      "n_retest_pairs": 1,
+      "retest_icc": null,
+      "survives": false
+     },
+     "pulse_width50_s": {
+      "n_participants": 6,
+      "n_recordings": 7,
+      "icc": 0.6947961407864446,
+      "bias": 0.015,
+      "loa_lower": 0.001,
+      "loa_upper": 0.028,
+      "n": 6,
+      "n_retest_pairs": 1,
+      "retest_icc": null,
+      "survives": false
+     },
+     "notch_present": {
+      "n_participants": 6,
+      "n_recordings": 7,
+      "icc": -3.58931634414363e-15,
+      "bias": -0.011,
+      "loa_lower": -0.049,
+      "loa_upper": 0.026,
+      "n": 6,
+      "n_retest_pairs": 1,
+      "retest_icc": null,
+      "survives": false
+     },
+     "notch_rel_amp": {
+      "n_participants": 6,
+      "n_recordings": 7,
+      "icc": 0.18025022074520666,
+      "bias": 0.069,
+      "loa_lower": 0.025,
+      "loa_upper": 0.112,
+      "n": 6,
+      "n_retest_pairs": 1,
+      "retest_icc": null,
+      "survives": false
+     },
+     "notch_time_frac": {
+      "n_participants": 6,
+      "n_recordings": 7,
+      "icc": 0.6728340515560798,
+      "bias": 0.003,
+      "loa_lower": -0.027,
+      "loa_upper": 0.033,
+      "n": 6,
+      "n_retest_pairs": 1,
+      "retest_icc": null,
+      "survives": false
+     },
+     "reflection_index": {
+      "n_participants": 6,
+      "n_recordings": 7,
+      "icc": 0.7668078262339392,
+      "bias": 0.045,
+      "loa_lower": 0.015,
+      "loa_upper": 0.076,
+      "n": 6,
+      "n_retest_pairs": 1,
+      "retest_icc": null,
+      "survives": false
+     },
+     "sdppg_b_over_a": {
+      "n_participants": 6,
+      "n_recordings": 7,
+      "icc": 0.45090795583378024,
+      "bias": -0.049,
+      "loa_lower": -1.131,
+      "loa_upper": 1.033,
+      "n": 6,
+      "n_retest_pairs": 1,
+      "retest_icc": null,
+      "survives": false
+     },
+     "sdppg_c_over_a": {
+      "n_participants": 2,
+      "n_recordings": 7,
+      "icc": null,
+      "n_retest_pairs": 1,
+      "retest_icc": null,
+      "survives": false
+     },
+     "sdppg_d_over_a": {
+      "n_participants": 2,
+      "n_recordings": 7,
+      "icc": null,
+      "n_retest_pairs": 1,
+      "retest_icc": null,
+      "survives": false
+     },
+     "sdppg_e_over_a": {
+      "n_participants": 2,
+      "n_recordings": 7,
+      "icc": null,
+      "n_retest_pairs": 1,
+      "retest_icc": null,
+      "survives": false
+     }
+    },
+    "surviving": [],
+    "strata": {
+     "fitzpatrick_group": {
+      "2": {
+       "n_recordings": 3,
+       "n_participants": 2,
+       "note": "under 3 participants \u2014 reported for coverage, no agreement statistic"
+      },
+      "3": {
+       "n_recordings": 1,
+       "n_participants": 1,
+       "note": "under 3 participants \u2014 reported for coverage, no agreement statistic"
+      },
+      "4": {
+       "n_recordings": 1,
+       "n_participants": 1,
+       "note": "under 3 participants \u2014 reported for coverage, no agreement statistic"
+      },
+      "5": {
+       "n_recordings": 1,
+       "n_participants": 1,
+       "note": "under 3 participants \u2014 reported for coverage, no agreement statistic"
+      },
+      "None": {
+       "n_recordings": 1,
+       "n_participants": 1,
+       "note": "under 3 participants \u2014 reported for coverage, no agreement statistic"
+      }
+     },
+     "device_label": {
+      "None": {
+       "n_recordings": 1,
+       "n_participants": 1,
+       "note": "under 3 participants \u2014 reported for coverage, no agreement statistic"
+      },
+      "rig-1": {
+       "n_recordings": 4,
+       "n_participants": 3,
+       "per_feature": {
+        "rise_time_s": {
+         "n_participants": 3,
+         "n_recordings": 4,
+         "icc": 0.8068889004765314,
+         "bias": 0.002,
+         "loa_lower": -0.035,
+         "loa_upper": 0.038,
+         "n": 3,
+         "n_retest_pairs": 1,
+         "retest_icc": null
+        },
+        "norm_upstroke_slope": {
+         "n_participants": 3,
+         "n_recordings": 4,
+         "icc": 0.6043812430653229,
+         "bias": -0.665,
+         "loa_lower": -1.586,
+         "loa_upper": 0.256,
+         "n": 3,
+         "n_retest_pairs": 1,
+         "retest_icc": null
+        },
+        "pulse_width50_s": {
+         "n_participants": 3,
+         "n_recordings": 4,
+         "icc": 0.7815565252288794,
+         "bias": 0.013,
+         "loa_lower": -0.006,
+         "loa_upper": 0.031,
+         "n": 3,
+         "n_retest_pairs": 1,
+         "retest_icc": null
+        },
+        "notch_present": {
+         "n_participants": 3,
+         "n_recordings": 4,
+         "icc": -1.5742615544489554e-16,
+         "bias": -0.015,
+         "loa_lower": -0.067,
+         "loa_upper": 0.036,
+         "n": 3,
+         "n_retest_pairs": 1,
+         "retest_icc": null
+        },
+        "notch_rel_amp": {
+         "n_participants": 3,
+         "n_recordings": 4,
+         "icc": 0.22275720748013225,
+         "bias": 0.064,
+         "loa_lower": 0.043,
+         "loa_upper": 0.084,
+         "n": 3,
+         "n_retest_pairs": 1,
+         "retest_icc": null
+        },
+        "notch_time_frac": {
+         "n_participants": 3,
+         "n_recordings": 4,
+         "icc": 0.6337715312607369,
+         "bias": 0.003,
+         "loa_lower": -0.037,
+         "loa_upper": 0.043,
+         "n": 3,
+         "n_retest_pairs": 1,
+         "retest_icc": null
+        },
+        "reflection_index": {
+         "n_participants": 3,
+         "n_recordings": 4,
+         "icc": 0.7473871655564387,
+         "bias": 0.051,
+         "loa_lower": 0.009,
+         "loa_upper": 0.094,
+         "n": 3,
+         "n_retest_pairs": 1,
+         "retest_icc": null
+        },
+        "sdppg_b_over_a": {
+         "n_participants": 3,
+         "n_recordings": 4,
+         "icc": 0.6578950695712971,
+         "bias": 0.256,
+         "loa_lower": -0.911,
+         "loa_upper": 1.422,
+         "n": 3,
+         "n_retest_pairs": 1,
+         "retest_icc": null
+        },
+        "sdppg_c_over_a": {
+         "n_participants": 2,
+         "n_recordings": 4,
+         "icc": null,
+         "n_retest_pairs": 1,
+         "retest_icc": null
+        },
+        "sdppg_d_over_a": {
+         "n_participants": 2,
+         "n_recordings": 4,
+         "icc": null,
+         "n_retest_pairs": 1,
+         "retest_icc": null
+        },
+        "sdppg_e_over_a": {
+         "n_participants": 2,
+         "n_recordings": 4,
+         "icc": null,
+         "n_retest_pairs": 1,
+         "retest_icc": null
+        }
+       }
+      },
+      "rig-2": {
+       "n_recordings": 2,
+       "n_participants": 2,
+       "note": "under 3 participants \u2014 reported for coverage, no agreement statistic"
+      }
+     }
+    }
+   },
+   "thresholds": {
+    "requires_clinical_signoff": true,
+    "feature_icc_min": 0.75,
+    "retest_icc_min": 0.7,
+    "min_surviving_features": 1,
+    "min_paired_participants": 60
+   }
+  },
+  {
+   "gate": "v1",
+   "title": "V1 \u2014 incremental validity vs age+sex+BP (PIVOTAL, T2 defense)",
+   "status": "RED",
+   "reasons": [
+    "no evaluation run on record",
+    "no baseline-battery evaluation on record"
+   ],
+   "metrics": {},
+   "thresholds": {
+    "requires_clinical_signoff": true,
+    "rmse_improvement_vs_b3_mps_min": 0.5,
+    "added_r2_min": 0.05,
+    "ci_must_exclude_zero": true,
+    "min_test_participants": 40
+   }
+  },
+  {
+   "gate": "v2",
+   "title": "V2 \u2014 repeatability of the estimate",
+   "status": "RED",
+   "reasons": [
+    "no evaluation run on record",
+    "no test-retest study of the estimate on record"
+   ],
+   "metrics": {},
+   "thresholds": {
+    "requires_clinical_signoff": true,
+    "estimate_retest_icc_min": 0.85,
+    "retest_drift_mps_max": 0.5,
+    "min_retest_pairs": 20
+   }
+  },
+  {
+   "gate": "v3",
+   "title": "V3 \u2014 generalization (leave-one-site/device-out)",
+   "status": "RED",
+   "reasons": [
+    "no evaluation run on record",
+    "no leave-one-site/device-out study on record"
+   ],
+   "metrics": {},
+   "thresholds": {
+    "requires_clinical_signoff": true,
+    "held_out_site_rmse_ratio_max": 1.25,
+    "min_sites": 2,
+    "held_out_device_rmse_ratio_max": 1.25,
+    "min_devices": 2
+   }
+  },
+  {
+   "gate": "v4",
+   "title": "V4 \u2014 fairness (coverage and error parity)",
+   "status": "RED",
+   "reasons": [
+    "no evaluation run on record",
+    "no subgroup coverage/error-parity tables on record"
+   ],
+   "metrics": {},
+   "thresholds": {
+    "requires_clinical_signoff": true,
+    "subgroups": [
+     "fitzpatrick_group",
+     "device"
+    ],
+    "coverage_ratio_min": 0.8,
+    "rmse_ratio_max": 1.25
+   }
+  },
+  {
+   "gate": "v5",
+   "title": "V5 \u2014 claim mapping (owner + clinical advisor)",
+   "status": "RED",
+   "reasons": [
+    "no evaluation run on record",
+    "claim mapping with owner + clinical advisor not on record \u2014 the first permissible surface is a longitudinal wellness comparison against the user's own baseline, nothing absolute",
+    "signoff claim_scope is not 'longitudinal_wellness_trend' \u2014 nothing may render"
+   ],
+   "metrics": {},
+   "thresholds": {
+    "requires_clinical_signoff": true,
+    "permissible_first_claim": "longitudinal_wellness_trend",
+    "absolute_claims_require_prospective_protocol": true
+   }
+  }
+ ],
+ "all_gates_green": false,
+ "clinical_signoff": false,
+ "promotion_open": false
+}

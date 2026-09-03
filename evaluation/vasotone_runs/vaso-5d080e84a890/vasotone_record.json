@@ -1,0 +1,10 @@
+{
+ "WATERMARK": "VASCULAR MORPHOLOGY \u2014 RESEARCH ARTIFACT \u2014 NOT A MEASUREMENT",
+ "run_id": "vaso-5d080e84a890",
+ "track": "vasomotor_reactivity",
+ "kind": "evaluation",
+ "n_recordings": 14,
+ "n_excluded": 1,
+ "signal_domain": "synthetic",
+ "evaluated_at": "2026-08-31T22:41:05"
+}

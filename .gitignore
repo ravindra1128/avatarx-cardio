@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Test / tooling caches
+.pytest_cache/
+.claude-flow/
+
+# macOS
+.DS_Store
+
+# Stray bootstrap script, not part of the project
+get-pip.py
+
+# Local scan artifacts. The live demo writes recordings + logs under
+# /tmp/avatarx_live, and the measure service writes uploads to the system
+# temp dir; neither belongs in history. This entry covers the case where
+# AFIB_WORK_DIR is pointed inside the repo.
+afib_measure/
+*.webm
+*.avi
+*.mp4
+*.timestamps.json
+
+# Research/evaluation run outputs are reproducible from the CLI and would
+# otherwise grow history. The gate SCOREBOARDS are kept (they are the
+# record of what was claimed and when) — only bulk artifacts are ignored.
+research/runs/**/decoder_*.npz
+research/runs/**/*.png

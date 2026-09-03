@@ -1,0 +1,10 @@
+{
+ "WATERMARK": "VASCULAR MORPHOLOGY \u2014 RESEARCH ARTIFACT \u2014 NOT A MEASUREMENT",
+ "run_id": "vasc-a7efaab6e06f",
+ "track": "vascular_stiffness",
+ "kind": "evaluation",
+ "n_recordings": 6,
+ "n_excluded": 1,
+ "signal_domain": "synthetic",
+ "evaluated_at": "2026-08-31T19:06:05"
+}

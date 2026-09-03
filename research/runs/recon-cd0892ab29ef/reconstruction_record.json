@@ -1,0 +1,248 @@
+{
+ "WATERMARK": "SYNTHETIC ECG \u2014 RESEARCH ARTIFACT \u2014 NOT A MEASUREMENT",
+ "run_id": "recon-cd0892ab29ef",
+ "run_name": "recon-mimic-perform",
+ "track": "ecg_reconstruction",
+ "architecture": "windowed_mlp",
+ "source": "mimic",
+ "seed": 7,
+ "steps": 400,
+ "config_hash": "cd0892ab29efd869",
+ "trained_at": "2026-08-29T20:42:16",
+ "train_subjects": [
+  "mimic_perform_af_001",
+  "mimic_perform_af_002",
+  "mimic_perform_af_003",
+  "mimic_perform_af_005",
+  "mimic_perform_af_006",
+  "mimic_perform_af_007",
+  "mimic_perform_af_008",
+  "mimic_perform_af_010",
+  "mimic_perform_af_011",
+  "mimic_perform_af_012",
+  "mimic_perform_af_013",
+  "mimic_perform_af_014",
+  "mimic_perform_af_015",
+  "mimic_perform_af_016",
+  "mimic_perform_af_017",
+  "mimic_perform_af_018",
+  "mimic_perform_non_af_002",
+  "mimic_perform_non_af_004",
+  "mimic_perform_non_af_005",
+  "mimic_perform_non_af_006",
+  "mimic_perform_non_af_009",
+  "mimic_perform_non_af_011",
+  "mimic_perform_non_af_013",
+  "mimic_perform_non_af_014",
+  "mimic_perform_non_af_015"
+ ],
+ "test_subjects": [
+  "mimic_perform_af_004",
+  "mimic_perform_af_009",
+  "mimic_perform_af_019",
+  "mimic_perform_non_af_001",
+  "mimic_perform_non_af_003",
+  "mimic_perform_non_af_007",
+  "mimic_perform_non_af_008",
+  "mimic_perform_non_af_010",
+  "mimic_perform_non_af_012",
+  "mimic_perform_non_af_016"
+ ],
+ "blinded_set": {
+  "cases_dir": "/Users/pg/Documents/AvatarX/code/afib/research/runs/recon-cd0892ab29ef/blinded/cases",
+  "answer_key": "/Users/pg/Documents/AvatarX/code/afib/research/runs/recon-cd0892ab29ef/blinded/escrow/answer_key.json",
+  "n_cases": 10
+ },
+ "per_subject": [
+  {
+   "subject": "mimic_perform_af_004",
+   "is_af": 1,
+   "decoder": {
+    "qt_mae_ms": 93.36,
+    "pr_mae_ms": 72.0,
+    "qrs_mae_ms": 8.0,
+    "n_matched_beats": 96,
+    "corr": 0.221
+   },
+   "identity": {
+    "qt_mae_ms": 85.17,
+    "pr_mae_ms": 64.0,
+    "qrs_mae_ms": 16.0,
+    "n_matched_beats": 285,
+    "corr": -0.04
+   },
+   "rr_only_qt_mae_ms": 68.12
+  },
+  {
+   "subject": "mimic_perform_af_009",
+   "is_af": 1,
+   "decoder": {
+    "qt_mae_ms": 111.36,
+    "pr_mae_ms": 56.0,
+    "qrs_mae_ms": 24.0,
+    "n_matched_beats": 230,
+    "corr": -0.042
+   },
+   "identity": {
+    "qt_mae_ms": 28.83,
+    "pr_mae_ms": 48.0,
+    "qrs_mae_ms": 8.0,
+    "n_matched_beats": 432,
+    "corr": 0.047
+   },
+   "rr_only_qt_mae_ms": 121.66
+  },
+  {
+   "subject": "mimic_perform_non_af_012",
+   "is_af": 0,
+   "decoder": {
+    "qt_mae_ms": 90.27,
+    "pr_mae_ms": 56.0,
+    "qrs_mae_ms": 8.0,
+    "n_matched_beats": 36,
+    "corr": -0.003
+   },
+   "identity": {
+    "qt_mae_ms": 28.01,
+    "pr_mae_ms": 8.0,
+    "qrs_mae_ms": 8.0,
+    "n_matched_beats": 144,
+    "corr": 0.039
+   },
+   "rr_only_qt_mae_ms": 39.5
+  },
+  {
+   "subject": "mimic_perform_non_af_007",
+   "is_af": 0,
+   "decoder": {
+    "qt_mae_ms": 57.98,
+    "pr_mae_ms": 72.0,
+    "qrs_mae_ms": 16.0,
+    "n_matched_beats": 97,
+    "corr": 0.059
+   },
+   "identity": {
+    "qt_mae_ms": 64.37,
+    "pr_mae_ms": 72.0,
+    "qrs_mae_ms": 0.0,
+    "n_matched_beats": 20,
+    "corr": 0.062
+   },
+   "rr_only_qt_mae_ms": 45.14
+  },
+  {
+   "subject": "mimic_perform_non_af_008",
+   "is_af": 0,
+   "decoder": {
+    "qt_mae_ms": 22.97,
+    "pr_mae_ms": 56.0,
+    "qrs_mae_ms": 16.0,
+    "n_matched_beats": 396,
+    "corr": 0.192
+   },
+   "identity": {
+    "qt_mae_ms": 42.06,
+    "pr_mae_ms": 8.0,
+    "qrs_mae_ms": 0.0,
+    "n_matched_beats": 8,
+    "corr": -0.04
+   },
+   "rr_only_qt_mae_ms": 47.5
+  },
+  {
+   "subject": "mimic_perform_non_af_003",
+   "is_af": 0,
+   "decoder": {
+    "qt_mae_ms": 35.52,
+    "pr_mae_ms": 112.0,
+    "qrs_mae_ms": 24.0,
+    "n_matched_beats": 713,
+    "corr": 0.202
+   },
+   "identity": {
+    "qt_mae_ms": 25.45,
+    "pr_mae_ms": 16.0,
+    "qrs_mae_ms": 8.0,
+    "n_matched_beats": 712,
+    "corr": 0.298
+   },
+   "rr_only_qt_mae_ms": 39.21
+  },
+  {
+   "subject": "mimic_perform_non_af_001",
+   "is_af": 0,
+   "decoder": {
+    "qt_mae_ms": 24.47,
+    "pr_mae_ms": 16.0,
+    "qrs_mae_ms": 32.0,
+    "n_matched_beats": 318,
+    "corr": 0.291
+   },
+   "identity": {
+    "qt_mae_ms": 72.55,
+    "pr_mae_ms": 8.0,
+    "qrs_mae_ms": 0.0,
+    "n_matched_beats": 3,
+    "corr": -0.063
+   },
+   "rr_only_qt_mae_ms": 97.29
+  },
+  {
+   "subject": "mimic_perform_af_019",
+   "is_af": 1,
+   "decoder": {
+    "qt_mae_ms": 101.33,
+    "pr_mae_ms": 64.0,
+    "qrs_mae_ms": 8.0,
+    "n_matched_beats": 124,
+    "corr": 0.131
+   },
+   "identity": {
+    "qt_mae_ms": 35.84,
+    "pr_mae_ms": 16.0,
+    "qrs_mae_ms": 0.0,
+    "n_matched_beats": 200,
+    "corr": 0.027
+   },
+   "rr_only_qt_mae_ms": 28.29
+  },
+  {
+   "subject": "mimic_perform_non_af_010",
+   "is_af": 0,
+   "decoder": {
+    "qt_mae_ms": 33.13,
+    "pr_mae_ms": 48.0,
+    "qrs_mae_ms": 32.0,
+    "n_matched_beats": 456,
+    "corr": 0.033
+   },
+   "identity": {
+    "qt_mae_ms": 7.54,
+    "pr_mae_ms": 0.0,
+    "qrs_mae_ms": 8.0,
+    "n_matched_beats": 108,
+    "corr": -0.038
+   },
+   "rr_only_qt_mae_ms": 87.79
+  },
+  {
+   "subject": "mimic_perform_non_af_016",
+   "is_af": 0,
+   "decoder": {
+    "qt_mae_ms": 39.45,
+    "pr_mae_ms": 40.0,
+    "qrs_mae_ms": 24.0,
+    "n_matched_beats": 467,
+    "corr": 0.121
+   },
+   "identity": {
+    "qt_mae_ms": 8.88,
+    "pr_mae_ms": 8.0,
+    "qrs_mae_ms": 8.0,
+    "n_matched_beats": 685,
+    "corr": 0.365
+   },
+   "rr_only_qt_mae_ms": 21.51
+  }
+ ]
+}

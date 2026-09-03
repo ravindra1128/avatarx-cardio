@@ -1,0 +1,48 @@
+{
+ "run_id": "run-e4ab92a36b89",
+ "run_name": "m3-demo",
+ "model": "logreg",
+ "seed": 7,
+ "split_seed": 20260814,
+ "git_commit": "db60a69",
+ "config_hash": "5916ad1e164c711e",
+ "datasets": [
+  {
+   "id": "ds-9fb3afce25370997",
+   "path": "/private/var/folders/rj/6lg276_n3vz64zk_t3kzbps00000gn/T/pytest-of-pg/pytest-327/m30/ds",
+   "license_class": "internal_consented"
+  }
+ ],
+ "feature_names": [
+  "autocorr_lag1",
+  "cv_ibi",
+  "dropout_rate",
+  "irregularity_index",
+  "longest_run",
+  "markov_surprise",
+  "mean_ibi",
+  "mean_sqi",
+  "median_abs_succ_diff",
+  "median_ibi",
+  "n_intervals",
+  "n_runs",
+  "pnn20",
+  "pnn50",
+  "poincare_ratio",
+  "poincare_sd1",
+  "poincare_sd2",
+  "rmssd",
+  "sample_entropy",
+  "sdnn",
+  "sdsd",
+  "shannon_entropy",
+  "spectral_entropy",
+  "turning_point_ratio"
+ ],
+ "n_train": 8,
+ "n_dev": 1,
+ "metrics": {
+  "dev_auc": null
+ },
+ "artifact": "model.json"
+}

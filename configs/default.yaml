@@ -1,0 +1,185 @@
+# AvatarX AFib v0.1 — single source of truth for configuration defaults.
+# Structure follows CLAUDE_CODE_SPEC.md section B.6; additions are marked.
+
+capture:   {fps_min: 30, fps_target: 60, lux_floor: 100, crf_ceiling: 18,
+            bpp_floor: 0.12, ae_awb_gain_locked: true, beautification: off}
+sync:      {max_uncertainty_ms: 5.0, min_marker_events: 10}
+runs:      {min_conf: CALIBRATED, min_run_beats: 4, missed_ratio: 1.75,
+            ibi_physiologic_ms: [250, 2200]}
+features:  {sampen_floor: 60, shannon_floor: 50, primary: [pnn50, pnn20,
+            median_abs_succ_diff, irregularity_index, dropout_rate]}
+gates:
+  g1:      {ibi_mae_ms: 30, f1_at_50ms: 0.90, missed: 0.10, false: 0.10,
+            production_rmssd_err_ms: 25, confidence_ece: 0.10}
+  g1b:     {ibi_mae_ms: 40, f1_at_50ms: 0.85, flag_recall: 0.60}
+  g1w:     {auc_tier_a: 0.90}
+  fairness: {max_subgroup_gap: 0.10, noread_max_ratio: 1.5, noread_max_abs: 0.10}
+serial:    {rule: [2, 3], fp_persistent_share_planning: 0.65, within_sitting: true}
+scan:      {capture_s: 120, ship_s: 90, subwindows: 3}
+
+# ---- v0.1 additions -------------------------------------------------------
+sqi:                       # T4 composite weights; components sum-normalised
+  weights: {snr_in_band: 0.25, skewness: 0.15, spectral_concentration: 0.20,
+            cross_roi_coherence: 0.30, tracking_stability: 0.10}
+  floor: 0.30              # below this the scan is not analysable
+  band_hz: [0.7, 4.0]      # physiological pulse band (24-240 bpm) for the
+                           # extractor bandpass; NOT a rhythm prior
+  energy_band_hz: [0.7, 6.0]  # v0.1.2: band for the SQI in-band ENERGY fractions
+                           # — includes the first harmonics of fast beats so the
+                           # index is rate-neutral (a 4 Hz ceiling penalised
+                           # rapid AF's harmonics: anti-periodicity margin
+                           # -0.08 -> -0.02 at 6 Hz; white noise stays 0.22)
+
+protocol:                  # v0.4 three-phase recovery session (T7)
+  three_phase: false       # OFF by default: the app runs the single
+                           # rhythm scan unless the owner flips this (or
+                           # AVATARX_THREE_PHASE=1). All gates fail
+                           # closed either way.
+  challenge: sts_1min
+  rest_seconds: 60
+  recovery_seconds: 150
+
+report:                    # v0.2.1 Cardiac Rhythm Scan Report
+  mode: findings_only      # v0.3 (owner-directed): the consumer surface
+                           # shows FINDINGS ONLY — sanctioned sentence,
+                           # stars, pulse rate, caveats, referral. No
+                           # waveform of any kind: no pulse waveform (per
+                           # owner) and no synthetic ECG (§G gates).
+                           # 'full' restores the v0.2.1 layout with the
+                           # labeled rPPG strips + interval trend.
+  show_tachogram: true     # full mode only: the honest carrier of
+                           # interval irregularity
+  research_tracks: true    # v0.8 (owner-directed, spec B.24 #15): the
+                           # five GATED research tracks (rhythm
+                           # regularity, atrial flutter, arterial
+                           # stiffness, vascular tone, cardiorespiratory
+                           # fitness) in the screen-only RESEARCH / DEBUG
+                           # METRICS panel, each beside its live gate
+                           # status. ON by default at the owner's third
+                           # direction: red gates do NOT suppress these
+                           # values, they are printed next to them. This
+                           # is a RESEARCH surface — the panel is already
+                           # labelled "not for participants" and is
+                           # hidden from print, the values ride their own
+                           # payload key (public_head_results untouched),
+                           # and no sentence about the person is ever
+                           # generated. AVATARX_RESEARCH_TRACKS=0 turns
+                           # it off for a participant-facing session.
+
+decision:                  # T5. INTERIM hand-set rules — replaced by the
+                           # trained Model A behind the same flag (T6).
+  classifier: interim_rules       # interim_rules | model_a
+  extractor: pos                  # pos | chrom
+  sqi_floor: 0.30
+  coverage_floor: 0.50
+  min_clean_intervals: 5
+  evidence:                       # v0.1.2 beat-EVIDENCE gates (after a real
+                                  # false positive: detection-error irregularity
+                                  # on a weak, incoherent signal read as AF)
+    coherence_floor: 0.20         # any class: pulse seen consistently across ROIs
+    min_intervals_any: 15         # any class: enough clean intervals
+    min_coverage_any: 0.60        # any class: most of the scan usable
+    max_split_fraction_any: 0.30  # any class: detection-error burden (T5
+                                  # missed/false-beat splits) must be modest
+    afib_min_intervals: 20        # AF call: near the 25-interval knee
+    afib_min_coherence: 0.35      # AF call: irregular beats must be verified
+    afib_max_harmonic_fraction: 0.20   # ½x/2x intervals = false/missed beats
+    afib_max_split_fraction: 0.15      # T5 splitter burden
+    deficit_rule_min_coherence: 0.50   # dropout = pulse deficit ONLY if coherent
+    max_timing_precision_ms_any: 40    # Gate-1 proxy: best ROI pair median |dt|
+    afib_max_timing_precision_ms: 30   # (refs 1-5 ms; real FP scans 36-49 ms)
+    afib_min_timing_matched: 0.75
+    # Resting morphology is a different endpoint from rhythm classification.
+    # A 2-star scan may still carry a real, visibly low-confidence research
+    # estimate when a non-trivial subset of beats agrees across regions and
+    # the morphology itself survives in >=2 ROIs.  These LIMITED-evidence
+    # floors never relax the rhythm verdict above.
+    endpoint_min_coherence: 0.10
+    endpoint_max_timing_precision_ms: 40
+    endpoint_min_timing_matched: 0.35
+  readiness:                      # v0.1.4 PRE-SCAN gate. PARITY RULE: the
+                                  # signal thresholds (coverage, coherence,
+                                  # beat timing, sqi) are the ANY-RESULT
+                                  # gates and are read DIRECTLY from
+                                  # decision.evidence / sqi_floor above —
+                                  # not duplicated here, so gate and
+                                  # decision can never drift apart. Only
+                                  # readiness-specific knobs live below.
+                                  # Basis: docs/READINESS.md.
+    mode: advisory                # 'advisory' = API start is allowed once
+                                  # blocking checks pass, but all checks below
+                                  # still gate recorded good time. The UI uses
+                                  # start permission, not result disposition.
+                                  # 'blocking' = the pre-v0.1.5 gate: start
+                                  # only when EVERY check passes + hold.
+    blocking_checks: [face, framing, frame_rate_floor]
+    min_fps_hard: 15.0            # below this the camera is not usable at
+                                  # all (blocking); the 24 fps capture
+                                  # floor stays as an advisory check and a
+                                  # post-scan validity gate
+    window_s: 8.0                 # >= 2 POS windows + ~7 beats at 55 bpm
+    hold_s: 3.0                   # blocking mode: all checks must hold this
+                                  # long; advisory mode: resume-after-pause
+    min_fps: 24.0                 # consumer capture floor (research 30):
+                                  # below it the RECORDING would be invalid
+    min_snr_rois: 2               # ROIs with in-band SNR >= +3 dB
+    min_roi_snr_component: 0.5    # (T4 logistic centre = +3 dB)
+    min_prelim_beats: 4           # fused beats seen in the window
+    min_tracking_stability: 0.6
+    max_collapsed_interval_fraction: 0.02  # repeated/near-zero frame times
+    recording_checks: [face, framing, lighting, exposure, motion,
+                       frame_delivery, frame_rate, frame_rate_floor,
+                       timestamps, tracking]
+    debounce_evals: 2             # a check must fail this many CONSECUTIVE
+                                  # 0.5 s evaluations to break the hold
+                                  # (single-eval estimator flicker forgiven)
+    max_paused_s: 20.0            # scan pauses more than this -> restart
+    max_pauses: 4
+    resume_hold_s: 1.0            # good time before resuming after a pause
+  heads:                          # v0.2 L4 endpoint-head registry (B.15).
+                                  # afib is the decision head and cannot be
+                                  # disabled; extension = new head, never a
+                                  # new pipeline (invariant 14)
+    enabled: [afib, rate_flags, rhythm_map]
+  confidence:                     # v0.1.5: 1-5 star confidence rating —
+                                  # the user-visible expression of the
+                                  # evidence gates, never their
+                                  # replacement. Hard rules override the
+                                  # arithmetic: blocking-check failure ->
+                                  # 1 star; any failing AF evidence gate
+                                  # -> at most 2 stars (so "AF needs >= 3
+                                  # stars" is enforceable, not cosmetic).
+    star_cuts: [0.30, 0.50, 0.68, 0.85]   # score -> 1..5 stars
+    weights:                      # the checks that determine whether a
+                                  # rhythm call is supportable
+      cross_roi_coherence: 0.30
+      beat_timing: 0.20
+      signal_snr: 0.15
+      sqi: 0.15
+      prelim_beats: 0.10
+      tracking: 0.05
+      motion: 0.05
+  calibration_path: inference/confidence_calibration_v01.json
+  model_a_path: models/model_a_v01.json   # used when classifier: model_a
+  interim_rules:                  # AF thresholds measured on the synthetic
+                                  # suite (AF med|d| 96-99 ms / pNN50
+                                  # 0.74-0.82 vs sinus 12-45 ms / 0.05-0.45).
+                                  # OTHER thresholds sit ABOVE normal resting
+                                  # sinus HRV (healthy-adult pNN50 ~5-40%,
+                                  # RMSSD ~20-50 ms) — v0.1.1: raised from
+                                  # 35 ms / 0.25, which mislabelled ordinary
+                                  # sinus variability as irregular.
+    high_rate_bpm: 110
+    afib_median_abs_ms: 60
+    afib_pnn50: 0.40
+    afib_deficit_median_abs_ms: 40
+    afib_deficit_dropout: 0.30
+    other_median_abs_ms: 45
+    other_pnn50: 0.45
+
+vascular:  # v0.4 arterial-stiffness research track (research-only)
+  head_model: ridge   # config-swappable trainer for head_vascular's
+                      # artifact (evaluation/vascular_metrics.py
+                      # _HEAD_TRAINERS); unknown values refuse loudly.
+                      # The model consumes V0-surviving MORPHOLOGY
+                      # features only — demographics live in baselines.

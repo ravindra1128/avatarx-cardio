@@ -1,0 +1,23 @@
+# Template campaign manifest for the v0.4 arterial-stiffness paired
+# fidelity/development campaign (docs/vascular_track.md; planning
+# estimates flagged there). Copy per site, keep quotas honest: they are
+# the fairness properties of every later model, decided at enrollment.
+campaign:
+  id: vascular-fidelity-template
+  version: 1
+  consent_form_version: consent-vasc-v1
+  target_n: 80                       # fidelity/feasibility band 60-100
+  quotas:
+    fitzpatrick: {I: 8, II: 12, III: 16, IV: 16, V: 16, VI: 12}
+    devices: {rig-1: 40, rig-2: 40}
+    lighting: {controlled: 60, ambient_office: 20}
+    age_band: {20-39: 20, 40-59: 30, 60-80: 30}    # wide band, by design
+    bp_range: {normotensive: 30, elevated: 25, hypertensive: 25}
+                                     # recruit through hypertension /
+                                     # vascular clinics for TRUE
+                                     # high-stiffness cases
+  retest: {target_pairs: 25}         # two scans + two reference reads
+                                     # per visit (V0 retest + V2 floor)
+  session_checklist: [cfpwv_reference_recorded, contact_ppg_synchronized,
+                      brachial_bp_recorded, meds_flags_recorded,
+                      seated_rest_5min_before_reference]

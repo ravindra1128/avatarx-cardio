@@ -1,0 +1,458 @@
+{
+ "WATERMARK": "SYNTHETIC ECG \u2014 RESEARCH ONLY \u2014 NOT A MEASUREMENT",
+ "purpose": "falsification: why generated ECG waveforms do not ship (spec B.15, invariant 10)",
+ "source": "mimic",
+ "seed": 7,
+ "steps": 1500,
+ "participant_disjoint": true,
+ "summary": {
+  "n_train": 25,
+  "n_test": 10,
+  "decoder_median_corr": 0.185,
+  "identity_median_corr": 0.033,
+  "decoder_pr_mae_ms": 56.0,
+  "identity_pr_mae_ms": 12.0,
+  "decoder_rt_mae_ms": 78.0,
+  "identity_rt_mae_ms": 10.0,
+  "hallucinated_p_on_af": 0.39,
+  "reference_p_on_af": 0.04
+ },
+ "per_subject": [
+  {
+   "subject": "mimic_perform_af_004",
+   "is_af": 1,
+   "decoder": {
+    "corr": 0.374,
+    "n_matched_beats": 100,
+    "n_ref_beats": 978,
+    "n_gen_beats": 394,
+    "r_timing_mae_ms": 64.0,
+    "pr_interval_mae_ms": 48.0,
+    "rt_interval_mae_ms": 64.0,
+    "p_prominence_ref": 0.09,
+    "p_prominence_gen": 0.47,
+    "t_prominence_ref": 0.11,
+    "t_prominence_gen": 0.35
+   },
+   "identity_baseline": {
+    "corr": -0.04,
+    "n_matched_beats": 285,
+    "n_ref_beats": 978,
+    "n_gen_beats": 958,
+    "r_timing_mae_ms": 40.0,
+    "pr_interval_mae_ms": 64.0,
+    "rt_interval_mae_ms": 64.0,
+    "p_prominence_ref": 0.09,
+    "p_prominence_gen": 0.09,
+    "t_prominence_ref": 0.09,
+    "t_prominence_gen": 0.1
+   }
+  },
+  {
+   "subject": "mimic_perform_af_009",
+   "is_af": 1,
+   "decoder": {
+    "corr": -0.087,
+    "n_matched_beats": 215,
+    "n_ref_beats": 974,
+    "n_gen_beats": 520,
+    "r_timing_mae_ms": 48.0,
+    "pr_interval_mae_ms": 88.0,
+    "rt_interval_mae_ms": 144.0,
+    "p_prominence_ref": 0.0,
+    "p_prominence_gen": 0.48,
+    "t_prominence_ref": 0.42,
+    "t_prominence_gen": 0.35
+   },
+   "identity_baseline": {
+    "corr": 0.047,
+    "n_matched_beats": 432,
+    "n_ref_beats": 974,
+    "n_gen_beats": 858,
+    "r_timing_mae_ms": 40.0,
+    "pr_interval_mae_ms": 48.0,
+    "rt_interval_mae_ms": 8.0,
+    "p_prominence_ref": 0.0,
+    "p_prominence_gen": 0.0,
+    "t_prominence_ref": 0.41,
+    "t_prominence_gen": 0.42
+   }
+  },
+  {
+   "subject": "mimic_perform_non_af_012",
+   "is_af": 0,
+   "decoder": {
+    "corr": -0.009,
+    "n_matched_beats": 27,
+    "n_ref_beats": 728,
+    "n_gen_beats": 103,
+    "r_timing_mae_ms": 40.0,
+    "pr_interval_mae_ms": 64.0,
+    "rt_interval_mae_ms": 88.0,
+    "p_prominence_ref": 0.14,
+    "p_prominence_gen": 0.5,
+    "t_prominence_ref": 0.29,
+    "t_prominence_gen": 0.4
+   },
+   "identity_baseline": {
+    "corr": 0.039,
+    "n_matched_beats": 144,
+    "n_ref_beats": 728,
+    "n_gen_beats": 455,
+    "r_timing_mae_ms": 48.0,
+    "pr_interval_mae_ms": 8.0,
+    "rt_interval_mae_ms": 32.0,
+    "p_prominence_ref": 0.14,
+    "p_prominence_gen": 0.14,
+    "t_prominence_ref": 0.38,
+    "t_prominence_gen": 0.19
+   }
+  },
+  {
+   "subject": "mimic_perform_non_af_007",
+   "is_af": 0,
+   "decoder": {
+    "corr": 0.167,
+    "n_matched_beats": 49,
+    "n_ref_beats": 560,
+    "n_gen_beats": 983,
+    "r_timing_mae_ms": 56.0,
+    "pr_interval_mae_ms": 72.0,
+    "rt_interval_mae_ms": 128.0,
+    "p_prominence_ref": 0.2,
+    "p_prominence_gen": 1.17,
+    "t_prominence_ref": 0.4,
+    "t_prominence_gen": 0.88
+   },
+   "identity_baseline": {
+    "corr": 0.062,
+    "n_matched_beats": 20,
+    "n_ref_beats": 560,
+    "n_gen_beats": 581,
+    "r_timing_mae_ms": 24.0,
+    "pr_interval_mae_ms": 72.0,
+    "rt_interval_mae_ms": 16.0,
+    "p_prominence_ref": 0.21,
+    "p_prominence_gen": 0.03,
+    "t_prominence_ref": 0.41,
+    "t_prominence_gen": 0.47
+   }
+  },
+  {
+   "subject": "mimic_perform_non_af_008",
+   "is_af": 0,
+   "decoder": {
+    "corr": 0.197,
+    "n_matched_beats": 634,
+    "n_ref_beats": 686,
+    "n_gen_beats": 763,
+    "r_timing_mae_ms": 56.0,
+    "pr_interval_mae_ms": 32.0,
+    "rt_interval_mae_ms": 8.0,
+    "p_prominence_ref": 0.04,
+    "p_prominence_gen": 1.22,
+    "t_prominence_ref": 0.37,
+    "t_prominence_gen": 0.35
+   },
+   "identity_baseline": {
+    "corr": -0.04,
+    "n_matched_beats": 8,
+    "n_ref_beats": 686,
+    "n_gen_beats": 693,
+    "r_timing_mae_ms": 72.0,
+    "pr_interval_mae_ms": 8.0,
+    "rt_interval_mae_ms": 12.0,
+    "p_prominence_ref": 0.03,
+    "p_prominence_gen": 0.04,
+    "t_prominence_ref": 0.35,
+    "t_prominence_gen": 0.37
+   }
+  },
+  {
+   "subject": "mimic_perform_non_af_003",
+   "is_af": 0,
+   "decoder": {
+    "corr": 0.358,
+    "n_matched_beats": 718,
+    "n_ref_beats": 766,
+    "n_gen_beats": 748,
+    "r_timing_mae_ms": 16.0,
+    "pr_interval_mae_ms": 120.0,
+    "rt_interval_mae_ms": 68.0,
+    "p_prominence_ref": 0.19,
+    "p_prominence_gen": 1.04,
+    "t_prominence_ref": 0.5,
+    "t_prominence_gen": 0.19
+   },
+   "identity_baseline": {
+    "corr": 0.298,
+    "n_matched_beats": 712,
+    "n_ref_beats": 766,
+    "n_gen_beats": 767,
+    "r_timing_mae_ms": 48.0,
+    "pr_interval_mae_ms": 16.0,
+    "rt_interval_mae_ms": 16.0,
+    "p_prominence_ref": 0.2,
+    "p_prominence_gen": 0.51,
+    "t_prominence_ref": 0.5,
+    "t_prominence_gen": 0.63
+   }
+  },
+  {
+   "subject": "mimic_perform_non_af_001",
+   "is_af": 0,
+   "decoder": {
+    "corr": 0.173,
+    "n_matched_beats": 247,
+    "n_ref_beats": 502,
+    "n_gen_beats": 405,
+    "r_timing_mae_ms": 64.0,
+    "pr_interval_mae_ms": 32.0,
+    "rt_interval_mae_ms": 128.0,
+    "p_prominence_ref": 0.05,
+    "p_prominence_gen": 0.56,
+    "t_prominence_ref": 0.27,
+    "t_prominence_gen": 0.36
+   },
+   "identity_baseline": {
+    "corr": -0.063,
+    "n_matched_beats": 3,
+    "n_ref_beats": 502,
+    "n_gen_beats": 492,
+    "r_timing_mae_ms": 64.0,
+    "pr_interval_mae_ms": 8.0,
+    "rt_interval_mae_ms": 8.0,
+    "p_prominence_ref": 0.04,
+    "p_prominence_gen": 0.05,
+    "t_prominence_ref": 0.29,
+    "t_prominence_gen": 0.28
+   }
+  },
+  {
+   "subject": "mimic_perform_af_019",
+   "is_af": 1,
+   "decoder": {
+    "corr": -0.072,
+    "n_matched_beats": 193,
+    "n_ref_beats": 723,
+    "n_gen_beats": 400,
+    "r_timing_mae_ms": 40.0,
+    "pr_interval_mae_ms": 72.0,
+    "rt_interval_mae_ms": 64.0,
+    "p_prominence_ref": 0.03,
+    "p_prominence_gen": 1.11,
+    "t_prominence_ref": 0.22,
+    "t_prominence_gen": 0.47
+   },
+   "identity_baseline": {
+    "corr": 0.027,
+    "n_matched_beats": 200,
+    "n_ref_beats": 723,
+    "n_gen_beats": 707,
+    "r_timing_mae_ms": 32.0,
+    "pr_interval_mae_ms": 16.0,
+    "rt_interval_mae_ms": 8.0,
+    "p_prominence_ref": 0.19,
+    "p_prominence_gen": 0.09,
+    "t_prominence_ref": 0.23,
+    "t_prominence_gen": 0.28
+   }
+  },
+  {
+   "subject": "mimic_perform_non_af_010",
+   "is_af": 0,
+   "decoder": {
+    "corr": 0.285,
+    "n_matched_beats": 180,
+    "n_ref_beats": 603,
+    "n_gen_beats": 540,
+    "r_timing_mae_ms": 48.0,
+    "pr_interval_mae_ms": 40.0,
+    "rt_interval_mae_ms": 104.0,
+    "p_prominence_ref": 0.13,
+    "p_prominence_gen": 0.76,
+    "t_prominence_ref": 0.19,
+    "t_prominence_gen": 0.51
+   },
+   "identity_baseline": {
+    "corr": -0.038,
+    "n_matched_beats": 108,
+    "n_ref_beats": 603,
+    "n_gen_beats": 596,
+    "r_timing_mae_ms": 72.0,
+    "pr_interval_mae_ms": 0.0,
+    "rt_interval_mae_ms": 0.0,
+    "p_prominence_ref": 0.13,
+    "p_prominence_gen": 0.13,
+    "t_prominence_ref": 0.19,
+    "t_prominence_gen": 0.2
+   }
+  },
+  {
+   "subject": "mimic_perform_non_af_016",
+   "is_af": 0,
+   "decoder": {
+    "corr": 0.399,
+    "n_matched_beats": 178,
+    "n_ref_beats": 689,
+    "n_gen_beats": 683,
+    "r_timing_mae_ms": 72.0,
+    "pr_interval_mae_ms": 48.0,
+    "rt_interval_mae_ms": 56.0,
+    "p_prominence_ref": 0.03,
+    "p_prominence_gen": 1.53,
+    "t_prominence_ref": 0.08,
+    "t_prominence_gen": 0.34
+   },
+   "identity_baseline": {
+    "corr": 0.365,
+    "n_matched_beats": 685,
+    "n_ref_beats": 689,
+    "n_gen_beats": 689,
+    "r_timing_mae_ms": 24.0,
+    "pr_interval_mae_ms": 8.0,
+    "rt_interval_mae_ms": 0.0,
+    "p_prominence_ref": 0.03,
+    "p_prominence_gen": 0.03,
+    "t_prominence_ref": 0.09,
+    "t_prominence_gen": 0.08
+   }
+  }
+ ],
+ "cross_rhythm_challenge": {
+  "decoder_without_af_on_af": [
+   {
+    "corr": 0.112,
+    "n_matched_beats": 103,
+    "n_ref_beats": 978,
+    "n_gen_beats": 377,
+    "r_timing_mae_ms": 48.0,
+    "pr_interval_mae_ms": 48.0,
+    "rt_interval_mae_ms": 64.0,
+    "p_prominence_ref": 0.08,
+    "p_prominence_gen": 0.39,
+    "t_prominence_ref": 0.1,
+    "t_prominence_gen": 0.17
+   },
+   {
+    "corr": -0.018,
+    "n_matched_beats": 258,
+    "n_ref_beats": 974,
+    "n_gen_beats": 451,
+    "r_timing_mae_ms": 48.0,
+    "pr_interval_mae_ms": 56.0,
+    "rt_interval_mae_ms": 64.0,
+    "p_prominence_ref": 0.0,
+    "p_prominence_gen": 0.24,
+    "t_prominence_ref": 0.41,
+    "t_prominence_gen": 0.22
+   },
+   {
+    "corr": -0.058,
+    "n_matched_beats": 178,
+    "n_ref_beats": 723,
+    "n_gen_beats": 449,
+    "r_timing_mae_ms": 32.0,
+    "pr_interval_mae_ms": 96.0,
+    "rt_interval_mae_ms": 44.0,
+    "p_prominence_ref": 0.04,
+    "p_prominence_gen": 0.64,
+    "t_prominence_ref": 0.22,
+    "t_prominence_gen": 0.3
+   }
+  ],
+  "decoder_af_only_on_sinus": [
+   {
+    "corr": 0.001,
+    "n_matched_beats": 30,
+    "n_ref_beats": 728,
+    "n_gen_beats": 109,
+    "r_timing_mae_ms": 40.0,
+    "pr_interval_mae_ms": 48.0,
+    "rt_interval_mae_ms": 64.0,
+    "p_prominence_ref": 0.15,
+    "p_prominence_gen": 0.6,
+    "t_prominence_ref": 0.35,
+    "t_prominence_gen": 0.35
+   },
+   {
+    "corr": 0.311,
+    "n_matched_beats": 115,
+    "n_ref_beats": 560,
+    "n_gen_beats": 696,
+    "r_timing_mae_ms": 56.0,
+    "pr_interval_mae_ms": 16.0,
+    "rt_interval_mae_ms": 72.0,
+    "p_prominence_ref": 0.21,
+    "p_prominence_gen": 0.0,
+    "t_prominence_ref": 0.41,
+    "t_prominence_gen": 0.79
+   },
+   {
+    "corr": 0.174,
+    "n_matched_beats": 612,
+    "n_ref_beats": 686,
+    "n_gen_beats": 1244,
+    "r_timing_mae_ms": 16.0,
+    "pr_interval_mae_ms": 16.0,
+    "rt_interval_mae_ms": 56.0,
+    "p_prominence_ref": 0.04,
+    "p_prominence_gen": 0.43,
+    "t_prominence_ref": 0.37,
+    "t_prominence_gen": 1.11
+   },
+   {
+    "corr": 0.316,
+    "n_matched_beats": 709,
+    "n_ref_beats": 766,
+    "n_gen_beats": 755,
+    "r_timing_mae_ms": 24.0,
+    "pr_interval_mae_ms": 120.0,
+    "rt_interval_mae_ms": 48.0,
+    "p_prominence_ref": 0.2,
+    "p_prominence_gen": 0.99,
+    "t_prominence_ref": 0.5,
+    "t_prominence_gen": 0.73
+   },
+   {
+    "corr": 0.229,
+    "n_matched_beats": 408,
+    "n_ref_beats": 502,
+    "n_gen_beats": 780,
+    "r_timing_mae_ms": 64.0,
+    "pr_interval_mae_ms": 96.0,
+    "rt_interval_mae_ms": 104.0,
+    "p_prominence_ref": 0.05,
+    "p_prominence_gen": 0.05,
+    "t_prominence_ref": 0.27,
+    "t_prominence_gen": 0.69
+   },
+   {
+    "corr": 0.265,
+    "n_matched_beats": 31,
+    "n_ref_beats": 603,
+    "n_gen_beats": 717,
+    "r_timing_mae_ms": 40.0,
+    "pr_interval_mae_ms": 40.0,
+    "rt_interval_mae_ms": 24.0,
+    "p_prominence_ref": 0.12,
+    "p_prominence_gen": 0.22,
+    "t_prominence_ref": 0.19,
+    "t_prominence_gen": 1.39
+   },
+   {
+    "corr": 0.287,
+    "n_matched_beats": 669,
+    "n_ref_beats": 689,
+    "n_gen_beats": 1346,
+    "r_timing_mae_ms": 16.0,
+    "pr_interval_mae_ms": 56.0,
+    "rt_interval_mae_ms": 8.0,
+    "p_prominence_ref": 0.03,
+    "p_prominence_gen": 0.64,
+    "t_prominence_ref": 0.09,
+    "t_prominence_gen": 1.54
+   }
+  ]
+ }
+}

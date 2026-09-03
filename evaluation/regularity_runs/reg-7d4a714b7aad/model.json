@@ -1,0 +1,10 @@
+{
+ "kind": "regularity_threshold_rule",
+ "reference_label": {
+  "requires_clinical_signoff": true,
+  "index": "irregularity_index",
+  "irregular_if_index_at_least": 0.06,
+  "min_intervals": 15,
+  "ecg_beat_confidence": 1.0
+ }
+}

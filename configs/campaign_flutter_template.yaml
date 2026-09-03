@@ -1,0 +1,74 @@
+# Template campaign manifest for the v0.6 flutter feasibility campaign
+# (docs/flutter_track.md; every number here is a PLANNING estimate and
+# is flagged as such in that document).
+#
+# The recruitment problem is the whole design. ECG-confirmed flutter is
+# not obtainable from a community screening cohort at any practical N,
+# so positives come from ELECTIVE CARDIOVERSION and EP/ABLATION clinics
+# — the same design choice Cramer et al. made, and for the same reason.
+# But a cardioversion cohort cannot measure specificity, because it has
+# almost no benign regular tachycardia in it. So the campaign has two
+# arms that must both be filled, and neither can substitute for the
+# other:
+#
+#   ARM A (positives, clinic-recruited): ECG-confirmed flutter across
+#     conduction ratios. 2:1 dominates naturally; 3:1 and 4:1 are
+#     quota'd DELIBERATELY, because gate F2 cannot be computed without
+#     them and the 4:1 quota is what turns the documented permanent
+#     miss into a measured number.
+#
+#   ARM B (negatives, prospective): regular tachycardia that is NOT an
+#     atrial tachyarrhythmia — exercise recovery, anxiety/panic, fever
+#     presentations. This is the arm that decides whether the flag
+#     ships, and it must DOMINATE the negative battery (gate F1 refuses
+#     a specificity earned on easy negatives).
+#
+# Every flutter POSITIVE additionally needs 12-lead ECG with EP-level
+# adjudication recorded in the label (datasets.schema.
+# flutter_label_problems); single-lead is fine for negatives and for the
+# rate comparator, but can never carry a positive.
+campaign:
+  id: flutter-feasibility-template
+  version: 1
+  consent_form_version: consent-flutter-v1
+  target_n: 120                       # ARM A ~45 + ARM B ~75 participants
+  quotas:
+    fitzpatrick: {I: 10, II: 20, III: 25, IV: 25, V: 22, VI: 18}
+                                      # VI is quota'd, not hoped for: the
+                                      # reference study excluded its only
+                                      # such patient and F4 reds the gate
+                                      # if the darkest band is absent
+    devices: {rig-1: 60, rig-2: 60}
+    lighting: {controlled: 90, ambient: 30}
+    rhythm_class:                     # the two arms, counted separately
+      atrial_flutter: 45              # >= 40 scans is the F1 floor
+      sinus_tachycardia: 120          # THE dominant negative (F1)
+      svt: 15                         # covered by design; reported apart
+      beta_blocked_sinus: 25
+      paced: 15
+      atrial_fibrillation: 30         # for the Task-6 combined endpoint
+      sinus: 30
+    conduction_ratio:                 # ARM A breakdown — F2 needs all four
+      TWO_TO_ONE: 22
+      THREE_TO_ONE: 10
+      FOUR_TO_ONE: 10                 # oversampled ON PURPOSE: this is the
+                                      # documented miss, and an unmeasured
+                                      # miss is an assertion
+      VARIABLE: 10
+  retest: {target_pairs: 20}
+  series: {target_series: 30, min_scans: 3}
+                                      # F3 sub-protocol: >= 3 scans per
+                                      # patient across a rate-varying
+                                      # window (e.g. pre/post rate-control
+                                      # titration, or pre/post
+                                      # cardioversion), so a conduction
+                                      # ratio STEP can be observed at all
+  session_checklist: [twelve_lead_ecg_recorded,
+                      ep_adjudication_recorded,
+                      atrial_rate_recorded,
+                      conduction_ratio_recorded,
+                      flutter_type_recorded,
+                      torso_visible_for_respiration,
+                      exertional_context_recorded,
+                      capture_fps_60_attempted,
+                      simultaneous_ecg_synchronized]

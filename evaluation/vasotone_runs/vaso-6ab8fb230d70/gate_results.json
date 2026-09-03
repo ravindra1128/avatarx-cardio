@@ -1,0 +1,318 @@
+{
+ "WATERMARK": "VASCULAR MORPHOLOGY \u2014 RESEARCH ARTIFACT \u2014 NOT A MEASUREMENT",
+ "run_id": "vaso-6ab8fb230d70",
+ "evidence": {
+  "data": {
+   "signal_domain": "synthetic",
+   "participant_disjoint": false,
+   "session_disjoint": false,
+   "production_path": false,
+   "n_recordings": 14,
+   "dataset_dir": "/private/tmp/claude-501/-Users-pg-Documents-AvatarX-code-afib/971031ba-40cf-4fe6-95e6-4d8f5ff48e94/scratchpad/vasotone_fixture_ds2"
+  },
+  "w0": {
+   "n_provocations": 6,
+   "direction_agreement": 0.0,
+   "per_maneuver_r": {}
+  },
+  "w1": {
+   "n_null_optics_sessions": 4,
+   "n_null_rest_sessions": 4,
+   "per_feature": {
+    "norm_pulse_amplitude": {
+     "null_optics_p95": 0.02171,
+     "null_rest_p95": 0.01108,
+     "n_null_optics_values": 4,
+     "n_null_rest_values": 4
+    },
+    "amplitude_trend": {
+     "null_optics_p95": 0.47126,
+     "null_rest_p95": 0.04339,
+     "n_null_optics_values": 4,
+     "n_null_rest_values": 4
+    },
+    "vasomotor_lf_power": {
+     "null_optics_p95": 0.64685,
+     "null_rest_p95": 0.27075,
+     "n_null_optics_values": 4,
+     "n_null_rest_values": 4
+    },
+    "notch_rel_amp": {
+     "null_optics_p95": 0.28254,
+     "null_rest_p95": 0.17973,
+     "n_null_optics_values": 4,
+     "n_null_rest_values": 4
+    },
+    "reflection_index": {
+     "null_optics_p95": 0.11389,
+     "null_rest_p95": 0.06909,
+     "n_null_optics_values": 4,
+     "n_null_rest_values": 4
+    }
+   },
+   "per_group_null_rest_p95": {
+    "2": null,
+    "3": null,
+    "4": null,
+    "5": null
+   }
+  },
+  "w2": {},
+  "w3": {},
+  "w4": {
+   "per_axis": {
+    "fitzpatrick_group": {
+     "per_group": {
+      "2": {
+       "n_participants": 1,
+       "attempted": 5,
+       "coverage": null,
+       "scored_participants": 0,
+       "detection": null,
+       "group_drift_floor": null
+      },
+      "3": {
+       "n_participants": 2,
+       "attempted": 4,
+       "coverage": null,
+       "scored_participants": 0,
+       "detection": null,
+       "group_drift_floor": null
+      },
+      "4": {
+       "n_participants": 1,
+       "attempted": 3,
+       "coverage": null,
+       "scored_participants": 0,
+       "detection": null,
+       "group_drift_floor": null
+      },
+      "5": {
+       "n_participants": 1,
+       "attempted": 3,
+       "coverage": null,
+       "scored_participants": 0,
+       "detection": null,
+       "group_drift_floor": null
+      }
+     }
+    }
+   }
+  },
+  "w5": {}
+ },
+ "gates": [
+  {
+   "gate": "w0",
+   "title": "W0 \u2014 reference tracking (facial vs contact-PI response)",
+   "status": "RED",
+   "reasons": [
+    "evidence domain 'synthetic' is not 'facial_rppg' \u2014 machinery evidence only, can never open a gate",
+    "evidence is not participant-disjoint",
+    "evidence is not session-disjoint",
+    "evidence is not production-path",
+    "direction agreement 0.0 < 0.8",
+    "response-magnitude correlation None < 0.6",
+    "6 provocations < 60"
+   ],
+   "metrics": {
+    "n_provocations": 6,
+    "direction_agreement": 0.0,
+    "per_maneuver_r": {}
+   },
+   "thresholds": {
+    "requires_clinical_signoff": true,
+    "direction_agreement_min": 0.8,
+    "magnitude_r_min": 0.6,
+    "min_provocations": 60,
+    "pi_detection_floor_delta_norm": 0.05
+   }
+  },
+  {
+   "gate": "w1",
+   "title": "W1 \u2014 optics invariance (null_optics arm, T1 defense)",
+   "status": "RED",
+   "reasons": [
+    "evidence domain 'synthetic' is not 'facial_rppg' \u2014 machinery evidence only, can never open a gate",
+    "evidence is not participant-disjoint",
+    "evidence is not session-disjoint",
+    "evidence is not production-path",
+    "4 null_optics sessions < 20",
+    "4 null_rest sessions < 20",
+    "only 0 feature(s) below the optics-response thresholds (p95 <= 0.1 and <= 2.0x natural drift; < 1) \u2014 the surviving set is empty, every candidate is an optics detector"
+   ],
+   "metrics": {
+    "n_null_optics_sessions": 4,
+    "n_null_rest_sessions": 4,
+    "per_feature": {
+     "norm_pulse_amplitude": {
+      "null_optics_p95": 0.02171,
+      "null_rest_p95": 0.01108,
+      "n_null_optics_values": 4,
+      "n_null_rest_values": 4
+     },
+     "amplitude_trend": {
+      "null_optics_p95": 0.47126,
+      "null_rest_p95": 0.04339,
+      "n_null_optics_values": 4,
+      "n_null_rest_values": 4
+     },
+     "vasomotor_lf_power": {
+      "null_optics_p95": 0.64685,
+      "null_rest_p95": 0.27075,
+      "n_null_optics_values": 4,
+      "n_null_rest_values": 4
+     },
+     "notch_rel_amp": {
+      "null_optics_p95": 0.28254,
+      "null_rest_p95": 0.17973,
+      "n_null_optics_values": 4,
+      "n_null_rest_values": 4
+     },
+     "reflection_index": {
+      "null_optics_p95": 0.11389,
+      "null_rest_p95": 0.06909,
+      "n_null_optics_values": 4,
+      "n_null_rest_values": 4
+     }
+    },
+    "per_group_null_rest_p95": {
+     "2": null,
+     "3": null,
+     "4": null,
+     "5": null
+    }
+   },
+   "thresholds": {
+    "requires_clinical_signoff": true,
+    "null_optics_abs_delta_norm_p95_max": 0.1,
+    "null_rest_ratio_max": 2.0,
+    "min_null_optics_sessions": 20,
+    "min_null_rest_sessions": 20,
+    "min_surviving_features": 1
+   }
+  },
+  {
+   "gate": "w2",
+   "title": "W2 \u2014 beats HR/respiration baselines (PIVOTAL, T2 defense)",
+   "status": "RED",
+   "reasons": [
+    "evidence domain 'synthetic' is not 'facial_rppg' \u2014 machinery evidence only, can never open a gate",
+    "evidence is not participant-disjoint",
+    "evidence is not session-disjoint",
+    "evidence is not production-path",
+    "no baseline-battery evaluation on record"
+   ],
+   "metrics": {},
+   "thresholds": {
+    "requires_clinical_signoff": true,
+    "added_r2_over_b3_min": 0.1,
+    "ci_must_exclude_zero": true,
+    "min_test_participants": 25
+   }
+  },
+  {
+   "gate": "w3",
+   "title": "W3 \u2014 dose/consistency (retest + graded ordering)",
+   "status": "RED",
+   "reasons": [
+    "evidence domain 'synthetic' is not 'facial_rppg' \u2014 machinery evidence only, can never open a gate",
+    "evidence is not participant-disjoint",
+    "evidence is not session-disjoint",
+    "evidence is not production-path",
+    "no retest/graded-provocation study on record"
+   ],
+   "metrics": {},
+   "thresholds": {
+    "requires_clinical_signoff": true,
+    "retest_icc_min": 0.6,
+    "min_retest_pairs": 10,
+    "ordered_fraction_min": 0.7
+   }
+  },
+  {
+   "gate": "w4",
+   "title": "W4 \u2014 fairness (detection parity and coverage)",
+   "status": "RED",
+   "reasons": [
+    "evidence domain 'synthetic' is not 'facial_rppg' \u2014 machinery evidence only, can never open a gate",
+    "evidence is not participant-disjoint",
+    "evidence is not session-disjoint",
+    "evidence is not production-path",
+    "fitzpatrick_group: worst-group response-detection ratio None < 0.75",
+    "fitzpatrick_group: worst-group coverage ratio None < 0.8"
+   ],
+   "metrics": {
+    "per_axis": {
+     "fitzpatrick_group": {
+      "per_group": {
+       "2": {
+        "n_participants": 1,
+        "attempted": 5,
+        "coverage": null,
+        "scored_participants": 0,
+        "detection": null,
+        "group_drift_floor": null
+       },
+       "3": {
+        "n_participants": 2,
+        "attempted": 4,
+        "coverage": null,
+        "scored_participants": 0,
+        "detection": null,
+        "group_drift_floor": null
+       },
+       "4": {
+        "n_participants": 1,
+        "attempted": 3,
+        "coverage": null,
+        "scored_participants": 0,
+        "detection": null,
+        "group_drift_floor": null
+       },
+       "5": {
+        "n_participants": 1,
+        "attempted": 3,
+        "coverage": null,
+        "scored_participants": 0,
+        "detection": null,
+        "group_drift_floor": null
+       }
+      }
+     }
+    }
+   },
+   "thresholds": {
+    "requires_clinical_signoff": true,
+    "subgroups": [
+     "fitzpatrick_group"
+    ],
+    "detection_parity_ratio_min": 0.75,
+    "coverage_ratio_min": 0.8,
+    "min_group_participants": 5
+   }
+  },
+  {
+   "gate": "w5",
+   "title": "W5 \u2014 claim mapping (owner + clinical advisor)",
+   "status": "RED",
+   "reasons": [
+    "evidence domain 'synthetic' is not 'facial_rppg' \u2014 machinery evidence only, can never open a gate",
+    "evidence is not participant-disjoint",
+    "evidence is not session-disjoint",
+    "evidence is not production-path",
+    "claim mapping with owner + clinical advisor not on record \u2014 the first permissible surface is a wellness reactivity comparison against the user's own baseline, explicitly non-medical",
+    "signoff claim_scope is not 'vasomotor_reactivity_trend' \u2014 nothing may render"
+   ],
+   "metrics": {},
+   "thresholds": {
+    "requires_clinical_signoff": true,
+    "permissible_first_claim": "vasomotor_reactivity_trend",
+    "absolute_claims_require_prospective_protocol": true
+   }
+  }
+ ],
+ "all_gates_green": false,
+ "clinical_signoff": false,
+ "promotion_open": false
+}

@@ -1,0 +1,11 @@
+{
+ "WATERMARK": "VASCULAR MORPHOLOGY \u2014 RESEARCH ARTIFACT \u2014 NOT A MEASUREMENT",
+ "run_id": "fid-be22792061c8",
+ "kind": "fidelity",
+ "track": "vascular_stiffness",
+ "n_recordings": 7,
+ "n_excluded": 0,
+ "n_paired_participants": 6,
+ "signal_domain": "synthetic",
+ "evaluated_at": "2026-08-31T18:20:00"
+}

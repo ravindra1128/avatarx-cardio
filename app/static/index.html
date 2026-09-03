@@ -1,0 +1,884 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AvatarX pulse rhythm scan</title>
+<style>
+  :root { --bg:#0b1220; --card:#121b2e; --ink:#eef2f7; --mute:#94a3b8; --acc:#2dd4bf;
+          --warn:#fbbf24; --bad:#f87171; --ok:#34d399; --line:#243046; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width:560px; margin:0 auto; padding:20px 16px 40px; }
+  body.showing-result .wrap { max-width:1064px; }
+  header { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+  header .logo { width:34px; height:34px; border-radius:10px; background:linear-gradient(135deg,var(--acc),#60a5fa);
+                 display:grid; place-items:center; font-weight:700; color:#06231f; }
+  header h1 { font-size:18px; margin:0; font-weight:600; }
+  header .sub { color:var(--mute); font-size:12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:18px; padding:20px; }
+  .screen { display:none; } .screen.active { display:block; }
+  h2 { margin:0 0 8px; font-size:22px; }
+  p { margin:8px 0; color:var(--ink); }
+  .mute { color:var(--mute); font-size:14px; }
+  ul.steps { padding-left:18px; color:var(--mute); }
+  button { appearance:none; border:0; border-radius:12px; padding:14px 18px; font-size:16px; font-weight:600;
+           background:var(--acc); color:#06231f; cursor:pointer; width:100%; margin-top:14px; }
+  button.secondary { background:transparent; color:var(--ink); border:1px solid var(--line); }
+  button:disabled { opacity:.5; cursor:default; }
+  .banner { background:#3b0d0d; border:1px solid #7f1d1d; color:#fecaca; padding:8px 12px; border-radius:10px;
+            font-size:13px; margin-bottom:12px; display:none; }
+  .disclaimer { font-size:12px; color:var(--mute); border-top:1px solid var(--line); margin-top:16px; padding-top:12px; }
+  /* camera stage */
+  .stage { position:relative; width:100%; aspect-ratio:4/3; background:#000; border-radius:16px; overflow:hidden; }
+  .stage .mirror { position:absolute; inset:0; transform:scaleX(-1); }
+  .stage video { width:100%; height:100%; object-fit:fill; display:block; }
+  .stage svg { position:absolute; inset:0; width:100%; height:100%; }
+  .stage .center { position:absolute; inset:0; display:grid; place-items:center; pointer-events:none; }
+  .count { font-size:72px; font-weight:700; text-shadow:0 2px 12px rgba(0,0,0,.6); }
+  .hint { text-align:center; margin:12px 0 4px; font-size:17px; min-height:24px; }
+  .chips { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-top:8px; }
+  .chip { font-size:12px; padding:5px 10px; border-radius:999px; border:1px solid var(--line); color:var(--mute); }
+  .chip.ok { border-color:var(--ok); color:var(--ok); }
+  .chip.bad { border-color:var(--warn); color:var(--warn); }
+  .chip.wait { border-color:var(--line); color:var(--mute); opacity:.8; }
+  .hold { height:6px; background:#0f172a; border-radius:3px; margin:6px auto 0; width:60%; overflow:hidden; }
+  .hold > div { height:100%; width:0; background:var(--acc); transition:width .3s linear; }
+  .pause { text-align:center; color:var(--warn); font-size:14px; margin-top:6px; }
+  /* horizontal progress bar (UI only — completion follows real events) */
+  .pbar { margin:20px 0 8px; }
+  .pbar .pl { display:flex; justify-content:space-between; align-items:baseline; gap:10px; margin-bottom:8px; }
+  .pbar .txt { font-size:14px; color:var(--mute); }
+  .pbar .pct { font-size:12px; color:var(--mute); font-variant-numeric:tabular-nums; }
+  .pbar .track { height:6px; background:#0f172a; border-radius:999px; overflow:hidden; }
+  .pbar .fill { height:100%; width:0%; background:var(--acc); border-radius:999px;
+                transition:width .4s cubic-bezier(.4,0,.2,1); }
+  .pbar.indet .fill { width:36%; animation:pslide 1.5s cubic-bezier(.45,.05,.55,.95) infinite; }
+  @keyframes pslide { from { transform:translateX(-100%);} to { transform:translateX(280%);} }
+  @media (prefers-reduced-motion:reduce) {
+    .pbar .fill { transition:none; }
+    .pbar.indet .fill { animation:none; width:100%; opacity:.35; }
+  }
+  #scanBar { margin:14px 0 2px; }
+  #scanBar.paused .fill { background:var(--warn); }
+  /* research/debug metrics (screen only; the generated report is above) */
+  .debug { margin-top:14px; border:1px dashed var(--warn); border-radius:12px; padding:12px 14px; }
+  .debug h3 { margin:0 0 2px; font-size:13px; color:var(--warn); letter-spacing:.06em; }
+  .debug .dnote { font-size:12px; color:var(--mute); margin:4px 0 8px; }
+  .debug h4 { margin:12px 0 4px; font-size:12px; color:var(--mute); text-transform:uppercase; letter-spacing:.05em; }
+  .debug table { width:100%; border-collapse:collapse; font-size:13px; }
+  .debug td { padding:3px 6px 3px 0; border-bottom:1px solid var(--line); vertical-align:top; }
+  .debug td.v { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .debug td.c { text-align:right; font-size:11px; color:var(--mute); white-space:nowrap; width:82px; }
+  @media print { .debug { display:none; } }
+  @media (max-width:700px) { .wrap, body.showing-result .wrap { max-width:100%; } }
+  /* results */
+  .outcome { display:flex; align-items:center; gap:12px; margin-bottom:8px; }
+  .dot { width:14px; height:14px; border-radius:50%; background:var(--acc); }
+  .dot.warn { background:var(--warn);} .dot.bad { background:var(--bad);}
+  .primary-text { font-size:18px; line-height:1.5; margin:10px 0 14px; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px; }
+  .metric { background:#0f172a; border:1px solid var(--line); border-radius:12px; padding:10px 12px; }
+  .metric .k { color:var(--mute); font-size:12px; } .metric .v { font-size:20px; font-weight:600; }
+  .metric .v small { font-size:12px; color:var(--mute); font-weight:400; }
+  canvas.wave { width:100%; height:90px; background:#0f172a; border:1px solid var(--line); border-radius:12px; margin-top:12px; }
+  details { margin-top:14px; } summary { cursor:pointer; color:var(--mute); }
+  pre { white-space:pre-wrap; font-size:12px; color:var(--mute); background:#0f172a; padding:10px; border-radius:10px; }
+  .caveat { font-size:13px; color:var(--warn); margin-top:10px; }
+  .err h2 { color:var(--bad); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><div class="logo">A</div><div><h1>AvatarX pulse rhythm scan</h1>
+    <div class="sub" id="buildline">Research demonstration · contactless</div></div></header>
+  <div id="testBanner" class="banner">TEST SOURCE — playing a synthetic clip instead of your camera. Not a real scan.</div>
+
+  <!-- 1. welcome -->
+  <section id="s-welcome" class="screen active card">
+    <h2>Check your pulse rhythm</h2>
+    <p class="mute">A 30-second face scan using your camera. Nothing is uploaded — analysis runs on this computer.</p>
+    <ul class="steps">
+      <li>Allow camera access when asked</li>
+      <li>Sit still in good, even light and centre your face in the oval</li>
+      <li>Hold still for 30 seconds while we read your pulse</li>
+    </ul>
+    <button id="btnStart">Start</button>
+    <div class="disclaimer">This is a research prototype. It does not provide a diagnosis and cannot rule out any condition.
+      If you feel unwell, contact a clinician.</div>
+  </section>
+
+  <!-- 2. permission -->
+  <section id="s-permission" class="screen card">
+    <h2>Camera permission</h2>
+    <p>Your browser is asking whether this page may use the camera. Please choose <b>Allow</b>.</p>
+    <div class="pbar indet" role="progressbar" aria-label="Waiting for camera access">
+      <div class="pl"><span class="txt">Waiting for camera access…</span></div>
+      <div class="track"><div class="fill"></div></div>
+    </div>
+    <p class="mute">The camera stays on this device; the video is analysed locally and never leaves your computer.</p>
+  </section>
+
+  <!-- 3/4. framing + scanning -->
+  <section id="s-scan" class="screen card">
+    <div class="stage">
+      <div class="mirror">
+        <video id="video" autoplay playsinline muted></video>
+        <svg id="ovl" viewBox="0 0 640 480" preserveAspectRatio="none">
+          <defs><mask id="m"><rect width="640" height="480" fill="#fff"/>
+            <ellipse id="hole" cx="320" cy="240" rx="175" ry="215" fill="#000"/></mask></defs>
+          <rect width="640" height="480" fill="rgba(0,0,0,.55)" mask="url(#m)"/>
+          <ellipse id="ring" cx="320" cy="240" rx="175" ry="215" fill="none" stroke="#94a3b8" stroke-width="4"/>
+          <g id="rois" fill="none" stroke="rgba(45,212,191,.7)" stroke-width="2"></g>
+        </svg>
+      </div>
+      <div class="center"><div id="count" class="count"></div></div>
+    </div>
+    <div class="pbar" id="scanBar" style="display:none" role="progressbar"
+         aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <div class="pl"><span class="txt" id="scanLabel">Recording your pulse…</span><span class="pct" id="scanPct">0%</span></div>
+      <div class="track"><div class="fill" id="scanFill"></div></div>
+    </div>
+    <div id="hint" class="hint">Starting camera…</div>
+    <div id="holdBar" class="hold"><div id="holdFill"></div></div>
+    <div id="stars" class="hint" style="font-size:15px;color:var(--acc);min-height:20px"></div>
+    <div id="checks" class="chips"></div>
+    <div id="pauseNote" class="pause" style="display:none">Paused — timer resumes when the signal is back</div>
+    <button id="btnCancel" class="secondary">Cancel</button>
+  </section>
+
+  <!-- v0.4 three-phase: safety screen -->
+  <section id="s-safety" class="screen card">
+    <h2>Before the activity</h2>
+    <p class="mute">A few standard questions first. Any "Yes" (or unanswered question) skips the
+      guided activity — a resting scan is still available.</p>
+    <div id="safetyQs"></div>
+    <div id="stopRules" class="mute" style="font-size:13px;margin-top:10px"></div>
+    <button id="btnSafety">Continue</button>
+  </section>
+
+  <!-- v0.4 three-phase: guided activity (NO physiology UI by design) -->
+  <section id="s-activity" class="screen card">
+    <h2 id="actTitle">Guided activity</h2>
+    <p class="mute" id="actNote">Follow the beat. The camera only counts your movement —
+      it does not measure your pulse while you move.</p>
+    <div class="center" style="position:static"><div id="actCount" class="count"></div></div>
+    <div class="hint" id="actReps"></div>
+    <button id="btnActStop" class="secondary">Stop early</button>
+  </section>
+
+  <!-- 5. processing -->
+  <section id="s-processing" class="screen card">
+    <h2>Analysing your pulse…</h2>
+    <div class="pbar" id="procBar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <div class="pl"><span class="txt" id="procLabel">Analysing signal…</span><span class="pct" id="procPct">0%</span></div>
+      <div class="track"><div class="fill" id="procFill"></div></div>
+    </div>
+    <p class="mute" id="procNote">Running the full analysis on the recorded scan: face tracking, pulse extraction from four facial regions,
+      beat detection with confidence, rhythm features, quality gates.</p>
+  </section>
+
+  <!-- 6. results -->
+  <section id="s-result" class="screen card">
+    <!-- v0.2.1: the single unified report replaces the ad-hoc result
+         graphs (metric grid, Rhythm Map panels, legacy canvas). -->
+    <div id="report"></div>
+    <div id="debugPanel" class="debug" style="display:none"></div>
+    <details><summary>Details &amp; provenance</summary><pre id="rDetails"></pre></details>
+    <button id="btnPrint" class="secondary">Print / save as PDF</button>
+    <button id="btnAgain">Scan again</button>
+    <div class="disclaimer">Research prototype. Not a diagnosis. This scan cannot rule out any condition.
+      Consumer wearables (e.g. a smartwatch) and this prototype are not interchangeable diagnostic references —
+      an ECG read by a clinician is the only ground truth for heart rhythm.</div>
+  </section>
+
+  <!-- errors -->
+  <section id="s-error" class="screen card err">
+    <h2 id="eTitle">Something went wrong</h2>
+    <p id="eMsg"></p>
+    <p id="eHelp" class="mute"></p>
+    <button id="btnRetry">Try again</button>
+  </section>
+</div>
+
+<script>
+(() => {
+  // ------------------------------------------------------------ config
+  const qs = new URLSearchParams(location.search);
+  const TEST_SOURCE = qs.get('source') === 'test';           // explicit self-test only
+  const TEST_KIND = qs.get('kind') || 'sinus_portrait';
+  const SCAN_OVERRIDE = qs.has('scan') ? parseFloat(qs.get('scan')) : null;
+  const CAPTURE_W_MAX = 480;     // downscale for throughput; ROIs stay resolvable
+  const COUNTDOWN_S = 3;
+
+  const $ = id => document.getElementById(id);
+  const screens = ['s-welcome','s-permission','s-safety','s-activity','s-scan','s-processing','s-result','s-error'];
+  const show = id => { if (id !== 's-processing') procStop();
+    document.body.classList.toggle('showing-result', id === 's-result');
+    screens.forEach(s => $(s).classList.toggle('active', s === id)); };
+
+  let cfg = { scan_seconds: 30 };
+  let stream = null, video = $('video'), track = null, cameraSettings = {};
+  let session = null, phase = 'idle';   // idle | preview | countdown | scanning | finishing
+  let cap = document.createElement('canvas'), ctx = null, capW = 0, capH = 0;
+  let batch = [], batchTs = [], sending = Promise.resolve(), pending = 0, dropped = 0;
+  let lastFb = null, readySince = null, countdownT0 = null, scanT0 = null, rvfcHandle = null, rafHandle = null;
+  let lastVideoTime = -1, statusTimer = null;
+  // v0.4 three-phase session state. captureTarget routes frames:
+  // 'scan' -> /api/frames (physiology scans), 'activity' ->
+  // /api/vsession/activity_frames (workload verification ONLY), null ->
+  // frames are dropped (between phases).
+  let vs = null, vstage = null, captureTarget = 'scan', actTimer = null, metroTimer = null;
+  const REST_OVERRIDE = qs.has('rest') ? parseFloat(qs.get('rest')) : null;
+  const RECOVERY_OVERRIDE = qs.has('recovery') ? parseFloat(qs.get('recovery')) : null;
+  const ACT_OVERRIDE = qs.has('act') ? parseFloat(qs.get('act')) : null;
+
+  if (TEST_SOURCE) $('testBanner').style.display = 'block';
+
+  // Client-side failures are otherwise invisible to the server-side
+  // telemetry; every uncaught error/rejection lands in the work dir.
+  const reportError = (kind, msg) => { try {
+    fetch('/api/client_error', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ kind, msg: String(msg).slice(0, 500), t: performance.now()/1000 }) });
+  } catch (_) {} };
+  addEventListener('error', e => reportError('error', (e.message||'') + ' @' + (e.filename||'') + ':' + (e.lineno||'')));
+  addEventListener('unhandledrejection', e => reportError('rejection', e.reason && (e.reason.stack || e.reason.message) || e.reason));
+
+  // ------------------------------------------------------------ helpers
+  async function api(path, obj) {
+    const r = await fetch(path, { method: 'POST', headers: {'Content-Type':'application/json'},
+                                  body: JSON.stringify(obj || {}) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+    return j;
+  }
+  function chip(id, state, label) {
+    const el = $(id); el.className = 'chip ' + (state === true ? 'ok' : state === false ? 'bad' : '');
+    if (label) el.textContent = label;
+  }
+  function fail(code, msg) {
+    stopCapture();
+    const help = {
+      permission: 'In your browser, click the camera icon in the address bar (or open Settings → Privacy → Camera), allow access for this page, then try again.',
+      no_camera: 'No camera was found. Connect a camera or check that another app is not using it.',
+      no_face: 'Sit facing the camera in even light so your whole face is inside the oval.',
+      movement: 'Rest your head, keep your face inside the oval and stay still for the whole scan.',
+      lighting: 'Move somewhere brighter with steady, even light on your face (avoid strong backlight and flicker).',
+      signal: 'Try again with more light on your face and less movement. Reflections, hair over the forehead and heavy make-up reduce the signal.',
+      processing_error: 'The analysis could not be completed. Please try again.',
+      cancelled: '',
+    }[code] || '';
+    const title = { permission:'Camera permission needed', no_camera:'No camera available', no_face:'We could not see your face',
+                    movement:'Too much movement', lighting:'Not enough light', signal:'Signal too weak',
+                    processing_error:'Analysis failed', cancelled:'Scan cancelled' }[code] || 'Something went wrong';
+    $('eTitle').textContent = title; $('eMsg').textContent = msg || ''; $('eHelp').textContent = help;
+    show('s-error');
+  }
+
+  // ------------------------------------------------------------ camera
+  async function openCamera() {
+    show('s-permission');
+    if (TEST_SOURCE) {
+      video.src = '/api/testsource?kind=' + encodeURIComponent(TEST_KIND);
+      video.loop = false; video.muted = true;
+      // wait for metadata only; frames come from seekPump, not playback,
+      // so the self-test runs even in a hidden/background tab.
+      await new Promise((res, rej) => {
+        video.addEventListener('loadeddata', res, { once: true });
+        video.addEventListener('error', () => rej(new Error('test source failed to load')), { once: true });
+      }).catch(e => { fail('processing_error', e.message); throw e; });
+      cameraSettings = { source: 'test:' + TEST_KIND };
+      return true;
+    }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      fail('no_camera', 'This browser does not support camera capture.'); return false;
+    }
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { facingMode: 'user', width: {ideal: 640}, height: {ideal: 480}, frameRate: {ideal: 30, min: 24} } });
+    } catch (e) {
+      const denied = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
+      fail(denied ? 'permission' : 'no_camera', denied ? 'Camera access was not allowed.' : (e.name + ': ' + e.message));
+      return false;
+    }
+    track = stream.getVideoTracks()[0];
+    // Best effort: ask the camera to lock exposure / white balance. Most laptop
+    // webcams refuse from the browser; we RECORD what the track reports.
+    try { await track.applyConstraints({ advanced: [{ exposureMode: 'manual' }, { whiteBalanceMode: 'manual' }] }); } catch (_) {}
+    try {
+      const s = track.getSettings();
+      cameraSettings = { label: track.label, width: s.width, height: s.height, frameRate: s.frameRate };
+      if ('exposureMode' in s) cameraSettings.exposureMode = s.exposureMode;
+      if ('whiteBalanceMode' in s) cameraSettings.whiteBalanceMode = s.whiteBalanceMode;
+    } catch (_) {}
+    video.srcObject = stream;
+    await video.play();
+    track.addEventListener('ended', () => { if (phase !== 'idle') fail('no_camera', 'The camera stopped.'); });
+    return true;
+  }
+  function stopCapture() {
+    if (rvfcHandle && video.cancelVideoFrameCallback) video.cancelVideoFrameCallback(rvfcHandle);
+    if (rafHandle) cancelAnimationFrame(rafHandle);
+    rvfcHandle = rafHandle = null;
+    if (statusTimer) { clearInterval(statusTimer); statusTimer = null; }
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+    if (TEST_SOURCE) { try { video.pause(); } catch (_) {} }
+    phase = 'idle';
+  }
+
+  // ------------------------------------------------------- frame capture
+  function setupCanvas() {
+    const vw = video.videoWidth || 640, vh = video.videoHeight || 480;
+    const scale = Math.min(1, CAPTURE_W_MAX / vw);
+    capW = Math.round(vw * scale) & ~1; capH = Math.round(vh * scale) & ~1;
+    cap.width = capW; cap.height = capH;
+    ctx = cap.getContext('2d', { willReadFrequently: true });
+    document.querySelector('.stage').style.aspectRatio = `${capW} / ${capH}`;
+    const ovl = $('ovl'); ovl.setAttribute('viewBox', `0 0 ${capW} ${capH}`);
+    ['hole','ring'].forEach(id => { const e = $(id);
+      e.setAttribute('cx', capW/2); e.setAttribute('cy', capH/2);
+      e.setAttribute('rx', capW*0.27); e.setAttribute('ry', capH*0.44); });
+    ovl.querySelectorAll('rect').forEach(r => { r.setAttribute('width', capW); r.setAttribute('height', capH); });
+  }
+  function onFrame(now, meta) {
+    if (phase === 'idle') return;
+    const t = (meta && typeof meta.mediaTime === 'number') ? meta.mediaTime : performance.now()/1000;
+    ctx.drawImage(video, 0, 0, capW, capH);
+    const img = ctx.getImageData(0, 0, capW, capH);
+    batch.push(img.data); batchTs.push(t);
+    if (batch.length >= 15) flush();
+    if (!TEST_SOURCE && video.requestVideoFrameCallback) rvfcHandle = video.requestVideoFrameCallback(onFrame);
+  }
+  function rafLoop() {
+    if (phase === 'idle') return;
+    if (video.currentTime !== lastVideoTime) { lastVideoTime = video.currentTime; onFrame(performance.now(), null); }
+    rafHandle = requestAnimationFrame(rafLoop);
+  }
+  function startFrameLoop() {
+    if (TEST_SOURCE) { seekPump(); return; }             // self-test: not the camera path
+    if (video.requestVideoFrameCallback) rvfcHandle = video.requestVideoFrameCallback(onFrame);
+    else rafLoop();
+  }
+  // TEST-SOURCE ONLY. Hidden/background tabs suspend file-video playback (a
+  // real user's foreground tab and live camera stream are exempt). To keep
+  // the self-test runnable anywhere, advance the clip by SEEKING at 30 fps
+  // and capture each seeked frame — media time is still the honest clock.
+  // Never used for the camera: a live MediaStream is not seekable.
+  function seekPump() {
+    const step = 1/30; let vt = 0, seekBase = 0;
+    const pump = () => {
+      if (phase === 'idle') return;
+      if (vt >= (video.duration || 1e9) - step) {
+        // session mode: loop the clip, keeping mediaTime MONOTONIC (a
+        // backwards capture clock would corrupt the timestamp sidecar)
+        if (vs) { seekBase += vt; vt = 0; setTimeout(pump, 20); return; }
+        if (phase === 'scanning') finishScan(); return; }
+      const onSeeked = () => { video.removeEventListener('seeked', onSeeked);
+        onFrame(0, { mediaTime: seekBase + video.currentTime }); setTimeout(pump, 20); };
+      video.addEventListener('seeked', onSeeked);
+      vt += step; video.currentTime = vt;
+    };
+    pump();
+  }
+  function flush() {
+    if (!batch.length) return;
+    if (captureTarget === null) { batch = []; batchTs = []; return; }   // between phases
+    if (captureTarget === 'scan' && !session) return;
+    if (pending >= 8) { dropped += batch.length; batch = []; batchTs = []; return; }   // never lie: dropped frames stay dropped
+    const frames = batch, ts = batchTs; batch = []; batchTs = [];
+    const activity = captureTarget === 'activity';
+    const head = activity ? { vsession: vs.id, w: capW, h: capH, n: frames.length, ts }
+                          : { session: session.id, w: capW, h: capH, n: frames.length, ts, dropped };
+    const header = new TextEncoder().encode(JSON.stringify(head));
+    const total = 4 + header.length + frames.reduce((s, f) => s + f.byteLength, 0);
+    const buf = new Uint8Array(total); const dv = new DataView(buf.buffer);
+    dv.setUint32(0, header.length, true); buf.set(header, 4);
+    let off = 4 + header.length; for (const f of frames) { buf.set(f, off); off += f.byteLength; }
+    pending++;
+    const url = activity ? '/api/vsession/activity_frames' : '/api/frames';
+    sending = sending.then(() => fetch(url, { method:'POST', headers:{'Content-Type':'application/octet-stream'}, body: buf })
+      .then(r => { if (!r.ok) throw new Error('frames HTTP ' + r.status); return r.json(); })
+      .then(fb => { pending--; if (activity) onActivityLive(fb); else onFeedback(fb); })
+      .catch(err => { pending--; dropped += frames.length; console.error('frames', err); reportError('frames', err); }));
+  }
+
+  // ------------------------------------------------------- feedback / UI
+  function drawRois(fb) {
+    const g = $('rois'); g.innerHTML = '';
+    if (!fb || !fb.roi_boxes) return;
+    for (const k of Object.keys(fb.roi_boxes)) {
+      const [x,y,w,h] = fb.roi_boxes[k];
+      const r = document.createElementNS('http://www.w3.org/2000/svg','rect');
+      r.setAttribute('x', x*capW); r.setAttribute('y', y*capH); r.setAttribute('width', w*capW); r.setAttribute('height', h*capH);
+      r.setAttribute('rx', 4); g.appendChild(r);
+    }
+  }
+  const CHECK_LABELS = { lighting:'Light', face:'Face', framing:'Framing', exposure:'Exposure', motion:'Still',
+    frame_delivery:'Delivery', frame_rate:'Frame rate', timestamps:'Frames', tracking:'Tracking', signal_snr:'Pulse signal',
+    cross_roi_coherence:'Cross-region', beat_timing:'Beat timing', prelim_beats:'Beats', sqi:'Quality' };
+  function renderChecks(rd) {
+    const el = $('checks'); el.innerHTML = '';
+    if (!rd || !rd.checks) return;
+    for (const k of Object.keys(CHECK_LABELS)) {
+      const c = rd.checks[k]; if (!c) continue;
+      const span = document.createElement('span');
+      const waiting = c.value == null && !c.pass;
+      span.className = 'chip ' + (c.pass ? 'ok' : (waiting ? 'wait' : 'bad'));
+      let v = '';
+      if (typeof c.value === 'number' && !['face','lighting','exposure','motion'].includes(k)) {
+        v = ' ' + (k === 'beat_timing' ? c.value.toFixed(0) + ' ms' : k === 'frame_rate' ? c.value.toFixed(0) + ' fps' :
+                   k === 'timestamps' ? Math.round(c.value * 100) + '%' :
+                   k === 'cross_roi_coherence' ? (c.mode === 'two_region_verified' ? '2-region' : c.value.toFixed(2)) :
+                   k === 'sqi' ? c.value.toFixed(2) : String(c.value));
+      }
+      span.textContent = CHECK_LABELS[k] + v + (c.pass ? ' ✓' : (waiting ? ' …' : ' ✗'));
+      span.title = `${k}: ${c.value == null ? '…' : c.value} ${c.op} ${c.threshold}` + (c.hint ? ' — ' + c.hint : '');
+      el.appendChild(span);
+    }
+  }
+  function renderStars(st) {
+    const el = $('stars');
+    if (!st || !st.stars) { el.textContent = ''; return; }
+    const n = Math.max(1, Math.min(5, st.stars));
+    let txt = '\u2605'.repeat(n) + '\u2606'.repeat(5 - n);
+    if (n < 5 && st.hint) txt += '  \u00b7  ' + st.hint;
+    el.textContent = txt;
+  }
+  function onFeedback(fb) {
+    lastFb = fb;
+    if (fb.state === 'failed' && fb.error) {
+      // an in-capture recovery failure still ends in the honest partial
+      // session verdict, not an error dead-end
+      if (vs && vstage === 'recovery') { finalizeVSession(); return; }
+      fail(fb.error.code, fb.error.message); return; }
+    const rd = fb.readiness || {};
+    renderChecks(rd);
+    drawRois(fb);
+    $('ring').setAttribute('stroke', (fb.ready || (phase === 'scanning' && !fb.paused)) ? '#34d399' : (fb.face_found ? '#fbbf24' : '#94a3b8'));
+    if (fb.restarted && phase === 'scanning') {
+      // the engine sent us back to readiness: too much of the recording was unusable
+      phase = 'preview'; readySince = null; $('scanBar').style.display = 'none'; $('count').textContent = '';
+      $('pauseNote').style.display = 'none';
+    }
+    if (phase === 'preview' || phase === 'countdown') {
+      // The hint comes from the SAME checklist the decision will apply — the
+      // first failing check in root-cause order, or the hold progress.
+      $('hint').textContent = fb.restart_reason && rd.hint === fb.restart_reason ? fb.restart_reason : (rd.hint || 'Checking…');
+      const holdS = (cfg.readiness && cfg.readiness.hold_s) || 3;
+      const frac = Math.min(1, (rd.hold_s || 0) / holdS);
+      $('holdFill').style.width = (rd.ready ? frac * 100 : 0) + '%';
+      renderStars(fb.stars);
+      // Advisory start permission intentionally arrives before downstream
+      // pulse evidence has fully matured. Waiting on result disposition here
+      // deadlocks an otherwise startable scan.
+      if (phase === 'preview' && fb.ready) beginCountdown();
+    } else if (phase === 'scanning') {
+      $('pauseNote').style.display = fb.paused ? '' : 'none';
+      const softWarning = !fb.paused && rd.failing && rd.failing.length ? rd.hint : '';
+      let hint = fb.paused ? (rd.hint || 'Capture paused — hold still, face the light') :
+                 (softWarning || 'Hold still and breathe normally');
+      $('hint').textContent = hint;
+      $('holdFill').style.width = '0%';
+      if (typeof fb.progress === 'number') {
+        const pc = Math.min(1, Math.max(0, fb.progress));
+        $('scanFill').style.width = (pc * 100).toFixed(1) + '%';
+        $('scanPct').textContent = Math.round(pc * 100) + '%';
+        $('scanBar').setAttribute('aria-valuenow', String(Math.round(pc * 100)));
+        $('scanBar').classList.toggle('paused', !!fb.paused);
+        $('scanLabel').textContent = fb.paused ? 'Paused — adjust your position' : 'Recording your pulse…';
+        const left = Math.max(0, Math.ceil(cfg.scan_seconds * (1 - fb.progress)));
+        $('count').textContent = fb.paused ? '❚❚' : left;
+        if (fb.progress >= 0.999) finishScan();
+      }
+    }
+  }
+  function beginCountdown() {
+    if (phase !== 'preview') return;
+    phase = 'countdown'; countdownT0 = performance.now();
+    $('hint').textContent = 'Starting in…';
+    const tick = () => {
+      if (phase !== 'countdown') return;
+      const left = COUNTDOWN_S - (performance.now() - countdownT0)/1000;
+      if (lastFb && !lastFb.ready) { phase = 'preview'; readySince = null; $('count').textContent = ''; $('hint').textContent = (lastFb.readiness && lastFb.readiness.hint) || 'Hold still'; return; }
+      if (left <= 0) { $('count').textContent = ''; startScan(); return; }
+      $('count').textContent = Math.ceil(left); requestAnimationFrame(tick);
+    };
+    tick();
+  }
+  async function startScan() {
+    try {
+      await api('/api/scan/start', { session: session.id, camera_settings: cameraSettings });
+    } catch (e) {
+      if (/not ready/i.test(e.message)) { phase = 'preview'; readySince = null; return; }   // gate closed again: keep guiding
+      fail('processing_error', e.message); return;
+    }
+    phase = 'scanning'; scanT0 = performance.now();
+    $('scanFill').style.width = '0%'; $('scanPct').textContent = '0%';
+    $('scanLabel').textContent = 'Recording your pulse…'; $('scanBar').classList.remove('paused');
+    $('scanBar').style.display = ''; $('hint').textContent = 'Hold still and breathe normally';
+    $('count').textContent = Math.ceil(cfg.scan_seconds);
+  }
+  // -------------------------------------------- processing progress bar
+  // UI only: while the server works the bar eases toward 95%; it reaches
+  // 100% only on the real "done" event and freezes in place on failure.
+  let procTimer = null, procT0 = 0;
+  function setBar(frac) {
+    $('procFill').style.width = (frac * 100).toFixed(1) + '%';
+    $('procPct').textContent = Math.round(frac * 100) + '%';
+    $('procBar').setAttribute('aria-valuenow', String(Math.round(frac * 100)));
+  }
+  function procStart(label) {
+    procStop(); procT0 = performance.now();
+    $('procLabel').textContent = label || 'Analysing signal…';
+    setBar(0);
+    procTimer = setInterval(() => {
+      const t = (performance.now() - procT0) / 1000;
+      setBar(0.95 * (1 - Math.exp(-t / 7)));
+    }, 200);
+  }
+  function procStop() { if (procTimer) { clearInterval(procTimer); procTimer = null; } }
+  function procFinish() {          // settle at 100% before moving on
+    procStop(); setBar(1);
+    return new Promise(res => setTimeout(res, 400));
+  }
+
+  async function finishScan() {
+    if (phase !== 'scanning') return;
+    phase = 'finishing';
+    flush();
+    await sending;                                     // every captured frame is in
+    try { await api('/api/scan/finish', { session: session.id }); }
+    catch (e) { fail('processing_error', e.message); return; }
+    if (vs) { captureTarget = null; }                  // session: camera stays open
+    else stopCapture();
+    phase = 'processing';
+    show('s-processing');
+    procStart('Analysing signal…');
+    const sid = session.id;
+    statusTimer = setInterval(async () => {
+      try {
+        const st = await (await fetch('/api/status?session=' + sid)).json();
+        if (st.state === 'done') {
+          clearInterval(statusTimer); statusTimer = null;
+          // settle at 100% only before a result reveal; phase hops stay snappy
+          if (vs && vstage === 'rest') { procStop(); startActivityPhase(); }
+          else if (vs && vstage === 'recovery') { procStop(); finalizeVSession(); }
+          else { await procFinish(); renderResult(st.result); }
+        } else if (st.state === 'failed') {
+          clearInterval(statusTimer); statusTimer = null;
+          procStop();
+          if (vs && vstage === 'recovery') finalizeVSession();   // honest partial
+          else fail(st.error.code, st.error.message);
+        }
+      } catch (e) { /* keep polling */ }
+    }, 500);
+  }
+
+  // ------------------------------------------- v0.4 three-phase session
+  function onActivityLive(live) {
+    if (live && live.reps != null)
+      $('actReps').textContent = `${live.reps} reps · ${live.cadence_per_min || '—'}/min counted`;
+  }
+  async function beginSessionFlow() {
+    try {
+      vs = await api('/api/vsession', { rest_seconds: REST_OVERRIDE || undefined,
+                                        recovery_seconds: RECOVERY_OVERRIDE || undefined });
+    } catch (e) { fail('processing_error', e.message); return; }
+    const box = $('safetyQs'); box.innerHTML = '';
+    for (const [id, q] of Object.entries(vs.safety_questions)) {
+      const row = document.createElement('label');
+      row.style.cssText = 'display:flex;gap:10px;align-items:flex-start;margin:8px 0;font-size:14px';
+      row.innerHTML = `<input type="checkbox" data-q="${id}" style="margin-top:3px"> <span>${q}</span>`;
+      box.appendChild(row);
+    }
+    $('stopRules').textContent = (vs.stop_rules || []).join(' ');
+    show('s-safety');
+    if (qs.get('autostart') === '1') setTimeout(() => $('btnSafety').click(), 300);
+  }
+  $('btnSafety').onclick = async () => {
+    const answers = {};
+    document.querySelectorAll('#safetyQs input[data-q]').forEach(i => { answers[i.dataset.q] = i.checked; });
+    let sr;
+    try { sr = await api('/api/vsession/safety', { session: vs.id, answers }); }
+    catch (e) { fail('processing_error', e.message); return; }
+    vs.activity_allowed = sr.activity_allowed;
+    if (!(await openCamera())) return;
+    await new Promise(res => { if (video.videoWidth) res(); else video.addEventListener('loadedmetadata', res, { once: true }); });
+    setupCanvas();
+    vstage = 'rest'; captureTarget = 'scan';
+    session = { id: vs.rest_session };
+    cfg.scan_seconds = REST_OVERRIDE || vs.rest_seconds;
+    phase = 'preview'; batch = []; batchTs = []; pending = 0; dropped = 0;
+    $('scanBar').style.display = 'none'; $('count').textContent = '';
+    $('hint').textContent = 'Resting scan — position your face inside the oval';
+    show('s-scan');
+    startFrameLoop();
+  };
+  function beep() {
+    try {
+      const ac = beep.ac = beep.ac || new (window.AudioContext || window.webkitAudioContext)();
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.frequency.value = 880; g.gain.value = 0.08;
+      o.connect(g); g.connect(ac.destination);
+      o.start(); o.stop(ac.currentTime + 0.06);
+    } catch (_) {}
+  }
+  async function startActivityPhase() {
+    if (!vs.activity_allowed) { finalizeVSession(); return; }
+    let act;
+    try { act = await api('/api/vsession/activity', { session: vs.id, action: 'begin' }); }
+    catch (e) { finalizeVSession(); return; }          // blocked -> rest-only
+    const dur = ACT_OVERRIDE || act.duration_s;
+    $('actTitle').textContent = act.display_name;
+    $('actNote').textContent = `Keep the beat: ${act.cadence_per_min} per minute. ` + $('actNote').textContent;
+    $('actReps').textContent = '';
+    show('s-activity');
+    phase = 'activity'; captureTarget = 'activity';
+    const beatMs = 60000 / act.cadence_per_min;
+    metroTimer = setInterval(beep, beatMs);
+    const t0 = performance.now();
+    actTimer = setInterval(() => {
+      const left = Math.max(0, Math.ceil(dur - (performance.now() - t0) / 1000));
+      $('actCount').textContent = left;
+      if (left <= 0) endActivityPhase();
+    }, 250);
+  }
+  async function endActivityPhase() {
+    clearInterval(actTimer); clearInterval(metroTimer); actTimer = metroTimer = null;
+    captureTarget = null;
+    flush(); await sending;
+    try { await api('/api/vsession/activity', { session: vs.id, action: 'end' }); }
+    catch (e) { /* recorded server-side as unverifiable */ }
+    // TRANSITION: sit still — the recovery scan should start within 5 s
+    let rec;
+    try { rec = await api('/api/vsession/recovery', { session: vs.id }); }
+    catch (e) { fail('processing_error', e.message); return; }
+    vstage = 'recovery'; captureTarget = 'scan';
+    session = { id: rec.recovery_session };
+    cfg.scan_seconds = RECOVERY_OVERRIDE || rec.scan_seconds;
+    phase = 'preview'; batch = []; batchTs = []; pending = 0; dropped = 0;
+    $('scanBar').style.display = 'none'; $('count').textContent = '';
+    $('hint').textContent = 'Sit still — recovery scan starting';
+    show('s-scan');
+  }
+  $('btnActStop').onclick = () => { if (actTimer) endActivityPhase(); };
+  async function finalizeVSession() {
+    stopCapture();
+    show('s-processing');
+    procStart('Preparing your session report…');
+    let out;
+    try { out = await api('/api/vsession/finish', { session: vs.id }); }
+    catch (e) { fail('processing_error', e.message); return; }
+    await procFinish();
+    const r = out.result || {};
+    renderDebugPanel('session', r);
+    $('report').innerHTML = r.report_html || '';
+    $('rDetails').textContent = JSON.stringify(
+      { outcome: r.outcome, compliance: r.compliance, phases: r.phases,
+        no_read_reasons: r.no_read_reasons, activity_tracker: r.activity_tracker }, null, 1);
+    show('s-result');
+  }
+
+  // ---------------------------------------------- research/debug metrics
+  // Screen-only pipeline internals for prototype validation. Numbers and
+  // labels only — participant-facing rhythm sentences still come solely
+  // from user_facing_text(); print CSS hides this debug panel. "measured"
+  // = derived from the remote rPPG /
+  // motion signal of this scan; "estimated" = model output.
+  const escH = s => String(s).replace(/[&<>"]/g,
+    c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  function fmtV(v) {
+    if (v == null || (typeof v === 'number' && !isFinite(v))) return '—';
+    if (typeof v === 'object') return JSON.stringify(v);
+    if (typeof v !== 'number') return String(v);
+    const s = Math.abs(v) >= 100 ? v.toFixed(1) : v.toFixed(3);
+    return s.indexOf('.') >= 0 ? s.replace(/0+$/, '').replace(/\.$/, '') : s;
+  }
+  function dbgRows(title, cls, entries) {
+    const rows = entries.filter(e => e[1] !== undefined).map(([k, v]) =>
+      `<tr><td>${escH(k)}</td><td class="v">${escH(fmtV(v))}</td><td class="c">${escH(cls)}</td></tr>`).join('');
+    return rows ? `<h4>${escH(title)}</h4><table>${rows}</table>` : '';
+  }
+  function biomarkerPayloadHtml(b) {
+    if (!b || !(b.items || []).length) return '';
+    let h = `<h4>${escH(b.label || 'Research Estimate / Prototype')}</h4>` +
+      `<p class="dnote">scope ${escH(b.scope || '')} &middot; outcome ` +
+      `${escH(b.outcome || '')} &middot; complete ${escH(fmtV(b.complete))}</p>`;
+    for (const x of b.items) {
+      const c = x.confidence || {};
+      const shown = x.status === 'computed'
+        ? `${fmtV(x.value)}${x.unit ? ' ' + x.unit : ''}`
+        : `NOT COMPUTED — ${x.reason || 'required evidence unavailable'}`;
+      h += dbgRows(x.title || x.key, x.label || 'research', [
+        ['status', x.status], ['value', shown], ['metric', x.metric],
+        ['method', x.method], ['signal quality', c.signal_quality_index],
+        ['confidence score', c.confidence_score],
+        ['confidence stars', c.confidence_stars],
+        ['limiting factor', c.confidence_limiting_factor],
+        ['beats / facial regions', c.n_beats_used != null
+          ? `${c.n_beats_used} / ${c.n_rois_used}` : undefined],
+        ['calibrated', x.calibrated], ['limit', x.limitation],
+      ]);
+    }
+    return h;
+  }
+  // v0.8: the five GATED research tracks. Deliberately GENERIC — this
+  // file names no track and no rhythm; titles, labels, gate rows and
+  // reasons all arrive in the payload, which the server builds only
+  // when the operator flag is on (report.research_tracks /
+  // AVATARX_RESEARCH_TRACKS). Print CSS hides the whole panel.
+  function researchTracksHtml(rt) {
+    let h = '<h4>GATED RESEARCH TRACKS</h4>' +
+      `<p class="dnote">${escH(rt.watermark || '')}</p>` +
+      `<p class="dnote">${escH(rt.note || '')}</p>`;
+    if (rt.error) return h + `<p class="dnote">${escH(rt.error)}</p>`;
+    if (rt.respiration_channel)
+      h += `<p class="dnote">respiration channel: ` +
+        `${escH(fmtV(rt.respiration_channel.rate_brpm))} brpm ` +
+        `(quality ${escH(fmtV(rt.respiration_channel.quality))})</p>`;
+    for (const t of (rt.tracks || [])) {
+      const g = t.gates || {};
+      h += `<h4>${escH(t.title)}</h4>`;
+      h += `<p class="dnote">head ${escH(t.head)} &middot; status ` +
+        `${escH(t.status)} &middot; promotion ${escH(g.promotion)} ` +
+        `&middot; gates ${escH(g.gates_version)} &middot; clinical ` +
+        `signoff ${escH(g.clinical_signoff)}</p>`;
+      if (g.error) h += `<p class="dnote">${escH(g.error)}</p>`;
+      if (t.value && typeof t.value === 'object')
+        h += dbgRows('value', 'research', Object.entries(t.value));
+      if ((g.gates || []).length)
+        h += dbgRows('gates', 'research', g.gates.map(x =>
+          [`${x.gate || ''} ${x.title || ''}`.trim(),
+           `${x.status}${x.first_reason ? ' — ' + x.first_reason : ''}`]));
+      if (t.needs) h += `<p class="dnote">Needs: ${escH(t.needs)}</p>`;
+      if (t.note) h += `<p class="dnote">${escH(t.note)}</p>`;
+      if (t.reasons && t.reasons.length)
+        h += `<p class="dnote">${escH(t.reasons.join(' \u00b7 '))}</p>`;
+    }
+    return h;
+  }
+
+  function renderDebugPanel(kind, r) {
+    let h = '<h3>RESEARCH / DEBUG METRICS</h3>' +
+      '<p class="dnote">Pipeline internals for prototype validation. This diagnostic ' +
+      'panel is excluded from print; estimates in the main report remain explicitly ' +
+      'labeled as uncalibrated research/prototype outputs.</p>';
+    if (kind === 'scan') {
+      const why = r.rationale || {}, f = why.features || {};
+      h += dbgRows('Measured signal', 'measured', [
+        ['heart rate (bpm)', r.pulse_bpm != null ? r.pulse_bpm : f.bpm],
+        ['median inter-beat interval (ms)', f.median_ibi],
+        ['usable beats', r.usable_beats],
+        ['signal quality (SQI)', r.signal_quality],
+      ]);
+      h += dbgRows('HRV / rhythm features', 'measured', [
+        ['RMSSD (ms)', f.rmssd],
+        ['pNN50', f.pnn50],
+        ['median abs successive diff (ms)', f.median_abs_succ_diff],
+        ['irregularity index', f.irregularity_index],
+        ['interval dropout rate', f.dropout_rate],
+        ['clean intervals', f.n_intervals],
+        ['runs / longest run', f.n_runs != null ? `${f.n_runs} / ${f.longest_run}` : undefined],
+      ]);
+      if (!Object.keys(f).length)
+        h += '<p class="dnote">Rhythm/HRV features not computed: the scan was gated out ' +
+          'before the classifier stage (see no-read reasons above). Re-derive offline with ' +
+          'scripts/diagnose_scan.py on the kept recording.</p>';
+      h += dbgRows('Signal-quality components', 'measured',
+        Object.entries(r.sqi_components || {}));
+      h += dbgRows('Model-estimated outputs', 'estimated', [
+        ['rhythm class', r.predicted_class || '(withheld — gates not passed)'],
+        ['AF probability', r.afib_probability == null ? undefined : r.afib_probability],
+      ]);
+      h += '<p class="dnote">An oxygen-uptake value in mL/kg/min remains empty unless a ' +
+        'versioned model is fitted against paired CPET truth. The numeric resting score shown ' +
+        'in the report is an uncalibrated research proxy built from resting pulse and RMSSD.</p>';
+    } else {
+      h += dbgRows('Measured recovery physiology', 'measured', [
+        ['resting HR (bpm)', r.hr_rest_bpm],
+        ['resting respiratory rate (brpm)', r.rr_rest_brpm],
+        ['end-exercise HR proxy (bpm)', r.hr_end_proxy_bpm],
+        ['HRR 30 s (bpm)', r.hrr30_bpm],
+        ['HRR 60 s (bpm)', r.hrr60_bpm],
+        ['HRR 120 s (bpm)', r.hrr120_bpm],
+        ['recovery slope (bpm/min)', r.recovery_slope_bpm_min],
+      ]);
+      h += dbgRows('Session verdict internals', 'measured', [
+        ['outcome', r.outcome],
+        ['compliance', r.compliance],
+        ['activity tracker', r.activity_tracker],
+      ]);
+      h += `<p class="dnote">Fitness category / trend: model-estimated (INFERRED_FITNESS), ` +
+        `category-only — withheld while any §V gate is red. Current value in this session's ` +
+        `result: ${escH(fmtV(r.fitness_category))}.</p>`;
+    }
+    if (r.biomarkers) h += biomarkerPayloadHtml(r.biomarkers);
+    if (r.research_tracks) h += researchTracksHtml(r.research_tracks);
+    $('debugPanel').innerHTML = h; $('debugPanel').style.display = '';
+  }
+
+  // ------------------------------------------------------------ results
+  function renderResult(r) {
+    renderDebugPanel('scan', r);
+    $('report').innerHTML = r.report_html ||
+      ('<p class="primary-text"></p>');
+    if (!r.report_html) $('report').firstChild.textContent = r.user_facing_text;   // VERBATIM fallback
+    const why = r.rationale || {};
+    const gateLines = (why.gates || []).map(g => `${g.pass ? 'PASS' : 'FAIL'}  ${g.name}  ${g.value == null ? 'NaN' : (+g.value).toFixed(3)} ${g.op} ${g.threshold}`);
+    $('rDetails').textContent = ['DECISION: ' + (why.outcome || r.outcome) + (why.predicted_class ? ' / ' + why.predicted_class : ''),
+      'rule fired: ' + JSON.stringify(why.rule || {}), '', 'GATES:', ...gateLines, '',
+      'FEATURES: ' + JSON.stringify(why.features || {}, null, 1), '', 'BEAT EVIDENCE: ' + JSON.stringify(why.evidence || r.evidence || {}, null, 1),
+      '', 'SQI components: ' + JSON.stringify(r.sqi_components || {}), 'capture: ' + JSON.stringify(r.capture || {}, null, 1),
+      'provenance: ' + JSON.stringify(r.provenance || {}, null, 1), 'recording_id: ' + r.recording_id,
+      '', 'Reference note: an Apple Watch and this prototype are not interchangeable diagnostic references; ECG-confirmed rhythm is the only ground truth for AF performance.'].join('\n');
+    show('s-result');
+  }
+
+  // which build is this page talking to? (a stale server on the default
+  // port once served days-old code — make version skew visible)
+  fetch('/api/meta').then(r => r.json()).then(m => {
+    if (m && m.code_commit) $('buildline').textContent +=
+      ` · build ${m.code_commit} · server up since ${m.started_at}`;
+  }).catch(() => {});
+
+  // ------------------------------------------------------------ flow
+  async function begin() {
+    try { const r = await fetch('/api/config'); cfg = await r.json(); } catch (_) {}
+    if (SCAN_OVERRIDE && SCAN_OVERRIDE > 0) cfg.scan_seconds = SCAN_OVERRIDE;
+    if (cfg.three_phase) { await beginSessionFlow(); return; }   // v0.4 flow
+    if (!(await openCamera())) return;
+    await new Promise(res => { if (video.videoWidth) res(); else video.addEventListener('loadedmetadata', res, { once: true }); });
+    setupCanvas();
+    try { session = await api('/api/session', { fps_hint: 30, scan_seconds: cfg.scan_seconds }); }
+    catch (e) { fail('processing_error', 'Could not reach the local analysis server: ' + e.message); return; }
+    phase = 'preview'; readySince = null; batch = []; batchTs = []; pending = 0; dropped = 0;
+    $('scanBar').style.display = 'none'; $('count').textContent = ''; $('hint').textContent = 'Position your face inside the oval';
+    show('s-scan');
+    startFrameLoop();
+  }
+  $('btnStart').onclick = begin;
+  // Headless e2e self-test hook: ?autostart=1 begins without a click. Never
+  // set in normal use; it changes nothing about the flow, only who triggers
+  // the first step. (The camera prompt still happens — the fake-camera flag
+  // is what auto-grants it under test.)
+  if (qs.get('autostart') === '1') addEventListener('load', () => setTimeout(begin, 200));
+  // Review route: ?show=<session id> re-renders a finished result (deep link
+  // back to a completed scan; also used to screenshot the results screen).
+  if (qs.get('show')) addEventListener('load', async () => {
+    try { const st = await (await fetch('/api/status?session=' + qs.get('show'))).json();
+      if (st.result) { cfg = await (await fetch('/api/config')).json().catch(()=>cfg); renderResult(st.result); }
+      else fail(st.error ? st.error.code : 'processing_error', st.error ? st.error.message : 'No result for that scan.');
+    } catch (e) { fail('processing_error', e.message); }
+  });
+  $('btnPrint').onclick = () => window.print();
+  $('btnAgain').onclick = () => { show('s-welcome'); };
+  $('btnRetry').onclick = () => { show('s-welcome'); };
+  $('btnCancel').onclick = async () => { const sid = session && session.id; stopCapture();
+    if (sid) { try { await api('/api/scan/abort', { session: sid, code: 'cancelled', message: 'You cancelled the scan.' }); } catch (_) {} }
+    show('s-welcome'); };
+})();
+</script>
+</body>
+</html>

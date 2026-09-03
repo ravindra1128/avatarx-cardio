@@ -1,0 +1,18 @@
+{
+ "inference/decision_logic.py::beat_evidence_from_series": {
+  "diff": 1
+ },
+ "inference/evidence.py::capture_segments": {
+  "diff": 3
+ },
+ "inference/evidence.py::window_evidence": {
+  "diff": 2,
+  "std": 1
+ },
+ "inference/pipeline.py::_display_waveform": {
+  "std": 1
+ },
+ "inference/pipeline.py::run_with_details": {
+  "diff": 2
+ }
+}

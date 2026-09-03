@@ -1,0 +1,21 @@
+{
+ "WATERMARK": "SYNTHETIC ECG \u2014 RESEARCH ARTIFACT \u2014 NOT A MEASUREMENT",
+ "instructions": "Blinded read: for each case, record is_af (0/1) and any morphology abnormality seen. Cases are reconstructions \u2014 the question is whether the truth survives them.",
+ "cases": [
+  "8666fce8",
+  "70adc736",
+  "983a85ae",
+  "0a39f77e",
+  "52df89bc",
+  "da38e048",
+  "fb1a0397",
+  "5de04bda",
+  "463bf880",
+  "e6028caa"
+ ],
+ "response_format": {
+  "<case_id>": {
+   "is_af": 0
+  }
+ }
+}

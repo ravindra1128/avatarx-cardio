@@ -1,0 +1,46 @@
+{
+ "WATERMARK": "SYNTHETIC ECG \u2014 RESEARCH ARTIFACT \u2014 NOT A MEASUREMENT",
+ "seed": 7,
+ "key": {
+  "8666fce8": {
+   "subject": "mimic_perform_non_af_010",
+   "is_af": 0
+  },
+  "70adc736": {
+   "subject": "mimic_perform_af_004",
+   "is_af": 1
+  },
+  "983a85ae": {
+   "subject": "mimic_perform_af_019",
+   "is_af": 1
+  },
+  "0a39f77e": {
+   "subject": "mimic_perform_af_009",
+   "is_af": 1
+  },
+  "52df89bc": {
+   "subject": "mimic_perform_non_af_007",
+   "is_af": 0
+  },
+  "da38e048": {
+   "subject": "mimic_perform_non_af_001",
+   "is_af": 0
+  },
+  "fb1a0397": {
+   "subject": "mimic_perform_non_af_012",
+   "is_af": 0
+  },
+  "5de04bda": {
+   "subject": "mimic_perform_non_af_008",
+   "is_af": 0
+  },
+  "463bf880": {
+   "subject": "mimic_perform_non_af_003",
+   "is_af": 0
+  },
+  "e6028caa": {
+   "subject": "mimic_perform_non_af_016",
+   "is_af": 0
+  }
+ }
+}

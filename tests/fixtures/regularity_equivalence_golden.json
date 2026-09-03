@@ -1,0 +1,1129 @@
+{
+ "af30": {
+  "afib_value": {
+   "afib_probability": null,
+   "confidence_stars": 5,
+   "outcome": "ACCEPT",
+   "predicted_class": "AFIB_SUGGESTIVE",
+   "user_facing_text": "We detected an irregular rhythm that can be associated with atrial fibrillation. This is not a diagnosis. Please share this result with a clinician, who may recommend an ECG. Confidence: 5 of 5."
+  },
+  "confidence_stars": 5,
+  "estimator_warnings": [
+   "longest clean run has 35 intervals: sample entropy suppressed (needs >=60 contiguous)",
+   "longest clean run has 35 intervals: Shannon entropy suppressed (needs >=50 contiguous)"
+  ],
+  "evidence": {
+   "cross_roi_coherence": 0.9722222222222222,
+   "dropout_rate": 0.0,
+   "harmonic_fraction": 0.05714285714285714,
+   "n_beats": 36,
+   "n_intervals": 35,
+   "split_fraction": 0.0,
+   "timing_matched_fraction": 1.0,
+   "timing_precision_ms": 6.880635593416784
+  },
+  "features": {
+   "autocorr_lag1": 0.2721996853020645,
+   "cv_ibi": 0.21793675701786708,
+   "dropout_rate": 0.0,
+   "irregularity_index": 0.1808084099792986,
+   "longest_run": 35.0,
+   "markov_surprise": "nan",
+   "mean_ibi": 547.9850562249345,
+   "mean_sqi": 0.9456452810446063,
+   "median_abs_succ_diff": 98.80449644502988,
+   "median_ibi": 546.4596279362357,
+   "n_intervals": 35.0,
+   "n_runs": 1.0,
+   "pnn20": 0.9117647058823529,
+   "pnn50": 0.8529411764705882,
+   "poincare_ratio": 0.7462363175755857,
+   "poincare_sd1": 101.01005159611519,
+   "poincare_sd2": 135.359334860949,
+   "rmssd": 140.7864781355399,
+   "sample_entropy": "nan",
+   "sdnn": 119.42608604791579,
+   "sdsd": 142.8497849032322,
+   "shannon_entropy": "nan",
+   "spectral_entropy": 0.8648018578931616,
+   "turning_point_ratio": 0.6666666666666666
+  },
+  "flutter": {
+   "coupling": {
+    "available": false,
+    "resp_rate_brpm": null,
+    "tachogram_resp_fraction": null
+   },
+   "rate": {
+    "band": "3:1",
+    "band_fraction": 0.518,
+    "in_band": false,
+    "median_bpm": 109.8,
+    "n_intervals": 35
+   },
+   "regularity": {
+    "below_floor": false,
+    "cv": 0.21794,
+    "effective_floor_ms": 25.0,
+    "measurement_limited": true,
+    "rmssd_ms": 140.786,
+    "sdnn_ms": 119.426,
+    "spectral_concentration": null
+   }
+  },
+  "gates_failed": [],
+  "head_names": [
+   "afib",
+   "rate_flags",
+   "rhythm_map"
+  ],
+  "irregularity_value": {
+   "evidence": {
+    "median_ibi_ms": 546.5,
+    "n_intervals": 35,
+    "pnn80": 0.618,
+    "rel_mad": 0.1349
+   },
+   "research_flag": true,
+   "user_facing": null
+  },
+  "mean_confidence": 1.0,
+  "n_intervals": 35,
+  "n_runs": 1,
+  "no_read_reasons": [],
+  "outcome": "ACCEPT",
+  "predicted_class": "AFIB_SUGGESTIVE",
+  "rate_flags_value": {
+   "flag": null,
+   "median_bpm": 109.8,
+   "sentence_key": null,
+   "sustained_fraction": 0.657
+  },
+  "rationale_features": {
+   "bpm": 109.79768116923208,
+   "dropout_rate": 0.0,
+   "irregularity_index": 0.1808084099792986,
+   "longest_run": 35.0,
+   "median_abs_succ_diff": 98.80449644502988,
+   "median_ibi": 546.4596279362357,
+   "n_intervals": 35.0,
+   "n_runs": 1.0,
+   "pnn50": 0.8529411764705882,
+   "rmssd": 140.7864781355399
+  },
+  "user_facing_text": "We detected an irregular rhythm that can be associated with atrial fibrillation. This is not a diagnosis. Please share this result with a clinician, who may recommend an ECG. Confidence: 5 of 5."
+ },
+ "af30_deficit": {
+  "afib_value": {
+   "afib_probability": null,
+   "confidence_stars": 5,
+   "outcome": "ACCEPT",
+   "predicted_class": "AFIB_SUGGESTIVE",
+   "user_facing_text": "We detected an irregular rhythm that can be associated with atrial fibrillation. This is not a diagnosis. Please share this result with a clinician, who may recommend an ECG. Confidence: 5 of 5."
+  },
+  "confidence_stars": 5,
+  "estimator_warnings": [
+   "longest clean run has 15 intervals: sample entropy suppressed (needs >=60 contiguous)",
+   "longest clean run has 15 intervals: Shannon entropy suppressed (needs >=50 contiguous)"
+  ],
+  "evidence": {
+   "cross_roi_coherence": 1.0,
+   "dropout_rate": 0.07999999999999996,
+   "harmonic_fraction": 0.061224489795918366,
+   "n_beats": 50,
+   "n_intervals": 42,
+   "split_fraction": 0.10204081632653061,
+   "timing_matched_fraction": 1.0,
+   "timing_precision_ms": 5.560643479664229
+  },
+  "features": {
+   "autocorr_lag1": 0.1970530207986571,
+   "cv_ibi": 0.23814861123489017,
+   "dropout_rate": 0.07999999999999996,
+   "irregularity_index": 0.20496024317149986,
+   "longest_run": 15.0,
+   "markov_surprise": "nan",
+   "mean_ibi": 734.5546718252599,
+   "mean_sqi": 0.9542110773823556,
+   "median_abs_succ_diff": 137.15772206140042,
+   "median_ibi": 669.1918390564853,
+   "n_intervals": 42.0,
+   "n_runs": 4.0,
+   "pnn20": 0.8947368421052632,
+   "pnn50": 0.7631578947368421,
+   "poincare_ratio": 0.9779458131041256,
+   "poincare_sd1": 172.97191011030566,
+   "poincare_sd2": 176.87269355064836,
+   "rmssd": 241.4722323816299,
+   "sample_entropy": "nan",
+   "sdnn": 174.93317497128615,
+   "sdsd": 244.61922118757414,
+   "shannon_entropy": "nan",
+   "spectral_entropy": "nan",
+   "turning_point_ratio": "nan"
+  },
+  "flutter": {
+   "coupling": {
+    "available": false,
+    "resp_rate_brpm": null,
+    "tachogram_resp_fraction": null
+   },
+   "rate": {
+    "band": "3:1",
+    "band_fraction": 0.4842,
+    "in_band": false,
+    "median_bpm": 89.66,
+    "n_intervals": 42
+   },
+   "regularity": {
+    "below_floor": false,
+    "cv": 0.23815,
+    "effective_floor_ms": 25.0,
+    "measurement_limited": true,
+    "rmssd_ms": 241.472,
+    "sdnn_ms": 174.933,
+    "spectral_concentration": null
+   }
+  },
+  "gates_failed": [],
+  "head_names": [
+   "afib",
+   "rate_flags",
+   "rhythm_map"
+  ],
+  "irregularity_value": {
+   "evidence": {
+    "median_ibi_ms": 669.2,
+    "n_intervals": 42,
+    "pnn80": 0.684,
+    "rel_mad": 0.0892
+   },
+   "research_flag": true,
+   "user_facing": null
+  },
+  "mean_confidence": 1.0,
+  "n_intervals": 42,
+  "n_runs": 4,
+  "no_read_reasons": [],
+  "outcome": "ACCEPT",
+  "predicted_class": "AFIB_SUGGESTIVE",
+  "rate_flags_value": {
+   "flag": null,
+   "median_bpm": 89.7,
+   "sentence_key": null,
+   "sustained_fraction": 0.143
+  },
+  "rationale_features": {
+   "bpm": 89.66038809528206,
+   "dropout_rate": 0.07999999999999996,
+   "irregularity_index": 0.20496024317149986,
+   "longest_run": 15.0,
+   "median_abs_succ_diff": 137.15772206140042,
+   "median_ibi": 669.1918390564853,
+   "n_intervals": 42.0,
+   "n_runs": 4.0,
+   "pnn50": 0.7631578947368421,
+   "rmssd": 241.4722323816299
+  },
+  "user_facing_text": "We detected an irregular rhythm that can be associated with atrial fibrillation. This is not a diagnosis. Please share this result with a clinician, who may recommend an ECG. Confidence: 5 of 5."
+ },
+ "af60": {
+  "afib_value": {
+   "afib_probability": null,
+   "confidence_stars": 5,
+   "outcome": "ACCEPT",
+   "predicted_class": "AFIB_SUGGESTIVE",
+   "user_facing_text": "We detected an irregular rhythm that can be associated with atrial fibrillation. This is not a diagnosis. Please share this result with a clinician, who may recommend an ECG. Confidence: 5 of 5."
+  },
+  "confidence_stars": 5,
+  "estimator_warnings": [
+   "longest clean run has 35 intervals: sample entropy suppressed (needs >=60 contiguous)",
+   "longest clean run has 35 intervals: Shannon entropy suppressed (needs >=50 contiguous)"
+  ],
+  "evidence": {
+   "cross_roi_coherence": 1.0,
+   "dropout_rate": 0.0,
+   "harmonic_fraction": 0.08571428571428572,
+   "n_beats": 36,
+   "n_intervals": 35,
+   "split_fraction": 0.0,
+   "timing_matched_fraction": 1.0,
+   "timing_precision_ms": 2.798935595412999
+  },
+  "features": {
+   "autocorr_lag1": 0.3036857046565746,
+   "cv_ibi": 0.21325458393584104,
+   "dropout_rate": 0.0,
+   "irregularity_index": 0.17522059143284127,
+   "longest_run": 35.0,
+   "markov_surprise": "nan",
+   "mean_ibi": 547.9930814140031,
+   "mean_sqi": 0.9351714318566114,
+   "median_abs_succ_diff": 96.65493802526606,
+   "median_ibi": 551.6186039259665,
+   "n_intervals": 35.0,
+   "n_runs": 1.0,
+   "pnn20": 0.9411764705882353,
+   "pnn50": 0.7941176470588235,
+   "poincare_ratio": 0.7193588038862971,
+   "poincare_sd1": 96.51013878354067,
+   "poincare_sd2": 134.1613368212773,
+   "rmssd": 134.50620657074887,
+   "sample_entropy": "nan",
+   "sdnn": 116.86203657666269,
+   "sdsd": 136.48594717419286,
+   "shannon_entropy": "nan",
+   "spectral_entropy": 0.864260652998755,
+   "turning_point_ratio": 0.6666666666666666
+  },
+  "flutter": {
+   "coupling": {
+    "available": false,
+    "resp_rate_brpm": null,
+    "tachogram_resp_fraction": null
+   },
+   "rate": {
+    "band": "3:1",
+    "band_fraction": 0.5187,
+    "in_band": false,
+    "median_bpm": 108.77,
+    "n_intervals": 35
+   },
+   "regularity": {
+    "below_floor": false,
+    "cv": 0.21325,
+    "effective_floor_ms": 12.5,
+    "measurement_limited": true,
+    "rmssd_ms": 134.506,
+    "sdnn_ms": 116.862,
+    "spectral_concentration": null
+   }
+  },
+  "gates_failed": [],
+  "head_names": [
+   "afib",
+   "rate_flags",
+   "rhythm_map"
+  ],
+  "irregularity_value": {
+   "evidence": {
+    "median_ibi_ms": 551.6,
+    "n_intervals": 35,
+    "pnn80": 0.559,
+    "rel_mad": 0.1541
+   },
+   "research_flag": true,
+   "user_facing": null
+  },
+  "mean_confidence": 1.0,
+  "n_intervals": 35,
+  "n_runs": 1,
+  "no_read_reasons": [],
+  "outcome": "ACCEPT",
+  "predicted_class": "AFIB_SUGGESTIVE",
+  "rate_flags_value": {
+   "flag": null,
+   "median_bpm": 108.8,
+   "sentence_key": null,
+   "sustained_fraction": 0.629
+  },
+  "rationale_features": {
+   "bpm": 108.7708057215066,
+   "dropout_rate": 0.0,
+   "irregularity_index": 0.17522059143284127,
+   "longest_run": 35.0,
+   "median_abs_succ_diff": 96.65493802526606,
+   "median_ibi": 551.6186039259665,
+   "n_intervals": 35.0,
+   "n_runs": 1.0,
+   "pnn50": 0.7941176470588235,
+   "rmssd": 134.50620657074887
+  },
+  "user_facing_text": "We detected an irregular rhythm that can be associated with atrial fibrillation. This is not a diagnosis. Please share this result with a clinician, who may recommend an ECG. Confidence: 5 of 5."
+ },
+ "dark30": {
+  "confidence_stars": 1,
+  "features": null,
+  "flutter": {
+   "available": false
+  },
+  "irregularity_value": null,
+  "no_read_reasons": [
+   "illuminance 58 lux < floor 100 (whole-frame estimate)",
+   "no face detected in the video"
+  ],
+  "outcome": "NO_RESULT",
+  "predicted_class": null,
+  "user_facing_text": "We could see your pulse, but not clearly enough to check your rhythm this time. Improve lighting: face a bright, even light. Confidence: 1 of 5."
+ },
+ "flutter30": {
+  "afib_value": {
+   "afib_probability": null,
+   "confidence_stars": 5,
+   "outcome": "ACCEPT",
+   "predicted_class": "HIGH_RATE",
+   "user_facing_text": "Your pulse was faster than usual during this scan. If you feel unwell or this repeats, contact a clinician. Confidence: 5 of 5."
+  },
+  "confidence_stars": 5,
+  "estimator_warnings": [],
+  "evidence": {
+   "cross_roi_coherence": 0.9949494949494949,
+   "dropout_rate": 0.0,
+   "harmonic_fraction": 0.0,
+   "n_beats": 99,
+   "n_intervals": 98,
+   "split_fraction": 0.0,
+   "timing_matched_fraction": 1.0,
+   "timing_precision_ms": 6.242963676427848
+  },
+  "features": {
+   "autocorr_lag1": -0.24014099188776247,
+   "cv_ibi": 0.027090447186881392,
+   "dropout_rate": 0.0,
+   "irregularity_index": 0.023087838601487838,
+   "longest_run": 98.0,
+   "markov_surprise": 0.5018576946156527,
+   "mean_ibi": 399.57614757996436,
+   "mean_sqi": 0.7985155276958682,
+   "median_abs_succ_diff": 9.233220624196292,
+   "median_ibi": 399.91706385201775,
+   "n_intervals": 98.0,
+   "n_runs": 1.0,
+   "pnn20": 0.20618556701030927,
+   "pnn50": 0.020618556701030927,
+   "poincare_ratio": 1.2428905967422257,
+   "poincare_sd1": 11.927207124557269,
+   "poincare_sd2": 9.59634512950697,
+   "rmssd": 16.782968744692457,
+   "sample_entropy": 1.548350220454262,
+   "sdnn": 10.82469652315255,
+   "sdsd": 16.867618076781895,
+   "shannon_entropy": 0.76592057729087,
+   "spectral_entropy": 0.8840327315653651,
+   "turning_point_ratio": 0.6666666666666666
+  },
+  "flutter": {
+   "coupling": {
+    "available": true,
+    "resp_rate_brpm": 15.0,
+    "tachogram_resp_fraction": 0.0013
+   },
+   "rate": {
+    "band": "2:1",
+    "band_fraction": 1.0,
+    "in_band": true,
+    "median_bpm": 150.03,
+    "n_intervals": 98
+   },
+   "regularity": {
+    "below_floor": true,
+    "cv": 0.02709,
+    "effective_floor_ms": 25.0,
+    "measurement_limited": true,
+    "rmssd_ms": 16.783,
+    "sdnn_ms": 10.825,
+    "spectral_concentration": 0.1759
+   }
+  },
+  "gates_failed": [],
+  "head_names": [
+   "afib",
+   "rate_flags",
+   "rhythm_map"
+  ],
+  "irregularity_value": {
+   "evidence": {
+    "median_ibi_ms": 399.9,
+    "n_intervals": 98,
+    "pnn80": 0.0,
+    "rel_mad": 0.0125
+   },
+   "research_flag": false,
+   "user_facing": null
+  },
+  "mean_confidence": 1.0,
+  "n_intervals": 98,
+  "n_runs": 1,
+  "no_read_reasons": [],
+  "outcome": "ACCEPT",
+  "predicted_class": "HIGH_RATE",
+  "rate_flags_value": {
+   "flag": "TACHY",
+   "median_bpm": 150.0,
+   "sentence_key": "tachy",
+   "sustained_fraction": 1.0
+  },
+  "rationale_features": {
+   "bpm": 150.031107505335,
+   "dropout_rate": 0.0,
+   "irregularity_index": 0.023087838601487838,
+   "longest_run": 98.0,
+   "median_abs_succ_diff": 9.233220624196292,
+   "median_ibi": 399.91706385201775,
+   "n_intervals": 98.0,
+   "n_runs": 1.0,
+   "pnn50": 0.020618556701030927,
+   "rmssd": 16.782968744692457
+  },
+  "user_facing_text": "Your pulse was faster than usual during this scan. If you feel unwell or this repeats, contact a clinician. Confidence: 5 of 5."
+ },
+ "rsa30": {
+  "afib_value": {
+   "afib_probability": null,
+   "confidence_stars": 5,
+   "outcome": "ACCEPT",
+   "predicted_class": "OTHER_IRREGULAR",
+   "user_facing_text": "We detected some irregular beats. This is common and often harmless, but if it recurs, mention it to a clinician. Confidence: 5 of 5."
+  },
+  "confidence_stars": 5,
+  "estimator_warnings": [
+   "longest clean run has 46 intervals: sample entropy suppressed (needs >=60 contiguous)",
+   "longest clean run has 46 intervals: Shannon entropy suppressed (needs >=50 contiguous)"
+  ],
+  "evidence": {
+   "cross_roi_coherence": 1.0,
+   "dropout_rate": 0.0,
+   "harmonic_fraction": 0.0,
+   "n_beats": 47,
+   "n_intervals": 46,
+   "split_fraction": 0.0,
+   "timing_matched_fraction": 1.0,
+   "timing_precision_ms": 5.529755948863624
+  },
+  "features": {
+   "autocorr_lag1": 0.19429340043488894,
+   "cv_ibi": 0.05107084145626591,
+   "dropout_rate": 0.0,
+   "irregularity_index": 0.06343669865974744,
+   "longest_run": 46.0,
+   "markov_surprise": 0.9521823783283435,
+   "mean_ibi": 845.0950228747577,
+   "mean_sqi": 0.9742962261627585,
+   "median_abs_succ_diff": 53.7919101099061,
+   "median_ibi": 847.9620037988948,
+   "n_intervals": 46.0,
+   "n_runs": 1.0,
+   "pnn20": 0.8444444444444444,
+   "pnn50": 0.5777777777777777,
+   "poincare_ratio": 0.8339381223951499,
+   "poincare_sd1": 39.091697715666434,
+   "poincare_sd2": 46.87601713588935,
+   "rmssd": 54.670079132816326,
+   "sample_entropy": "nan",
+   "sdnn": 43.159713928716165,
+   "sdsd": 55.284009085684815,
+   "shannon_entropy": "nan",
+   "spectral_entropy": 0.41658889940204674,
+   "turning_point_ratio": 0.4318181818181818
+  },
+  "flutter": {
+   "coupling": {
+    "available": true,
+    "resp_rate_brpm": 15.0,
+    "tachogram_resp_fraction": 0.8869
+   },
+   "rate": {
+    "band": "4:1",
+    "band_fraction": 1.0,
+    "in_band": true,
+    "median_bpm": 70.76,
+    "n_intervals": 46
+   },
+   "regularity": {
+    "below_floor": false,
+    "cv": 0.05107,
+    "effective_floor_ms": 25.0,
+    "measurement_limited": true,
+    "rmssd_ms": 54.67,
+    "sdnn_ms": 43.16,
+    "spectral_concentration": 0.9357
+   }
+  },
+  "gates_failed": [],
+  "head_names": [
+   "afib",
+   "rate_flags",
+   "rhythm_map"
+  ],
+  "irregularity_value": {
+   "evidence": {
+    "median_ibi_ms": 848.0,
+    "n_intervals": 46,
+    "pnn80": 0.067,
+    "rel_mad": 0.0393
+   },
+   "research_flag": false,
+   "user_facing": null
+  },
+  "mean_confidence": 1.0,
+  "n_intervals": 46,
+  "n_runs": 1,
+  "no_read_reasons": [],
+  "outcome": "ACCEPT",
+  "predicted_class": "OTHER_IRREGULAR",
+  "rate_flags_value": {
+   "flag": null,
+   "median_bpm": 70.8,
+   "sentence_key": null,
+   "sustained_fraction": 0.0
+  },
+  "rationale_features": {
+   "bpm": 70.75788741853789,
+   "dropout_rate": 0.0,
+   "irregularity_index": 0.06343669865974744,
+   "longest_run": 46.0,
+   "median_abs_succ_diff": 53.7919101099061,
+   "median_ibi": 847.9620037988948,
+   "n_intervals": 46.0,
+   "n_runs": 1.0,
+   "pnn50": 0.5777777777777777,
+   "rmssd": 54.670079132816326
+  },
+  "user_facing_text": "We detected some irregular beats. This is common and often harmless, but if it recurs, mention it to a clinician. Confidence: 5 of 5."
+ },
+ "sinus30": {
+  "afib_value": {
+   "afib_probability": null,
+   "confidence_stars": 5,
+   "outcome": "ACCEPT",
+   "predicted_class": "SINUS",
+   "user_facing_text": "No irregular rhythm was detected during this scan. This scan cannot rule out atrial fibrillation, which often comes and goes. Confidence: 5 of 5."
+  },
+  "confidence_stars": 5,
+  "estimator_warnings": [
+   "longest clean run has 22 intervals: sample entropy suppressed (needs >=60 contiguous)",
+   "longest clean run has 22 intervals: Shannon entropy suppressed (needs >=50 contiguous)"
+  ],
+  "evidence": {
+   "cross_roi_coherence": 1.0,
+   "dropout_rate": 0.0,
+   "harmonic_fraction": 0.0,
+   "n_beats": 23,
+   "n_intervals": 22,
+   "split_fraction": 0.0,
+   "timing_matched_fraction": 1.0,
+   "timing_precision_ms": 4.412395831377758
+  },
+  "features": {
+   "autocorr_lag1": 0.35431748643584543,
+   "cv_ibi": 0.02690857870971305,
+   "dropout_rate": 0.0,
+   "irregularity_index": 0.016637522170628725,
+   "longest_run": 22.0,
+   "markov_surprise": "nan",
+   "mean_ibi": 836.7408307779143,
+   "mean_sqi": 0.9736605911100131,
+   "median_abs_succ_diff": 13.873243219817141,
+   "median_ibi": 833.8527262375919,
+   "n_intervals": 22.0,
+   "n_runs": 1.0,
+   "pnn20": 0.42857142857142855,
+   "pnn50": 0.047619047619047616,
+   "poincare_ratio": 0.7087862968834739,
+   "poincare_sd1": 18.412909639484813,
+   "poincare_sd2": 25.978083549930616,
+   "rmssd": 25.420308384162485,
+   "sample_entropy": "nan",
+   "sdnn": 22.515506504618195,
+   "sdsd": 26.03978653490972,
+   "shannon_entropy": "nan",
+   "spectral_entropy": "nan",
+   "turning_point_ratio": 0.7
+  },
+  "flutter": {
+   "coupling": {
+    "available": false,
+    "resp_rate_brpm": null,
+    "tachogram_resp_fraction": null
+   },
+   "rate": {
+    "band": "4:1",
+    "band_fraction": 1.0,
+    "in_band": true,
+    "median_bpm": 71.96,
+    "n_intervals": 22
+   },
+   "regularity": {
+    "below_floor": false,
+    "cv": 0.02691,
+    "effective_floor_ms": 25.0,
+    "measurement_limited": true,
+    "rmssd_ms": 25.42,
+    "sdnn_ms": 22.516,
+    "spectral_concentration": null
+   }
+  },
+  "gates_failed": [],
+  "head_names": [
+   "afib",
+   "rate_flags",
+   "rhythm_map"
+  ],
+  "irregularity_value": {
+   "evidence": {
+    "median_ibi_ms": 833.9,
+    "n_intervals": 22,
+    "pnn80": 0.0,
+    "rel_mad": 0.0182
+   },
+   "research_flag": false,
+   "user_facing": null
+  },
+  "mean_confidence": 1.0,
+  "n_intervals": 22,
+  "n_runs": 1,
+  "no_read_reasons": [],
+  "outcome": "ACCEPT",
+  "predicted_class": "SINUS",
+  "rate_flags_value": {
+   "flag": null,
+   "median_bpm": 72.0,
+   "sentence_key": null,
+   "sustained_fraction": 0.0
+  },
+  "rationale_features": {
+   "bpm": 71.95515240529902,
+   "dropout_rate": 0.0,
+   "irregularity_index": 0.016637522170628725,
+   "longest_run": 22.0,
+   "median_abs_succ_diff": 13.873243219817141,
+   "median_ibi": 833.8527262375919,
+   "n_intervals": 22.0,
+   "n_runs": 1.0,
+   "pnn50": 0.047619047619047616,
+   "rmssd": 25.420308384162485
+  },
+  "user_facing_text": "No irregular rhythm was detected during this scan. This scan cannot rule out atrial fibrillation, which often comes and goes. Confidence: 5 of 5."
+ },
+ "sinus30_deficit": {
+  "afib_value": {
+   "afib_probability": null,
+   "confidence_stars": 2,
+   "outcome": "REPEAT_SCAN",
+   "predicted_class": null,
+   "user_facing_text": "We could see your pulse, but not clearly enough to check your rhythm this time. Even light on both cheeks and forehead. Confidence: 2 of 5."
+  },
+  "confidence_stars": 2,
+  "estimator_warnings": [
+   "longest clean run has 8 intervals: sample entropy suppressed (needs >=60 contiguous)",
+   "longest clean run has 8 intervals: Shannon entropy suppressed (needs >=50 contiguous)"
+  ],
+  "evidence": {
+   "cross_roi_coherence": 0.9027777777777778,
+   "dropout_rate": 0.38888888888888884,
+   "harmonic_fraction": 0.22857142857142856,
+   "n_beats": 36,
+   "n_intervals": 19,
+   "split_fraction": 0.23529411764705882,
+   "timing_matched_fraction": 0.9473684210526315,
+   "timing_precision_ms": 6.019201630665272
+  },
+  "features": {
+   "autocorr_lag1": -0.31210317510650365,
+   "cv_ibi": 0.03614977443546984,
+   "dropout_rate": 0.38888888888888884,
+   "irregularity_index": 0.031063609270442872,
+   "longest_run": 8.0,
+   "markov_surprise": "nan",
+   "mean_ibi": 848.1053291111401,
+   "mean_sqi": 0.8897474564273606,
+   "median_abs_succ_diff": 26.69217633427536,
+   "median_ibi": 859.2747900570928,
+   "n_intervals": 19.0,
+   "n_runs": 3.0,
+   "pnn20": 0.5625,
+   "pnn50": 0.25,
+   "poincare_ratio": 1.248461152415873,
+   "poincare_sd1": 33.84071483253643,
+   "poincare_sd2": 27.105941395975286,
+   "rmssd": 46.522910567999034,
+   "sample_entropy": "nan",
+   "sdnn": 30.65881634488763,
+   "sdsd": 47.857997876573386,
+   "shannon_entropy": "nan",
+   "spectral_entropy": "nan",
+   "turning_point_ratio": "nan"
+  },
+  "flutter": {
+   "available": false
+  },
+  "gates_failed": [
+   "coverage",
+   "coverage_any_class"
+  ],
+  "head_names": [
+   "afib",
+   "rate_flags",
+   "rhythm_map"
+  ],
+  "irregularity_value": {
+   "evidence": {
+    "median_ibi_ms": 859.3,
+    "n_intervals": 19,
+    "pnn80": 0.188,
+    "rel_mad": 0.0174
+   },
+   "research_flag": false,
+   "user_facing": null
+  },
+  "mean_confidence": 0.9659457972628939,
+  "n_intervals": 19,
+  "n_runs": 3,
+  "no_read_reasons": [
+   "clean-interval coverage 0.40 below floor 0.5",
+   "only 40% of the scan yielded clean intervals (< 60%)"
+  ],
+  "outcome": "REPEAT_SCAN",
+  "predicted_class": null,
+  "rate_flags_value": {
+   "flag": null,
+   "median_bpm": 69.8,
+   "sentence_key": null,
+   "sustained_fraction": 0.0
+  },
+  "rationale_features": {},
+  "user_facing_text": "We could see your pulse, but not clearly enough to check your rhythm this time. Even light on both cheeks and forehead. Confidence: 2 of 5."
+ },
+ "sinus30_dim": {
+  "afib_value": {
+   "afib_probability": null,
+   "confidence_stars": 5,
+   "outcome": "ACCEPT",
+   "predicted_class": "SINUS",
+   "user_facing_text": "No irregular rhythm was detected during this scan. This scan cannot rule out atrial fibrillation, which often comes and goes. Confidence: 5 of 5."
+  },
+  "confidence_stars": 5,
+  "estimator_warnings": [
+   "longest clean run has 22 intervals: sample entropy suppressed (needs >=60 contiguous)",
+   "longest clean run has 22 intervals: Shannon entropy suppressed (needs >=50 contiguous)"
+  ],
+  "evidence": {
+   "cross_roi_coherence": 1.0,
+   "dropout_rate": 0.0,
+   "harmonic_fraction": 0.0,
+   "n_beats": 23,
+   "n_intervals": 22,
+   "split_fraction": 0.0,
+   "timing_matched_fraction": 1.0,
+   "timing_precision_ms": 6.835861744050931
+  },
+  "features": {
+   "autocorr_lag1": 0.31263700613411943,
+   "cv_ibi": 0.02758177590203078,
+   "dropout_rate": 0.0,
+   "irregularity_index": 0.01782661262743104,
+   "longest_run": 22.0,
+   "markov_surprise": "nan",
+   "mean_ibi": 836.6541620047744,
+   "mean_sqi": 0.9290955483222749,
+   "median_abs_succ_diff": 14.90712735591876,
+   "median_ibi": 836.2288263884824,
+   "n_intervals": 22.0,
+   "n_runs": 1.0,
+   "pnn20": 0.42857142857142855,
+   "pnn50": 0.047619047619047616,
+   "poincare_ratio": 0.744307850901721,
+   "poincare_sd1": 19.48547986775054,
+   "poincare_sd2": 26.179328679852148,
+   "rmssd": 26.903053648668585,
+   "sample_entropy": "nan",
+   "sdnn": 23.076407603917044,
+   "sdsd": 27.556629898320722,
+   "shannon_entropy": "nan",
+   "spectral_entropy": "nan",
+   "turning_point_ratio": 0.6
+  },
+  "flutter": {
+   "coupling": {
+    "available": false,
+    "resp_rate_brpm": null,
+    "tachogram_resp_fraction": null
+   },
+   "rate": {
+    "band": "4:1",
+    "band_fraction": 1.0,
+    "in_band": true,
+    "median_bpm": 71.75,
+    "n_intervals": 22
+   },
+   "regularity": {
+    "below_floor": false,
+    "cv": 0.02758,
+    "effective_floor_ms": 25.0,
+    "measurement_limited": true,
+    "rmssd_ms": 26.903,
+    "sdnn_ms": 23.076,
+    "spectral_concentration": null
+   }
+  },
+  "gates_failed": [],
+  "head_names": [
+   "afib",
+   "rate_flags",
+   "rhythm_map"
+  ],
+  "irregularity_value": {
+   "evidence": {
+    "median_ibi_ms": 836.2,
+    "n_intervals": 22,
+    "pnn80": 0.0,
+    "rel_mad": 0.0169
+   },
+   "research_flag": false,
+   "user_facing": null
+  },
+  "mean_confidence": 1.0,
+  "n_intervals": 22,
+  "n_runs": 1,
+  "no_read_reasons": [],
+  "outcome": "ACCEPT",
+  "predicted_class": "SINUS",
+  "rate_flags_value": {
+   "flag": null,
+   "median_bpm": 71.8,
+   "sentence_key": null,
+   "sustained_fraction": 0.0
+  },
+  "rationale_features": {
+   "bpm": 71.75069563091827,
+   "dropout_rate": 0.0,
+   "irregularity_index": 0.01782661262743104,
+   "longest_run": 22.0,
+   "median_abs_succ_diff": 14.90712735591876,
+   "median_ibi": 836.2288263884824,
+   "n_intervals": 22.0,
+   "n_runs": 1.0,
+   "pnn50": 0.047619047619047616,
+   "rmssd": 26.903053648668585
+  },
+  "user_facing_text": "No irregular rhythm was detected during this scan. This scan cannot rule out atrial fibrillation, which often comes and goes. Confidence: 5 of 5."
+ },
+ "sinus30_shaky": {
+  "afib_value": {
+   "afib_probability": null,
+   "confidence_stars": 5,
+   "outcome": "ACCEPT",
+   "predicted_class": "SINUS",
+   "user_facing_text": "No irregular rhythm was detected during this scan. This scan cannot rule out atrial fibrillation, which often comes and goes. Confidence: 5 of 5."
+  },
+  "confidence_stars": 5,
+  "estimator_warnings": [
+   "longest clean run has 22 intervals: sample entropy suppressed (needs >=60 contiguous)",
+   "longest clean run has 22 intervals: Shannon entropy suppressed (needs >=50 contiguous)"
+  ],
+  "evidence": {
+   "cross_roi_coherence": 1.0,
+   "dropout_rate": 0.0,
+   "harmonic_fraction": 0.0,
+   "n_beats": 23,
+   "n_intervals": 22,
+   "split_fraction": 0.0,
+   "timing_matched_fraction": 1.0,
+   "timing_precision_ms": 4.5386360971519935
+  },
+  "features": {
+   "autocorr_lag1": 0.2919007585775084,
+   "cv_ibi": 0.028399822443375515,
+   "dropout_rate": 0.0,
+   "irregularity_index": 0.02344889440597165,
+   "longest_run": 22.0,
+   "markov_surprise": "nan",
+   "mean_ibi": 836.7276451806446,
+   "mean_sqi": 0.9716152148324124,
+   "median_abs_succ_diff": 19.62003951363647,
+   "median_ibi": 836.7149074900478,
+   "n_intervals": 22.0,
+   "n_runs": 1.0,
+   "pnn20": 0.38095238095238093,
+   "pnn50": 0.09523809523809523,
+   "poincare_ratio": 0.7618866653813999,
+   "poincare_sd1": 20.36628457145666,
+   "poincare_sd2": 26.73138341548649,
+   "rmssd": 28.10823824803257,
+   "sample_entropy": "nan",
+   "sdnn": 23.762916556594014,
+   "sdsd": 28.80227585610393,
+   "shannon_entropy": "nan",
+   "spectral_entropy": "nan",
+   "turning_point_ratio": 0.6
+  },
+  "flutter": {
+   "coupling": {
+    "available": false,
+    "resp_rate_brpm": null,
+    "tachogram_resp_fraction": null
+   },
+   "rate": {
+    "band": "4:1",
+    "band_fraction": 1.0,
+    "in_band": true,
+    "median_bpm": 71.71,
+    "n_intervals": 22
+   },
+   "regularity": {
+    "below_floor": false,
+    "cv": 0.0284,
+    "effective_floor_ms": 25.0,
+    "measurement_limited": true,
+    "rmssd_ms": 28.108,
+    "sdnn_ms": 23.763,
+    "spectral_concentration": null
+   }
+  },
+  "gates_failed": [],
+  "head_names": [
+   "afib",
+   "rate_flags",
+   "rhythm_map"
+  ],
+  "irregularity_value": {
+   "evidence": {
+    "median_ibi_ms": 836.7,
+    "n_intervals": 22,
+    "pnn80": 0.0,
+    "rel_mad": 0.0144
+   },
+   "research_flag": false,
+   "user_facing": null
+  },
+  "mean_confidence": 1.0,
+  "n_intervals": 22,
+  "n_runs": 1,
+  "no_read_reasons": [],
+  "outcome": "ACCEPT",
+  "predicted_class": "SINUS",
+  "rate_flags_value": {
+   "flag": null,
+   "median_bpm": 71.7,
+   "sentence_key": null,
+   "sustained_fraction": 0.0
+  },
+  "rationale_features": {
+   "bpm": 71.70901278666851,
+   "dropout_rate": 0.0,
+   "irregularity_index": 0.02344889440597165,
+   "longest_run": 22.0,
+   "median_abs_succ_diff": 19.62003951363647,
+   "median_ibi": 836.7149074900478,
+   "n_intervals": 22.0,
+   "n_runs": 1.0,
+   "pnn50": 0.09523809523809523,
+   "rmssd": 28.10823824803257
+  },
+  "user_facing_text": "No irregular rhythm was detected during this scan. This scan cannot rule out atrial fibrillation, which often comes and goes. Confidence: 5 of 5."
+ },
+ "sinus60": {
+  "afib_value": {
+   "afib_probability": null,
+   "confidence_stars": 5,
+   "outcome": "ACCEPT",
+   "predicted_class": "SINUS",
+   "user_facing_text": "No irregular rhythm was detected during this scan. This scan cannot rule out atrial fibrillation, which often comes and goes. Confidence: 5 of 5."
+  },
+  "confidence_stars": 5,
+  "estimator_warnings": [
+   "longest clean run has 22 intervals: sample entropy suppressed (needs >=60 contiguous)",
+   "longest clean run has 22 intervals: Shannon entropy suppressed (needs >=50 contiguous)"
+  ],
+  "evidence": {
+   "cross_roi_coherence": 1.0,
+   "dropout_rate": 0.0,
+   "harmonic_fraction": 0.0,
+   "n_beats": 23,
+   "n_intervals": 22,
+   "split_fraction": 0.0,
+   "timing_matched_fraction": 1.0,
+   "timing_precision_ms": 3.0750176694758213
+  },
+  "features": {
+   "autocorr_lag1": 0.31552775679915945,
+   "cv_ibi": 0.027133906455731927,
+   "dropout_rate": 0.0,
+   "irregularity_index": 0.028868115198291855,
+   "longest_run": 22.0,
+   "markov_surprise": "nan",
+   "mean_ibi": 836.6112830967803,
+   "mean_sqi": 0.9594782717168439,
+   "median_abs_succ_diff": 23.97933539993778,
+   "median_ibi": 830.6512300933541,
+   "n_intervals": 22.0,
+   "n_runs": 1.0,
+   "pnn20": 0.6190476190476191,
+   "pnn50": 0.047619047619047616,
+   "poincare_ratio": 0.7461019555709599,
+   "poincare_sd1": 19.197788387672286,
+   "poincare_sd2": 25.73078417008174,
+   "rmssd": 26.495682651432418,
+   "sample_entropy": "nan",
+   "sdnn": 22.7005322953579,
+   "sdsd": 27.149772705414865,
+   "shannon_entropy": "nan",
+   "spectral_entropy": "nan",
+   "turning_point_ratio": 0.8
+  },
+  "flutter": {
+   "coupling": {
+    "available": false,
+    "resp_rate_brpm": null,
+    "tachogram_resp_fraction": null
+   },
+   "rate": {
+    "band": "4:1",
+    "band_fraction": 1.0,
+    "in_band": true,
+    "median_bpm": 72.23,
+    "n_intervals": 22
+   },
+   "regularity": {
+    "below_floor": false,
+    "cv": 0.02713,
+    "effective_floor_ms": 12.5,
+    "measurement_limited": true,
+    "rmssd_ms": 26.496,
+    "sdnn_ms": 22.701,
+    "spectral_concentration": null
+   }
+  },
+  "gates_failed": [],
+  "head_names": [
+   "afib",
+   "rate_flags",
+   "rhythm_map"
+  ],
+  "irregularity_value": {
+   "evidence": {
+    "median_ibi_ms": 830.7,
+    "n_intervals": 22,
+    "pnn80": 0.0,
+    "rel_mad": 0.0187
+   },
+   "research_flag": false,
+   "user_facing": null
+  },
+  "mean_confidence": 1.0,
+  "n_intervals": 22,
+  "n_runs": 1,
+  "no_read_reasons": [],
+  "outcome": "ACCEPT",
+  "predicted_class": "SINUS",
+  "rate_flags_value": {
+   "flag": null,
+   "median_bpm": 72.2,
+   "sentence_key": null,
+   "sustained_fraction": 0.0
+  },
+  "rationale_features": {
+   "bpm": 72.23248196870401,
+   "dropout_rate": 0.0,
+   "irregularity_index": 0.028868115198291855,
+   "longest_run": 22.0,
+   "median_abs_succ_diff": 23.97933539993778,
+   "median_ibi": 830.6512300933541,
+   "n_intervals": 22.0,
+   "n_runs": 1.0,
+   "pnn50": 0.047619047619047616,
+   "rmssd": 26.495682651432418
+  },
+  "user_facing_text": "No irregular rhythm was detected during this scan. This scan cannot rule out atrial fibrillation, which often comes and goes. Confidence: 5 of 5."
+ }
+}

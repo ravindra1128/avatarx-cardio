@@ -1,0 +1,14 @@
+{
+ "WATERMARK": "SYNTHETIC ECG \u2014 RESEARCH ARTIFACT \u2014 NOT A MEASUREMENT",
+ "seed": 7,
+ "key": {
+  "c8e817ad": {
+   "subject": "synth06_naf",
+   "is_af": 0
+  },
+  "1dfc1e31": {
+   "subject": "synth07_naf",
+   "is_af": 0
+  }
+ }
+}

@@ -1,0 +1,12 @@
+{
+ "ladder": {
+  "available": true,
+  "n_train": 3,
+  "n_test": 2,
+  "delta_see_mlkgmin": 0.619,
+  "delta_see_ci95": null,
+  "category_accuracy_gain_pts": 0.0,
+  "category_gain_ci95": null,
+  "beats_static_face_control": true
+ }
+}

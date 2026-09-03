@@ -1,0 +1,232 @@
+{
+ "WATERMARK": "SYNTHETIC ECG \u2014 RESEARCH ARTIFACT \u2014 NOT A MEASUREMENT",
+ "run_id": "recon-cd0892ab29ef",
+ "evidence": {
+  "data": {
+   "signal_domain": "mimic_finger_ppg",
+   "participant_disjoint": true,
+   "session_disjoint": true,
+   "production_path": false,
+   "facial_dataset_ids": [],
+   "n_train_subjects": 25,
+   "n_test_subjects": 10
+  },
+  "fidelity": {
+   "decoder_qt_mae_ms": 48.72,
+   "decoder_qt_mae_ms_ci95": [
+    33.13,
+    93.36
+   ],
+   "decoder_pr_mae_ms": 56.0,
+   "decoder_pr_mae_ms_ci95": [
+    48.0,
+    72.0
+   ],
+   "decoder_qrs_mae_ms": 20.0,
+   "decoder_qrs_mae_ms_ci95": [
+    8.0,
+    24.0
+   ],
+   "decoder_corr": 0.13,
+   "identity_qt_mae_ms": 32.34,
+   "identity_qt_mae_ms_ci95": [
+    25.45,
+    64.47
+   ],
+   "identity_pr_mae_ms": 12.0,
+   "identity_pr_mae_ms_ci95": [
+    8.0,
+    48.2
+   ],
+   "identity_qrs_mae_ms": 8.0,
+   "identity_qrs_mae_ms_ci95": [
+    0.0,
+    8.0
+   ],
+   "identity_corr": 0.03,
+   "rr_only_qt_mae_ms": 46.32,
+   "n_test_subjects": 10,
+   "rr_only_qt_fit": {
+    "a": 471.561,
+    "b": -0.10172,
+    "n_beats": 44126
+   }
+  },
+  "g1": {
+   "qt_mae_ms": {
+    "decoder": 48.72,
+    "identity": 32.34,
+    "decoder_wins": false
+   },
+   "pr_mae_ms": {
+    "decoder": 56.0,
+    "identity": 12.0,
+    "decoder_wins": false
+   },
+   "qrs_mae_ms": {
+    "decoder": 20.0,
+    "identity": 8.0,
+    "decoder_wins": false
+   },
+   "all_morphology_metrics_beat_identity": false
+  },
+  "confabulation": {
+   "withheld_class": "AFIB",
+   "n_af_test_subjects": 3,
+   "p_prominence_gen_on_withheld_af": 0.5,
+   "p_prominence_ref_on_af": 0.08,
+   "hallucinated_p_excess": 0.42
+  },
+  "detection": {
+   "endpoint": "afib_irregularity",
+   "n_subjects": 10,
+   "auc_measured_path": 0.857,
+   "auc_from_reconstruction": 0.857,
+   "auc_deficit": 0.0
+  },
+  "blinded_reads": null
+ },
+ "gates": [
+  {
+   "gate": "g1",
+   "title": "G1 \u2014 beats the identity-template baseline",
+   "status": "RED",
+   "reasons": [
+    "evidence domain 'mimic_finger_ppg' \u2014 gates are judged on facial rPPG through the production path (this run is machinery/pretraining evidence only)",
+    "evidence is not production-path",
+    "identity template not beaten on qt_mae_ms (decoder 48.72 vs identity 32.34 ms)",
+    "identity template not beaten on pr_mae_ms (decoder 56.0 vs identity 12.0 ms)",
+    "identity template not beaten on qrs_mae_ms (decoder 20.0 vs identity 8.0 ms)"
+   ],
+   "metrics": {
+    "qt_mae_ms": {
+     "decoder": 48.72,
+     "identity": 32.34,
+     "decoder_wins": false
+    },
+    "pr_mae_ms": {
+     "decoder": 56.0,
+     "identity": 12.0,
+     "decoder_wins": false
+    },
+    "qrs_mae_ms": {
+     "decoder": 20.0,
+     "identity": 8.0,
+     "decoder_wins": false
+    },
+    "all_morphology_metrics_beat_identity": false
+   },
+   "thresholds": {
+    "requires_clinical_signoff": true,
+    "must_beat_identity_on_every_morphology_metric": true,
+    "morphology_metrics": [
+     "qt_mae_ms",
+     "pr_mae_ms",
+     "qrs_mae_ms"
+    ]
+   }
+  },
+  {
+   "gate": "g2",
+   "title": "G2 \u2014 interval fidelity (QT/PR/QRS MAE + RR-only baseline)",
+   "status": "RED",
+   "reasons": [
+    "evidence domain 'mimic_finger_ppg' \u2014 gates are judged on facial rPPG through the production path (this run is machinery/pretraining evidence only)",
+    "evidence is not production-path",
+    "qt_mae_ms 48.72 ms exceeds the 20 ms gate",
+    "pr_mae_ms 56.0 ms exceeds the 20 ms gate",
+    "qrs_mae_ms 20.0 ms exceeds the 15 ms gate",
+    "QT MAE 48.72 ms does not beat the RR-only regression baseline (46.32 ms)"
+   ],
+   "metrics": {
+    "decoder_qt_mae_ms": 48.72,
+    "decoder_pr_mae_ms": 56.0,
+    "decoder_qrs_mae_ms": 20.0,
+    "decoder_qt_mae_ms_ci95": [
+     33.13,
+     93.36
+    ],
+    "decoder_pr_mae_ms_ci95": [
+     48.0,
+     72.0
+    ],
+    "decoder_qrs_mae_ms_ci95": [
+     8.0,
+     24.0
+    ],
+    "rr_only_qt_mae_ms": 46.32,
+    "decoder_corr": 0.13
+   },
+   "thresholds": {
+    "requires_clinical_signoff": true,
+    "qt_mae_ms_max": 20,
+    "pr_mae_ms_max": 20,
+    "qrs_mae_ms_max": 15,
+    "must_beat_rr_only_qt_baseline": true,
+    "report_with_ci": true
+   }
+  },
+  {
+   "gate": "g3",
+   "title": "G3 \u2014 abnormality preservation (blinded read)",
+   "status": "RED",
+   "reasons": [
+    "evidence domain 'mimic_finger_ppg' \u2014 gates are judged on facial rPPG through the production path (this run is machinery/pretraining evidence only)",
+    "evidence is not production-path",
+    "no blinded cardiologist read on record"
+   ],
+   "metrics": {},
+   "thresholds": {
+    "requires_clinical_signoff": true,
+    "sensitivity_min": 0.8,
+    "specificity_min": 0.8
+   }
+  },
+  {
+   "gate": "g4",
+   "title": "G4 \u2014 no confabulation (withheld-class challenge)",
+   "status": "RED",
+   "reasons": [
+    "evidence domain 'mimic_finger_ppg' \u2014 gates are judged on facial rPPG through the production path (this run is machinery/pretraining evidence only)",
+    "evidence is not production-path",
+    "decoder trained without AF hallucinates P waves into AF (prominence excess 0.42 > 0.1: gen 0.5 vs ref 0.08)",
+    "withheld-class blinded scoring not on record"
+   ],
+   "metrics": {
+    "withheld_class": "AFIB",
+    "n_af_test_subjects": 3,
+    "p_prominence_gen_on_withheld_af": 0.5,
+    "p_prominence_ref_on_af": 0.08,
+    "hallucinated_p_excess": 0.42
+   },
+   "thresholds": {
+    "requires_clinical_signoff": true,
+    "max_hallucinated_p_prominence_excess": 0.1,
+    "blinded_reader_scored": true
+   }
+  },
+  {
+   "gate": "g5",
+   "title": "G5 \u2014 detection non-inferiority vs the measured path",
+   "status": "RED",
+   "reasons": [
+    "evidence domain 'mimic_finger_ppg' \u2014 gates are judged on facial rPPG through the production path (this run is machinery/pretraining evidence only)",
+    "evidence is not production-path"
+   ],
+   "metrics": {
+    "endpoint": "afib_irregularity",
+    "n_subjects": 10,
+    "auc_measured_path": 0.857,
+    "auc_from_reconstruction": 0.857,
+    "auc_deficit": 0.0
+   },
+   "thresholds": {
+    "requires_clinical_signoff": true,
+    "max_auc_deficit_vs_measured": 0.02
+   }
+  }
+ ],
+ "all_gates_green": false,
+ "clinical_signoff": false,
+ "promotion_open": false
+}

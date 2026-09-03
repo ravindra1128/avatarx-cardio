@@ -1,0 +1,20 @@
+# v0.3 reconstruction training run — config-driven (T4).
+# source: synthetic (paired fixtures, no downloads) | mimic (cached
+# PERform finger-PPG+ECG) | facial (REGISTERED datasets whose manifests
+# name an ingested reference_dir — the flywheel; the only source whose
+# evidence can ever open the §G gates).
+reconstruction:
+  run_name: recon-baseline
+  architecture: windowed_mlp
+  source: synthetic
+  n_subjects: 8            # synthetic source only
+  limit_per_class: 0       # mimic source only (0 = all cached subjects)
+  facial_dataset_ids: []   # facial source only (registered ids)
+  seed: 7
+  split_seed: 7
+  test_fraction: 0.3
+  steps: 400
+  batch: 256
+  lr: 0.003
+  confabulation_steps: 400
+  blinded_set: true

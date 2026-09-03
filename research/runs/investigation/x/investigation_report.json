@@ -1,0 +1,325 @@
+{
+  "WATERMARK": "RESEARCH & INVESTIGATION REPORT \u2014 RESEARCH ARTIFACT \u2014 FOR RESEARCH AND INVESTIGATION PURPOSES ONLY \u2014 NOT VALIDATED \u2014 NOT A MEASUREMENT \u2014 NOT A DIAGNOSIS \u2014 NOT FOR PARTICIPANT OR PATIENT USE",
+  "report_title": "AvatarX Research & Investigation Report",
+  "notice": "This document is NOT the consumer scan report and nothing in it is for a participant, a patient or a clinician. It exists for research and investigation only. Every value below is a raw head payload: while its track's promotion reads BLOCKED the track may show nothing anywhere a participant can see, and if a track ever opens, only its sanctioned sentence may render, through that track's own gate \u2014 never these payloads.",
+  "purpose": "research artifact for investigators: every gated head's raw output for one scan beside the live gate status of its track; user-visibility of any track is decided by its block of configs/gates.yaml, nowhere else",
+  "recording_id": "x",
+  "video": "/var/folders/rj/6lg276_n3vz64zk_t3kzbps00000gn/T//x.avi",
+  "generated_at": "2026-09-01T22:51:16",
+  "inputs": {
+    "age_years": 0.1,
+    "session_manifest": null,
+    "provocation": false,
+    "respiration_channel": null
+  },
+  "consumer_result": {
+    "report_title": "AvatarX Cardiac Rhythm Scan Report",
+    "outcome": "NO_RESULT",
+    "predicted_class": null,
+    "confidence_stars": 1,
+    "signal_quality_index": null,
+    "no_read_reasons": [
+      "unreadable video: cannot open video /var/folders/rj/6lg276_n3vz64zk_t3kzbps00000gn/T//x.avi"
+    ],
+    "user_facing_text": "We could see your pulse, but not clearly enough to check your rhythm this time. Hold still in bright, even light. Confidence: 1 of 5."
+  },
+  "tracks": {
+    "rhythm_regularity": {
+      "watermark": "RESEARCH & INVESTIGATION REPORT \u2014 RESEARCH ARTIFACT \u2014 FOR RESEARCH AND INVESTIGATION PURPOSES ONLY \u2014 NOT VALIDATED \u2014 NOT A MEASUREMENT \u2014 NOT A DIAGNOSIS \u2014 NOT FOR PARTICIPANT OR PATIENT USE",
+      "key": "rhythm_regularity",
+      "title": "Rhythm regularity (v0.7, \u00a7R)",
+      "head": "regularity",
+      "research_only": true,
+      "status": "not_run",
+      "gates": {
+        "promotion": "BLOCKED",
+        "gates_version": "R-2026-09-01-1",
+        "clinical_signoff": false,
+        "gates": [
+          {
+            "gate": "r0",
+            "title": "R0 \u2014 ceiling: camera vs ECG regularity agreement",
+            "status": "RED",
+            "first_reason": "evidence domain 'synthetic' is not 'facial_rppg' \u2014 machinery evidence only, can never open a gate"
+          },
+          {
+            "gate": "r1",
+            "title": "R1 \u2014 noise floor published (MDI per fps / SQI / skin tone)",
+            "status": "RED",
+            "first_reason": "evidence domain 'synthetic' is not 'facial_rppg' \u2014 machinery evidence only, can never open a gate"
+          },
+          {
+            "gate": "r2",
+            "title": "R2 \u2014 benign separation (RSA not flagged; age-stratified specificity)",
+            "status": "RED",
+            "first_reason": "evidence domain 'synthetic' is not 'facial_rppg' \u2014 machinery evidence only, can never open a gate"
+          },
+          {
+            "gate": "r3",
+            "title": "R3 \u2014 beats B3, B4, B5 subject-independent",
+            "status": "RED",
+            "first_reason": "evidence domain 'synthetic' is not 'facial_rppg' \u2014 machinery evidence only, can never open a gate"
+          },
+          {
+            "gate": "r4",
+            "title": "R4 \u2014 fairness (index bias, flag rate, coverage parity)",
+            "status": "RED",
+            "first_reason": "evidence domain 'synthetic' is not 'facial_rppg' \u2014 machinery evidence only, can never open a gate"
+          },
+          {
+            "gate": "r5",
+            "title": "R5 \u2014 claim mapping (owner + clinical advisor)",
+            "status": "RED",
+            "first_reason": "evidence domain 'synthetic' is not 'facial_rppg' \u2014 machinery evidence only, can never open a gate"
+          }
+        ]
+      },
+      "head_result": {
+        "head": "regularity",
+        "version": null,
+        "measurement_class": "RESEARCH_RHYTHM",
+        "value": null,
+        "reasons": [
+          "unreadable video: cannot open video /var/folders/rj/6lg276_n3vz64zk_t3kzbps00000gn/T//x.avi"
+        ]
+      },
+      "note": "the scan produced no beat lattice (outcome NO_RESULT); the head never ran"
+    },
+    "atrial_flutter": {
+      "watermark": "RESEARCH & INVESTIGATION REPORT \u2014 RESEARCH ARTIFACT \u2014 FOR RESEARCH AND INVESTIGATION PURPOSES ONLY \u2014 NOT VALIDATED \u2014 NOT A MEASUREMENT \u2014 NOT A DIAGNOSIS \u2014 NOT FOR PARTICIPANT OR PATIENT USE",
+      "key": "atrial_flutter",
+      "title": "Atrial flutter pattern flag (v0.6, \u00a7F)",
+      "head": "flutter",
+      "research_only": true,
+      "status": "not_run",
+      "gates": {
+        "promotion": "BLOCKED",
+        "gates_version": "F-2026-09-01-1",
+        "clinical_signoff": false,
+        "gates": [
+          {
+            "gate": "f0",
+            "title": "F0 \u2014 pulse-rate accuracy during arrhythmia",
+            "status": "RED",
+            "first_reason": "no evaluation run on record"
+          },
+          {
+            "gate": "f1",
+            "title": "F1 \u2014 flag performance (sensitivity, specificity, vs B3)",
+            "status": "RED",
+            "first_reason": "no evaluation run on record"
+          },
+          {
+            "gate": "f2",
+            "title": "F2 \u2014 per-ratio reporting incl. the quantified known miss",
+            "status": "RED",
+            "first_reason": "no evaluation run on record"
+          },
+          {
+            "gate": "f3",
+            "title": "F3 \u2014 serial signature (integer-ratio steps, one atrial rate)",
+            "status": "RED",
+            "first_reason": "no evaluation run on record"
+          },
+          {
+            "gate": "f4",
+            "title": "F4 \u2014 fairness and coverage parity",
+            "status": "RED",
+            "first_reason": "no evaluation run on record"
+          },
+          {
+            "gate": "f5",
+            "title": "F5 \u2014 claim mapping (owner + clinical advisor)",
+            "status": "RED",
+            "first_reason": "no evaluation run on record"
+          }
+        ]
+      },
+      "head_result": {
+        "head": "flutter",
+        "version": null,
+        "measurement_class": "RESEARCH_RHYTHM",
+        "value": null,
+        "reasons": [
+          "unreadable video: cannot open video /var/folders/rj/6lg276_n3vz64zk_t3kzbps00000gn/T//x.avi"
+        ]
+      },
+      "note": "the scan produced no beat lattice (outcome NO_RESULT); the head never ran"
+    },
+    "arterial_stiffness": {
+      "watermark": "RESEARCH & INVESTIGATION REPORT \u2014 RESEARCH ARTIFACT \u2014 FOR RESEARCH AND INVESTIGATION PURPOSES ONLY \u2014 NOT VALIDATED \u2014 NOT A MEASUREMENT \u2014 NOT A DIAGNOSIS \u2014 NOT FOR PARTICIPANT OR PATIENT USE",
+      "key": "arterial_stiffness",
+      "title": "Arterial stiffness (v0.4 vascular)",
+      "head": "vascular",
+      "research_only": true,
+      "status": "abstained",
+      "gates": {
+        "promotion": "BLOCKED",
+        "gates_version": "VASC-2026-08-31-1",
+        "clinical_signoff": false,
+        "gates": [
+          {
+            "gate": "v0",
+            "title": "V0 \u2014 signal fidelity (facial vs contact reference)",
+            "status": "RED",
+            "first_reason": "evidence domain 'synthetic' is not 'facial_rppg' \u2014 machinery evidence only, can never open a gate"
+          },
+          {
+            "gate": "v1",
+            "title": "V1 \u2014 incremental validity vs age+sex+BP (PIVOTAL, T2 defense)",
+            "status": "RED",
+            "first_reason": "evidence domain 'synthetic' is not 'facial_rppg' \u2014 machinery evidence only, can never open a gate"
+          },
+          {
+            "gate": "v2",
+            "title": "V2 \u2014 repeatability of the estimate",
+            "status": "RED",
+            "first_reason": "evidence domain 'synthetic' is not 'facial_rppg' \u2014 machinery evidence only, can never open a gate"
+          },
+          {
+            "gate": "v3",
+            "title": "V3 \u2014 generalization (leave-one-site/device-out)",
+            "status": "RED",
+            "first_reason": "evidence domain 'synthetic' is not 'facial_rppg' \u2014 machinery evidence only, can never open a gate"
+          },
+          {
+            "gate": "v4",
+            "title": "V4 \u2014 fairness (coverage and error parity)",
+            "status": "RED",
+            "first_reason": "evidence domain 'synthetic' is not 'facial_rppg' \u2014 machinery evidence only, can never open a gate"
+          },
+          {
+            "gate": "v5",
+            "title": "V5 \u2014 claim mapping (owner + clinical advisor)",
+            "status": "RED",
+            "first_reason": "evidence domain 'synthetic' is not 'facial_rppg' \u2014 machinery evidence only, can never open a gate"
+          }
+        ]
+      },
+      "head_result": {
+        "head": "vascular",
+        "version": "0.1.0-research",
+        "measurement_class": "RESEARCH_VASCULAR",
+        "value": {
+          "available": false,
+          "watermark": "VASCULAR MORPHOLOGY \u2014 RESEARCH ARTIFACT \u2014 NOT A MEASUREMENT"
+        },
+        "confidence": null,
+        "reasons": [
+          "no morphology features for this scan (V-c or quality refusal)",
+          "no trained vascular model on record \u2014 run evaluate-vascular on a referenced dataset",
+          "no V0-surviving features \u2014 the fidelity gate blocks all estimation (fail closed)"
+        ]
+      },
+      "morphology_features": {
+        "available": false,
+        "outcome": "NO_RESULT",
+        "reasons": [
+          "V-c: morphology features are computed only on ACCEPT-grade scans",
+          "unreadable video: cannot open video /var/folders/rj/6lg276_n3vz64zk_t3kzbps00000gn/T//x.avi"
+        ]
+      },
+      "track_report_path": "/Users/pg/Documents/AvatarX/code/afib/evaluation/vascular_runs/head-x/vascular_head_report.json",
+      "side_effect": "the v0.4 vascular research runner also writes its own per-scan report under the vascular runs root (gitignored), exactly as `cli.py process --heads vascular` does; --out does not move it"
+    },
+    "vascular_tone": {
+      "watermark": "RESEARCH & INVESTIGATION REPORT \u2014 RESEARCH ARTIFACT \u2014 FOR RESEARCH AND INVESTIGATION PURPOSES ONLY \u2014 NOT VALIDATED \u2014 NOT A MEASUREMENT \u2014 NOT A DIAGNOSIS \u2014 NOT FOR PARTICIPANT OR PATIENT USE",
+      "key": "vascular_tone",
+      "title": "Vasomotor reactivity / vascular tone (v0.5, \u00a7W)",
+      "head": "vasotone",
+      "research_only": true,
+      "status": "not_applicable",
+      "gates": {
+        "promotion": "BLOCKED",
+        "gates_version": "W-2026-08-31-1",
+        "clinical_signoff": false,
+        "gates": [
+          {
+            "gate": "w0",
+            "title": "W0 \u2014 reference tracking (facial vs contact-PI response)",
+            "status": "RED",
+            "first_reason": "evidence domain 'synthetic' is not 'facial_rppg' \u2014 machinery evidence only, can never open a gate"
+          },
+          {
+            "gate": "w1",
+            "title": "W1 \u2014 optics invariance (null_optics arm, T1 defense)",
+            "status": "RED",
+            "first_reason": "evidence domain 'synthetic' is not 'facial_rppg' \u2014 machinery evidence only, can never open a gate"
+          },
+          {
+            "gate": "w2",
+            "title": "W2 \u2014 beats HR/respiration baselines (PIVOTAL, T2 defense)",
+            "status": "RED",
+            "first_reason": "evidence domain 'synthetic' is not 'facial_rppg' \u2014 machinery evidence only, can never open a gate"
+          },
+          {
+            "gate": "w3",
+            "title": "W3 \u2014 dose/consistency (retest + graded ordering)",
+            "status": "RED",
+            "first_reason": "evidence domain 'synthetic' is not 'facial_rppg' \u2014 machinery evidence only, can never open a gate"
+          },
+          {
+            "gate": "w4",
+            "title": "W4 \u2014 fairness (detection parity and coverage)",
+            "status": "RED",
+            "first_reason": "evidence domain 'synthetic' is not 'facial_rppg' \u2014 machinery evidence only, can never open a gate"
+          },
+          {
+            "gate": "w5",
+            "title": "W5 \u2014 claim mapping (owner + clinical advisor)",
+            "status": "RED",
+            "first_reason": "evidence domain 'synthetic' is not 'facial_rppg' \u2014 machinery evidence only, can never open a gate"
+          }
+        ]
+      },
+      "needs": "timed provocation marks (a .provocation.json with baseline / stimulus / recovery phase marks) and, optionally, a contact perfusion-index reference \u2014 vasomotor reactivity is a RESPONSE to a controlled provocation; a single resting scan carries no tone measurement"
+    },
+    "vo2_fitness": {
+      "watermark": "RESEARCH & INVESTIGATION REPORT \u2014 RESEARCH ARTIFACT \u2014 FOR RESEARCH AND INVESTIGATION PURPOSES ONLY \u2014 NOT VALIDATED \u2014 NOT A MEASUREMENT \u2014 NOT A DIAGNOSIS \u2014 NOT FOR PARTICIPANT OR PATIENT USE",
+      "key": "vo2_fitness",
+      "title": "VO2 / cardiorespiratory fitness (v0.4, \u00a7V)",
+      "head": "fitness",
+      "research_only": true,
+      "status": "not_applicable",
+      "gates": {
+        "promotion": "BLOCKED",
+        "gates_version": "V-2026-08-30-1",
+        "clinical_signoff": false,
+        "gates": [
+          {
+            "gate": "v1",
+            "title": "V1 \u2014 recovery-HR fidelity vs reference ECG (per Monk band)",
+            "status": "RED",
+            "first_reason": "evidence domain 'synthetic' \u2014 \u00a7V gates are judged on facial rPPG through the production path (this run is machinery evidence only)"
+          },
+          {
+            "gate": "v2",
+            "title": "V2 \u2014 protocol repeatability + accepted-rate + no-read parity",
+            "status": "RED",
+            "first_reason": "evidence domain 'synthetic' \u2014 \u00a7V gates are judged on facial rPPG through the production path (this run is machinery evidence only)"
+          },
+          {
+            "gate": "v3",
+            "title": "V3 \u2014 incremental value beyond demographics+activity (PIVOTAL)",
+            "status": "RED",
+            "first_reason": "evidence domain 'synthetic' \u2014 \u00a7V gates are judged on facial rPPG through the production path (this run is machinery evidence only)"
+          },
+          {
+            "gate": "v4",
+            "title": "V4 \u2014 subgroup honesty (bias/LoA tables; medication routing)",
+            "status": "RED",
+            "first_reason": "evidence domain 'synthetic' \u2014 \u00a7V gates are judged on facial rPPG through the production path (this run is machinery evidence only)"
+          },
+          {
+            "gate": "v5",
+            "title": "V5 \u2014 trend validity (head_trend beyond direction-only)",
+            "status": "RED",
+            "first_reason": "evidence domain 'synthetic' \u2014 \u00a7V gates are judged on facial rPPG through the production path (this run is machinery evidence only)"
+          }
+        ]
+      },
+      "needs": "the three-phase recovery session (rest scan, guided activity, recovery scan) as a session manifest \u2014 `cli.py research-report <video> --session <manifest.json> [--videos rest activity recovery]`; a single resting scan carries no VO2 or fitness information",
+      "note": "hard rule (spec B.18/B.19): an oxygen-uptake number never renders in any version and none exists in the session pipeline; the track yields a fitness CATEGORY from heart-rate recovery, shown here raw, never an estimate"
+    }
+  }
+}

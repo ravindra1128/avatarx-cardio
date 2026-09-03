@@ -1,0 +1,8 @@
+{
+ "WATERMARK": "VASCULAR MORPHOLOGY \u2014 RESEARCH ARTIFACT \u2014 NOT A MEASUREMENT",
+ "kind": "reactivity_primary",
+ "primary_feature": "norm_pulse_amplitude",
+ "surviving_features": [],
+ "detection_floor_delta_norm": null,
+ "n_provocations": 6
+}

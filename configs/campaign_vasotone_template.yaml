@@ -1,0 +1,22 @@
+# Template campaign manifest for the v0.5 vasomotor-reactivity
+# feasibility campaign (docs/vasotone_track.md; planning estimates
+# flagged there). Both null arms are quota'd like the provocations —
+# a campaign that skips its placebo arms cannot move gate W1.
+campaign:
+  id: vasotone-feasibility-template
+  version: 1
+  consent_form_version: consent-tone-v1
+  target_n: 45                        # feasibility band 30-60
+  quotas:
+    fitzpatrick: {I: 4, II: 7, III: 10, IV: 10, V: 8, VI: 6}
+    devices: {rig-1: 25, rig-2: 20}
+    lighting: {controlled: 45}
+    maneuver: {cold_pressor: 45, paced_breathing: 25,
+               mental_arithmetic: 15, posture_change: 15,
+               null_optics: 45, null_rest: 45}
+  retest: {target_pairs: 12}          # same maneuver, second visit (W3)
+  session_checklist: [provocation_marks_recorded, optics_lock_verified,
+                      pi_reference_on_uninvolved_hand,
+                      finger_ppg_recorded,
+                      null_optics_log_recorded,
+                      irb_cold_pressor_protocol_followed]

@@ -1,0 +1,431 @@
+# §G — ECG-reconstruction promotion gates (v0.3). PRE-REGISTERED.
+#
+# The reconstruction head may be rendered on ANY user-facing surface only
+# when every gate below is GREEN on participant-disjoint AND
+# session-disjoint held-out FACIAL data, evaluated by the production path
+# (inference.pipeline). Numeric thresholds are PROVISIONAL DEFAULTS —
+# REQUIRES_CLINICAL_SIGNOFF: the owner and a clinical advisor must confirm
+# or tighten them before any promotion. Gates may be tightened at any
+# time; LOOSENING any gate requires an explicit CLAUDE_CODE_SPEC.md
+# changelog entry signed by the owner. models/registry.promote refuses a
+# reconstruction run while any gate is red (it reads gate_results.json —
+# data, never research code).
+
+gates_version: G-2026-08-29-1
+requires_clinical_signoff: true
+signoff: {owner_confirmed: false, clinical_advisor: null, date: null}
+
+evidence_requirements:            # what makes an evaluation COUNT
+  participant_disjoint: true
+  session_disjoint: true
+  production_path: true           # facial signal via inference.pipeline
+  signal_domain: facial_rppg      # MIMIC finger-PPG and synthetic pairs
+                                  # are pretraining/machinery surrogates —
+                                  # they exercise the metrics but can
+                                  # never open a gate
+
+g1_identity_baseline:             # beats the zero-parameter baseline
+  requires_clinical_signoff: true
+  must_beat_identity_on_every_morphology_metric: true
+  morphology_metrics: [qt_mae_ms, pr_mae_ms, qrs_mae_ms]
+
+g2_interval_fidelity:             # against reference-ECG measurements
+  requires_clinical_signoff: true
+  qt_mae_ms_max: 20
+  pr_mae_ms_max: 20
+  qrs_mae_ms_max: 15
+  must_beat_rr_only_qt_baseline: true
+  report_with_ci: true            # waveform correlation may be reported
+                                  # only ALONGSIDE these, never instead
+
+g3_blinded_read:                  # abnormality preservation
+  requires_clinical_signoff: true
+  sensitivity_min: 0.80
+  specificity_min: 0.80
+
+g4_no_confabulation:              # withheld-class morphology honesty
+  requires_clinical_signoff: true
+  max_hallucinated_p_prominence_excess: 0.10   # gen P prominence on a
+                                  # WITHHELD AF class may exceed the
+                                  # reference AF P prominence by at most
+                                  # this (v0.2 lab measured 0.39 vs 0.04)
+  blinded_reader_scored: true
+
+g5_detection_noninferiority:      # endpoints stay on the measured path
+  requires_clinical_signoff: true
+  max_auc_deficit_vs_measured: 0.02
+
+# ===========================================================================
+# §V — VO2/CRF fitness-track gates (v0.4). PRE-REGISTERED.
+#
+# Same mechanics as §G above: numeric thresholds are PROVISIONAL DEFAULTS —
+# REQUIRES_CLINICAL_SIGNOFF; the owner and a clinical advisor confirm or
+# tighten them before any promotion; tightening is always allowed;
+# LOOSENING any gate requires an owner-signed CLAUDE_CODE_SPEC.md entry.
+# Evidence must be facial-domain, participant- AND session-disjoint,
+# through the production path; public finger-PPG / synthetic sets exercise
+# the machinery and can never open a gate. models/registry.promote refuses
+# head_fitness while any §V gate is red.
+# ===========================================================================
+vo2:
+  gates_version: V-2026-08-30-1
+  requires_clinical_signoff: true
+  signoff: {owner_confirmed: false, clinical_advisor: null, date: null}
+
+  evidence_requirements:
+    participant_disjoint: true
+    session_disjoint: true
+    production_path: true
+    signal_domain: facial_rppg
+
+  v1_recovery_hr_fidelity:
+    requires_clinical_signoff: true
+    hrr60_loa_bpm_max: 5            # 95% LoA half-width, EVERY powered Monk band
+    per_band_kill_bpm: 8            # > this after engineering -> that band
+                                    # returns NO_RESULT for recovery metrics
+    report_per_window_rmse_by_recovery_time: true
+
+  v2_protocol_repeatability:
+    requires_clinical_signoff: true
+    hrr60_typical_error_bpm_max: 4
+    accepted_scan_rate_min: 0.85    # ages 20-75
+    noread_parity: {max_ratio: 1.5, max_abs_pts: 10}
+
+  v3_incremental_value:             # PIVOTAL — fail means head_fitness is
+    requires_clinical_signoff: true # never promoted; recovery metrics ship
+    delta_see_mlkgmin_min: 0.5      # vs demographics+activity, CI excl. zero
+    category_accuracy_gain_pts_min: 5
+    must_beat_static_face_negative_control: true
+
+  v4_subgroup_honesty:
+    requires_clinical_signoff: true
+    subgroups: [age, sex, bmi, monk_band, medications]
+    beta_blocker_bias_met_max: 1.0  # else medicated users hard-routed to
+                                    # trend-only IN CODE (not labeling)
+
+  v5_trend_validity:                # gates head_trend beyond direction-only
+    requires_clinical_signoff: true
+    change_score_r_min: 0.6
+    auroc_1met_min: 0.75
+
+# ===========================================================================
+# vascular: — arterial-stiffness track gates (v0.4 vascular). PRE-REGISTERED.
+#
+# Same mechanics as §G/§V above: numeric thresholds are PROVISIONAL
+# DEFAULTS — REQUIRES_CLINICAL_SIGNOFF; tightening is always allowed;
+# LOOSENING any gate requires an owner-signed CLAUDE_CODE_SPEC.md entry.
+# Evidence must be facial-domain, participant- AND session-disjoint,
+# through the production path; synthetic/public-PPG sets exercise the
+# machinery and can never open a gate. models/registry.promote refuses
+# head_vascular while any gate is red. While red, invariants V-a/V-b
+# stand: NO vascular output of any kind on user-facing surfaces.
+# ===========================================================================
+vascular:
+  gates_version: VASC-2026-08-31-1
+  requires_clinical_signoff: true
+  signoff: {owner_confirmed: false, clinical_advisor: null, date: null, claim_scope: null}
+
+  evidence_requirements:
+    participant_disjoint: true
+    session_disjoint: true
+    production_path: true
+    signal_domain: facial_rppg
+
+  v0_signal_fidelity:               # run BEFORE any modeling (T1)
+    requires_clinical_signoff: true
+    feature_icc_min: 0.75           # facial vs contact reference, per feature
+    retest_icc_min: 0.70            # same-day feature repeatability
+    min_surviving_features: 1       # empty survivor set = no modeling at all
+    min_paired_participants: 60     # fidelity cohort floor (plan: 60-100)
+
+  v1_incremental_validity:          # PIVOTAL — the T2 age-shortcut defense:
+    requires_clinical_signoff: true # beat age+sex+brachial-BP (B3) or ship
+    rmse_improvement_vs_b3_mps_min: 0.5   # nothing
+    added_r2_min: 0.05              # added variance explained over B3
+    ci_must_exclude_zero: true
+    min_test_participants: 40
+
+  v2_estimate_repeatability:
+    requires_clinical_signoff: true
+    estimate_retest_icc_min: 0.85   # same-day test-retest of the ESTIMATE
+    retest_drift_mps_max: 0.5
+    min_retest_pairs: 20
+
+  v3_generalization:
+    requires_clinical_signoff: true
+    held_out_site_rmse_ratio_max: 1.25     # leave-one-site-out
+    min_sites: 2
+    held_out_device_rmse_ratio_max: 1.25   # leave-one-device-out
+    min_devices: 2
+
+  v4_fairness:
+    requires_clinical_signoff: true
+    subgroups: [fitzpatrick_group, device]
+    coverage_ratio_min: 0.8         # worst/best group feature coverage
+    rmse_ratio_max: 1.25            # worst/best group error parity
+
+  v5_claim_mapping:                 # owner + clinical advisor decide the
+    requires_clinical_signoff: true # FIRST permissible surface; absolute
+    permissible_first_claim: longitudinal_wellness_trend  # stiffness or
+    absolute_claims_require_prospective_protocol: true    # screening claims
+                                    # need a further prospective protocol
+
+# ===========================================================================
+# §W — vasotone: vasomotor-reactivity track gates (v0.5). PRE-REGISTERED.
+#
+# Same mechanics as §G/§V/vascular above: thresholds are PROVISIONAL
+# DEFAULTS — REQUIRES_CLINICAL_SIGNOFF; tightening always allowed;
+# LOOSENING requires an owner-signed CLAUDE_CODE_SPEC.md entry. Evidence
+# must be facial-domain, participant- AND session-disjoint, through the
+# production path; synthetic sets exercise the machinery and can never
+# open a gate. models/registry.promote refuses head_vasotone while any
+# §W gate is red. While red, W-a/W-b/W-c stand: NO user-facing vasomotor
+# output of any kind, and never an absolute cross-session tone value.
+# ===========================================================================
+vasotone:
+  gates_version: W-2026-08-31-1
+  requires_clinical_signoff: true
+  signoff: {owner_confirmed: false, clinical_advisor: null, date: null, claim_scope: null}
+
+  evidence_requirements:
+    participant_disjoint: true
+    session_disjoint: true
+    production_path: true
+    signal_domain: facial_rppg
+
+  w0_reference_tracking:            # facial response vs contact-PI response
+    requires_clinical_signoff: true
+    direction_agreement_min: 0.80   # fraction of provocations
+    magnitude_r_min: 0.60           # within-maneuver, Fisher-z combined
+    min_provocations: 60            # feasibility plan: N 30-60 subjects
+                                    # x >= 2 provocations
+    pi_detection_floor_delta_norm: 0.05   # |PI delta| below this is
+                                    # "no reference response" and counts
+                                    # as non-agreement (conservative)
+
+  w1_optics_invariance:             # the T1 defense — this track's
+    requires_clinical_signoff: true # signature test
+    null_optics_abs_delta_norm_p95_max: 0.10
+    null_rest_ratio_max: 2.0        # null_optics p95 <= 2x null_rest p95
+    min_null_optics_sessions: 20
+    min_null_rest_sessions: 20
+    min_surviving_features: 1       # a feature that responds to lamps is
+                                    # an optics detector and is dropped
+
+  w2_beats_baselines:               # PIVOTAL — the T2 HR/respiration
+    requires_clinical_signoff: true # shortcut defense
+    added_r2_over_b3_min: 0.10
+    ci_must_exclude_zero: true
+    min_test_participants: 25
+
+  w3_dose_consistency:
+    requires_clinical_signoff: true
+    retest_icc_min: 0.60            # same maneuver, retest visit
+    min_retest_pairs: 10
+    ordered_fraction_min: 0.70      # graded provocations in order
+
+  w4_fairness:
+    requires_clinical_signoff: true
+    subgroups: [fitzpatrick_group]
+    detection_parity_ratio_min: 0.75
+    coverage_ratio_min: 0.8
+    min_group_participants: 5       # a group below this is None-rated,
+                                    # which REDs the gate by name —
+                                    # never silently dropped
+
+  w5_claim_mapping:                 # owner + clinical advisor sign the
+    requires_clinical_signoff: true # FIRST permissible surface; anything
+    permissible_first_claim: vasomotor_reactivity_trend   # endothelial/
+    absolute_claims_require_prospective_protocol: true    # clinical needs
+                                    # an EndoPAT/FMD-referenced protocol
+
+# ===========================================================================
+# v0.6 ATRIAL-FLUTTER TRACK (§F) — the regular-tachyarrhythmia pattern flag.
+# Flutter is the arrhythmia the AFib detector is structurally blind to: fixed
+# AV conduction of a ~250-300/min atrial circuit makes the pulse METRONOMIC
+# (2:1 ~150, 3:1 ~100, 4:1 ~75), which an irregularity-based detector reads as
+# normal sinus rhythm. The pulse also cannot NAME the rhythm — flutter, SVT
+# and sinus tachycardia at the same rate are the same pulse, and separating
+# them needs F waves on an ECG. So nothing here gates a "flutter detector";
+# it gates a pattern flag that routes to an ECG.
+# Evidence floor to beat, not to target (Cramer et al. 2025, J Clin Monit
+# Comput, N=51 cardioversion patients, 32 Hz camera, LOSO SVM): AUC 0.95
+# arrhythmia-vs-sinus, AF 94.6% / flutter 92.5% classified, but "other
+# arrhythmias" only 61.8%, HR bias -7.45 bpm during arrhythmia with 48.6% of
+# readings within 5 bpm, and the single Fitzpatrick-VI patient excluded.
+# That is an arrhythmia-vs-sinus result in a cardioversion clinic — not
+# evidence that flutter can be named, nor that slow fixed-block flutter is
+# detectable at all. Every threshold below is a PLANNING value, pre-registered
+# so it cannot drift; only data may revise it.
+# models/registry.promote refuses head_flutter while any §F gate is red.
+# While red, F-a/F-b/F-c/F-d stand: no user-facing regular-tachy output of any
+# kind, no rhythm ever named, the known-miss registry ships, and the flag is
+# measured-path only.
+# ===========================================================================
+flutter:
+  gates_version: F-2026-09-01-1
+  requires_clinical_signoff: true
+  signoff: {owner_confirmed: false, clinical_advisor: null, date: null, claim_scope: null}
+
+  evidence_requirements:
+    participant_disjoint: true
+    session_disjoint: true
+    production_path: true
+    signal_domain: facial_rppg
+
+  f0_rate_accuracy:                 # a rate-based flag means nothing until
+    requires_clinical_signoff: true # the rate itself is right IN arrhythmia
+    max_abs_bias_bpm: 3.0           # Cramer measured -7.45 bpm bias
+    min_within_5bpm_fraction: 0.80  # Cramer measured 0.486 — we must do
+                                    # materially better, not marginally
+    min_arrhythmia_scans: 30
+
+  f1_flag_performance:              # sensitivity for the ONE specific band,
+    requires_clinical_signoff: true # specificity against the FULL battery
+    min_sensitivity_2to1: 0.80
+    min_specificity_battery: 0.95   # regular tachycardia is usually benign:
+                                    # specificity is the whole product risk
+    must_beat_b3: true              # the interpretable competitor. If the
+                                    # head cannot beat it, B3 SHIPS and the
+                                    # summary says so.
+    min_b3_margin: 0.02             # beating B3 by noise is not beating B3
+    min_flutter_scans: 40
+    min_negative_scans: 200
+    require_dominant_negative: sinus_tachycardia   # the battery must be
+                                    # dominated by the confounder that
+                                    # actually presents, not by easy negatives
+
+  f2_per_ratio_reporting:           # the known misses must be COUNTED, not
+    requires_clinical_signoff: true # asserted (invariant F-c)
+    required_ratios: [TWO_TO_ONE, THREE_TO_ONE, FOUR_TO_ONE, VARIABLE]
+    min_scans_per_ratio: 10
+    slow_block_miss_must_be_quantified: true
+
+  f3_serial_signature:              # the track's differentiator: integer-
+    requires_clinical_signoff: true # ratio steps of ONE latent atrial rate
+    min_series_auc: 0.85
+    min_flutter_series: 10
+    min_nonflutter_series: 20
+    min_scans_per_series: 3
+
+  f4_fairness:
+    requires_clinical_signoff: true
+    subgroups: [fitzpatrick_group]
+    detection_parity_ratio_min: 0.75
+    coverage_ratio_min: 0.80
+    min_group_participants: 5
+    require_darkest_band_present: true   # the reference study excluded its
+                                    # only Fitzpatrick-VI patient. We do not
+                                    # get to do that: absence REDs the gate.
+
+  f5_claim_mapping:                 # owner + clinical advisor sign the FIRST
+    requires_clinical_signoff: true # permissible surface
+    permissible_first_claim: regular_tachy_ecg_referral
+    combined_endpoint_decision_required: true   # Task 6: AF-alone vs
+                                    # flutter-alone vs combined, decided on
+                                    # numbers and recorded
+    limitations_doc_required: docs/flutter_limitations.md
+
+# ===========================================================================
+# v0.7 RHYTHM-REGULARITY TRACK (§R) — the substrate head.
+# "Is this pulse regular or irregular, and how confident are we?" AFib and
+# flutter are specializations of this question, and all three heads read ONE
+# representation (features/regularity.py, invariant G-a). Two things make
+# this track different: its reference label is COMPUTABLE from the reference
+# ECG's own R-R series with the identical statistics (no adjudication needed
+# for the base label — the definition is published below and in
+# docs/regularity_track.md; there is no hidden ground truth), and its
+# dominant false positive is a healthy person breathing (respiratory sinus
+# arrhythmia is real, benign irregularity — separating benign from
+# pathological irregularity is the actual problem, gate R2).
+# Regulatory anchor: the FDA irregular-rhythm-notification precedent (Apple
+# DEN180042 -> 21 CFR 870.2790 / product code QDB; Fitbit K212372; Samsung
+# K230292) — all contact wrist PPG; no contactless predicate exists.
+# Every threshold is a PLANNING value, pre-registered so it cannot drift.
+# models/registry.promote refuses head_regularity while any §R gate is red.
+# While red, G-b/G-c/G-d stand: index + CI always, benign evidence on every
+# irregular call, no rhythm ever named.
+# ===========================================================================
+regularity:
+  gates_version: R-2026-09-01-1
+  requires_clinical_signoff: true
+  signoff: {owner_confirmed: false, clinical_advisor: null, date: null, claim_scope: null}
+
+  evidence_requirements:
+    participant_disjoint: true
+    session_disjoint: true
+    production_path: true
+    signal_domain: facial_rppg
+
+  reference_label:                 # THE published reference definition,
+    requires_clinical_signoff: true # applied identically to camera intervals
+                                    # and to ECG R-R via the same code
+    index: irregularity_index       # median |successive diff| / median interval,
+                                    # within-run differences only
+    irregular_if_index_at_least: 0.06   # planning: sinus at rest ~0.02-0.04,
+                                    # deep RSA ~0.06-0.10, AF ~0.15+ — the
+                                    # boundary sits INSIDE the RSA range on
+                                    # purpose: R2 must separate them
+    min_intervals: 15
+    ecg_beat_confidence: 1.0        # the reference series is trusted beat by
+                                    # beat; the run discipline (physiologic
+                                    # range, missed/false-beat splitters)
+                                    # still applies identically
+
+  r0_ceiling:                       # can the optics reproduce the ECG's own
+    requires_clinical_signoff: true # verdict? (class + index agreement)
+    kappa_min: 0.80
+    index_r_min: 0.85
+    bland_altman_loa_max: 0.04      # 95% limits of agreement on the index
+    bland_altman_bias_max: 0.02     # |camera - ECG| index bias, gated on
+                                    # its own: a tight systematic offset
+                                    # passes the half-width alone
+    min_paired_scans: 100
+    per_sqi_grade: true             # reported per SQI grade, worst governs
+
+  r1_noise_floor:                   # the honesty gate: MDI is a PUBLISHED
+    requires_clinical_signoff: true # product parameter
+    require_mdi_per: [fps, sqi_grade, fitzpatrick_group]
+    min_regular_scans_per_cell: 10  # metronomic references per (fps) cell
+    mdi_confidence: 0.95
+    mdi_power: 0.80
+    max_false_irregular_rate_at_5pct_beat_error: 0.05
+
+  r2_benign_separation:             # the RSA problem
+    requires_clinical_signoff: true
+    max_rsa_flag_rate: 0.10         # RSA-dominant sessions flagged as
+                                    # clinically irregular, NOT counting
+                                    # those explained as respiration-coupled
+    age_bands: ["<35", "35-59", ">=60"]
+    min_specificity_per_age_band: 0.90
+    min_sessions_per_age_band: 20   # JUDGED sessions per band
+    min_rsa_sessions: 20            # judged RSA-annotated sessions
+    max_no_read_rate_per_age_band: 0.30   # abstention is disclosed and
+                                    # bounded: a head that declines the
+                                    # sessions it would get wrong buys
+                                    # specificity with silence
+
+  r3_baselines:                     # PIVOTAL — subject-independent
+    requires_clinical_signoff: true
+    min_balanced_accuracy_margin_over_b3: 0.02
+    min_balanced_accuracy_margin_over_b4: 0.10   # demographics-only
+    min_balanced_accuracy_margin_over_b5: 0.10   # SQI-only
+    min_test_participants: 25       # participants the head JUDGED
+    max_head_no_read_rate: 0.20     # baselines are re-scored on the
+                                    # head's judged rows (like with like)
+                                    # and the no-read rate is gated
+
+  r4_fairness:
+    requires_clinical_signoff: true
+    subgroups: [fitzpatrick_group]
+    max_index_bias: 0.01            # camera-minus-ECG index bias, worst group
+    flag_rate_parity_ratio_min: 0.75
+    coverage_ratio_min: 0.80
+    min_group_participants: 5
+    require_darkest_band_present: true
+
+  r5_claim_mapping:
+    requires_clinical_signoff: true
+    permissible_first_claim: irregular_rhythm_notification
+    this_head_never_escalates: true # an AFib-suggestive sentence is
+                                    # head_afib's job, never this head's

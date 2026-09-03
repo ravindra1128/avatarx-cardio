@@ -1,0 +1,458 @@
+{
+ "WATERMARK": "VASCULAR MORPHOLOGY \u2014 RESEARCH ARTIFACT \u2014 NOT A MEASUREMENT",
+ "run_id": "vasc-c1672a372057",
+ "evidence": {
+  "data": {
+   "signal_domain": "synthetic",
+   "participant_disjoint": true,
+   "session_disjoint": true,
+   "production_path": false,
+   "n_recordings": 6,
+   "dataset_dir": "/private/tmp/claude-501/-Users-pg-Documents-AvatarX-code-afib/971031ba-40cf-4fe6-95e6-4d8f5ff48e94/scratchpad/vascular_fixture_ds"
+  },
+  "v1": {},
+  "v2": {},
+  "v3": {
+   "n_sites": 2
+  },
+  "v4": {
+   "per_group": {
+    "2": {
+     "coverage": 1.0,
+     "attempted": 3,
+     "usable": 3
+    },
+    "3": {
+     "coverage": 1.0,
+     "attempted": 1,
+     "usable": 1
+    },
+    "4": {
+     "coverage": 1.0,
+     "attempted": 1,
+     "usable": 1
+    },
+    "5": {
+     "coverage": 1.0,
+     "attempted": 1,
+     "usable": 1
+    }
+   },
+   "coverage_ratio_worst": 1.0
+  },
+  "v5": {},
+  "v0": {
+   "n_paired_participants": 6,
+   "per_feature": {
+    "rise_time_s": {
+     "n": 7,
+     "icc": 0.9614707494828767,
+     "bias": 0.003,
+     "loa_lower": -0.011,
+     "loa_upper": 0.017,
+     "n_retest_pairs": 1,
+     "retest_icc": null,
+     "survives": false
+    },
+    "norm_upstroke_slope": {
+     "n": 7,
+     "icc": 0.6779236015275741,
+     "bias": -0.649,
+     "loa_lower": -1.452,
+     "loa_upper": 0.154,
+     "n_retest_pairs": 1,
+     "retest_icc": null,
+     "survives": false
+    },
+    "pulse_width50_s": {
+     "n": 7,
+     "icc": 0.814940428576572,
+     "bias": 0.012,
+     "loa_lower": -0.001,
+     "loa_upper": 0.025,
+     "n_retest_pairs": 1,
+     "retest_icc": null,
+     "survives": false
+    },
+    "notch_present": {
+     "n": 7,
+     "icc": null,
+     "bias": 0.0,
+     "loa_lower": 0.0,
+     "loa_upper": 0.0,
+     "n_retest_pairs": 1,
+     "retest_icc": null,
+     "survives": false
+    },
+    "notch_rel_amp": {
+     "n": 7,
+     "icc": 0.7507441141575982,
+     "bias": 0.045,
+     "loa_lower": -0.008,
+     "loa_upper": 0.098,
+     "n_retest_pairs": 1,
+     "retest_icc": null,
+     "survives": false
+    },
+    "notch_time_frac": {
+     "n": 7,
+     "icc": -0.2020349096198925,
+     "bias": 0.045,
+     "loa_lower": -0.103,
+     "loa_upper": 0.193,
+     "n_retest_pairs": 1,
+     "retest_icc": null,
+     "survives": false
+    },
+    "reflection_index": {
+     "n": 7,
+     "icc": 0.7047376519903649,
+     "bias": 0.021,
+     "loa_lower": -0.089,
+     "loa_upper": 0.131,
+     "n_retest_pairs": 1,
+     "retest_icc": null,
+     "survives": false
+    },
+    "sdppg_b_over_a": {
+     "n": 7,
+     "icc": -0.03577008352571516,
+     "bias": 0.33,
+     "loa_lower": -1.383,
+     "loa_upper": 2.042,
+     "n_retest_pairs": 1,
+     "retest_icc": null,
+     "survives": false
+    },
+    "sdppg_d_over_a": {
+     "n": 5,
+     "icc": 0.13366980670584988,
+     "bias": -0.578,
+     "loa_lower": -1.708,
+     "loa_upper": 0.553,
+     "n_retest_pairs": 1,
+     "retest_icc": null,
+     "survives": false
+    }
+   },
+   "surviving": [],
+   "strata": {
+    "fitzpatrick_group": {
+     "2": {
+      "n": 3,
+      "mean_abs_facial_contact_diff": 0.1517
+     },
+     "3": {
+      "n": 1,
+      "note": "under 3 recordings \u2014 reported for coverage, no agreement statistic"
+     },
+     "4": {
+      "n": 1,
+      "note": "under 3 recordings \u2014 reported for coverage, no agreement statistic"
+     },
+     "5": {
+      "n": 1,
+      "note": "under 3 recordings \u2014 reported for coverage, no agreement statistic"
+     },
+     "None": {
+      "n": 1,
+      "note": "under 3 recordings \u2014 reported for coverage, no agreement statistic"
+     }
+    },
+    "device_label": {
+     "None": {
+      "n": 1,
+      "note": "under 3 recordings \u2014 reported for coverage, no agreement statistic"
+     },
+     "rig-1": {
+      "n": 4,
+      "mean_abs_facial_contact_diff": 0.2794
+     },
+     "rig-2": {
+      "n": 2,
+      "note": "under 3 recordings \u2014 reported for coverage, no agreement statistic"
+     }
+    }
+   }
+  },
+  "fidelity_data": {
+   "signal_domain": "synthetic",
+   "participant_disjoint": true,
+   "session_disjoint": true,
+   "production_path": false,
+   "n_recordings": 7,
+   "dataset_dir": "/private/tmp/claude-501/-Users-pg-Documents-AvatarX-code-afib/971031ba-40cf-4fe6-95e6-4d8f5ff48e94/scratchpad/vascular_fixture_ds"
+  }
+ },
+ "gates": [
+  {
+   "gate": "v0",
+   "title": "V0 \u2014 signal fidelity (facial vs contact reference)",
+   "status": "RED",
+   "reasons": [
+    "evidence domain 'synthetic' is not 'facial_rppg' \u2014 machinery evidence only, can never open a gate",
+    "evidence is not production-path",
+    "6 paired participants < 60",
+    "only 0 feature(s) met ICC >= 0.75 and retest ICC >= 0.7 (< 1) \u2014 no morphology signal survives the camera at fidelity grade"
+   ],
+   "metrics": {
+    "n_paired_participants": 6,
+    "per_feature": {
+     "rise_time_s": {
+      "n": 7,
+      "icc": 0.9614707494828767,
+      "bias": 0.003,
+      "loa_lower": -0.011,
+      "loa_upper": 0.017,
+      "n_retest_pairs": 1,
+      "retest_icc": null,
+      "survives": false
+     },
+     "norm_upstroke_slope": {
+      "n": 7,
+      "icc": 0.6779236015275741,
+      "bias": -0.649,
+      "loa_lower": -1.452,
+      "loa_upper": 0.154,
+      "n_retest_pairs": 1,
+      "retest_icc": null,
+      "survives": false
+     },
+     "pulse_width50_s": {
+      "n": 7,
+      "icc": 0.814940428576572,
+      "bias": 0.012,
+      "loa_lower": -0.001,
+      "loa_upper": 0.025,
+      "n_retest_pairs": 1,
+      "retest_icc": null,
+      "survives": false
+     },
+     "notch_present": {
+      "n": 7,
+      "icc": null,
+      "bias": 0.0,
+      "loa_lower": 0.0,
+      "loa_upper": 0.0,
+      "n_retest_pairs": 1,
+      "retest_icc": null,
+      "survives": false
+     },
+     "notch_rel_amp": {
+      "n": 7,
+      "icc": 0.7507441141575982,
+      "bias": 0.045,
+      "loa_lower": -0.008,
+      "loa_upper": 0.098,
+      "n_retest_pairs": 1,
+      "retest_icc": null,
+      "survives": false
+     },
+     "notch_time_frac": {
+      "n": 7,
+      "icc": -0.2020349096198925,
+      "bias": 0.045,
+      "loa_lower": -0.103,
+      "loa_upper": 0.193,
+      "n_retest_pairs": 1,
+      "retest_icc": null,
+      "survives": false
+     },
+     "reflection_index": {
+      "n": 7,
+      "icc": 0.7047376519903649,
+      "bias": 0.021,
+      "loa_lower": -0.089,
+      "loa_upper": 0.131,
+      "n_retest_pairs": 1,
+      "retest_icc": null,
+      "survives": false
+     },
+     "sdppg_b_over_a": {
+      "n": 7,
+      "icc": -0.03577008352571516,
+      "bias": 0.33,
+      "loa_lower": -1.383,
+      "loa_upper": 2.042,
+      "n_retest_pairs": 1,
+      "retest_icc": null,
+      "survives": false
+     },
+     "sdppg_d_over_a": {
+      "n": 5,
+      "icc": 0.13366980670584988,
+      "bias": -0.578,
+      "loa_lower": -1.708,
+      "loa_upper": 0.553,
+      "n_retest_pairs": 1,
+      "retest_icc": null,
+      "survives": false
+     }
+    },
+    "surviving": [],
+    "strata": {
+     "fitzpatrick_group": {
+      "2": {
+       "n": 3,
+       "mean_abs_facial_contact_diff": 0.1517
+      },
+      "3": {
+       "n": 1,
+       "note": "under 3 recordings \u2014 reported for coverage, no agreement statistic"
+      },
+      "4": {
+       "n": 1,
+       "note": "under 3 recordings \u2014 reported for coverage, no agreement statistic"
+      },
+      "5": {
+       "n": 1,
+       "note": "under 3 recordings \u2014 reported for coverage, no agreement statistic"
+      },
+      "None": {
+       "n": 1,
+       "note": "under 3 recordings \u2014 reported for coverage, no agreement statistic"
+      }
+     },
+     "device_label": {
+      "None": {
+       "n": 1,
+       "note": "under 3 recordings \u2014 reported for coverage, no agreement statistic"
+      },
+      "rig-1": {
+       "n": 4,
+       "mean_abs_facial_contact_diff": 0.2794
+      },
+      "rig-2": {
+       "n": 2,
+       "note": "under 3 recordings \u2014 reported for coverage, no agreement statistic"
+      }
+     }
+    }
+   },
+   "thresholds": {
+    "requires_clinical_signoff": true,
+    "feature_icc_min": 0.75,
+    "retest_icc_min": 0.7,
+    "min_surviving_features": 1,
+    "min_paired_participants": 60
+   }
+  },
+  {
+   "gate": "v1",
+   "title": "V1 \u2014 incremental validity vs age+sex+BP (PIVOTAL, T2 defense)",
+   "status": "RED",
+   "reasons": [
+    "evidence domain 'synthetic' is not 'facial_rppg' \u2014 machinery evidence only, can never open a gate",
+    "evidence is not production-path",
+    "no baseline-battery evaluation on record"
+   ],
+   "metrics": {},
+   "thresholds": {
+    "requires_clinical_signoff": true,
+    "rmse_improvement_vs_b3_mps_min": 0.5,
+    "added_r2_min": 0.05,
+    "ci_must_exclude_zero": true,
+    "min_test_participants": 40
+   }
+  },
+  {
+   "gate": "v2",
+   "title": "V2 \u2014 repeatability of the estimate",
+   "status": "RED",
+   "reasons": [
+    "evidence domain 'synthetic' is not 'facial_rppg' \u2014 machinery evidence only, can never open a gate",
+    "evidence is not production-path",
+    "no test-retest study of the estimate on record"
+   ],
+   "metrics": {},
+   "thresholds": {
+    "requires_clinical_signoff": true,
+    "estimate_retest_icc_min": 0.85,
+    "retest_drift_mps_max": 0.5,
+    "min_retest_pairs": 20
+   }
+  },
+  {
+   "gate": "v3",
+   "title": "V3 \u2014 generalization (leave-one-site/device-out)",
+   "status": "RED",
+   "reasons": [
+    "evidence domain 'synthetic' is not 'facial_rppg' \u2014 machinery evidence only, can never open a gate",
+    "evidence is not production-path",
+    "worst held-out-site RMSE ratio None > 1.25"
+   ],
+   "metrics": {
+    "n_sites": 2
+   },
+   "thresholds": {
+    "requires_clinical_signoff": true,
+    "held_out_site_rmse_ratio_max": 1.25,
+    "min_sites": 2
+   }
+  },
+  {
+   "gate": "v4",
+   "title": "V4 \u2014 fairness (coverage and error parity)",
+   "status": "RED",
+   "reasons": [
+    "evidence domain 'synthetic' is not 'facial_rppg' \u2014 machinery evidence only, can never open a gate",
+    "evidence is not production-path",
+    "worst-group RMSE ratio None > 1.25"
+   ],
+   "metrics": {
+    "per_group": {
+     "2": {
+      "coverage": 1.0,
+      "attempted": 3,
+      "usable": 3
+     },
+     "3": {
+      "coverage": 1.0,
+      "attempted": 1,
+      "usable": 1
+     },
+     "4": {
+      "coverage": 1.0,
+      "attempted": 1,
+      "usable": 1
+     },
+     "5": {
+      "coverage": 1.0,
+      "attempted": 1,
+      "usable": 1
+     }
+    },
+    "coverage_ratio_worst": 1.0
+   },
+   "thresholds": {
+    "requires_clinical_signoff": true,
+    "subgroups": [
+     "fitzpatrick_group",
+     "device"
+    ],
+    "coverage_ratio_min": 0.8,
+    "rmse_ratio_max": 1.25
+   }
+  },
+  {
+   "gate": "v5",
+   "title": "V5 \u2014 claim mapping (owner + clinical advisor)",
+   "status": "RED",
+   "reasons": [
+    "evidence domain 'synthetic' is not 'facial_rppg' \u2014 machinery evidence only, can never open a gate",
+    "evidence is not production-path",
+    "claim mapping with owner + clinical advisor not on record \u2014 the first permissible surface is a longitudinal wellness comparison against the user's own baseline, nothing absolute",
+    "signoff claim_scope is not 'longitudinal_wellness_trend' \u2014 nothing may render"
+   ],
+   "metrics": {},
+   "thresholds": {
+    "requires_clinical_signoff": true,
+    "permissible_first_claim": "longitudinal_wellness_trend",
+    "absolute_claims_require_prospective_protocol": true
+   }
+  }
+ ],
+ "all_gates_green": false,
+ "clinical_signoff": false,
+ "promotion_open": false
+}

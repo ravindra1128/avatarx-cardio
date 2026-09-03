@@ -1,0 +1,25 @@
+# Runtime dependencies for the batch measure service ONLY
+# (run_measure.py -> app/measure_api.py -> inference.pipeline).
+#
+# Deliberately NOT the full research environment: sklearn, pandas and neurokit2 are
+# imported only by evaluation/, training/ and research/ code, none of which
+# the measure path touches. Verified by grepping the runtime packages
+# (inference, capture, rppg, beats, features, preprocessing, heads,
+# datasets, configs) — zero hits. Keeping them out roughly halves the image.
+#
+# Pinned to the versions this service was developed and measured against.
+# Python 3.10-3.12 recommended; 3.13 works (dev machine), 3.14 does NOT
+# (scipy/opencv wheels are unavailable or slow).
+numpy==2.2.6
+scipy==1.16.3
+opencv-python-headless==4.12.0.88
+
+# NOT PyYAML: configs/ ships its own parse_yaml_subset() and nothing on the
+# runtime path does `import yaml`. Verified by import trace — loading the
+# service pulls exactly cv2, numpy and scipy.
+
+# NOT a Python dependency, but REQUIRED on PATH: ffmpeg.
+# app/measure_prep.py shells out to it for the downscale (lossless FFV1) and
+# the tail trim. Without it both steps no-op and say so in the response —
+# the service still returns a result, but from the full-resolution clip,
+# which measurably fails the cross-ROI coherence gate.

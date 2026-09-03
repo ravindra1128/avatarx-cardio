@@ -1,0 +1,25 @@
+{
+  "WATERMARK": "VASCULAR MORPHOLOGY \u2014 RESEARCH ARTIFACT \u2014 NOT A MEASUREMENT",
+  "purpose": "research artifact for the vascular track; user-visibility is decided by the vascular block of configs/gates.yaml, nowhere else",
+  "recording_id": "probe12",
+  "generated_at": "2026-09-01T22:27:35",
+  "gates": {
+    "promotion": "BLOCKED",
+    "gates_version": "VASC-2026-08-31-1"
+  },
+  "head_result": {
+    "head": "vascular",
+    "version": "0.1.0-research",
+    "measurement_class": "RESEARCH_VASCULAR",
+    "value": {
+      "available": false,
+      "watermark": "VASCULAR MORPHOLOGY \u2014 RESEARCH ARTIFACT \u2014 NOT A MEASUREMENT"
+    },
+    "confidence": null,
+    "reasons": [
+      "no morphology features for this scan (V-c or quality refusal)",
+      "no trained vascular model on record \u2014 run evaluate-vascular on a referenced dataset",
+      "no V0-surviving features \u2014 the fidelity gate blocks all estimation (fail closed)"
+    ]
+  }
+}
