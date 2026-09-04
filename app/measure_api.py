@@ -63,6 +63,24 @@ _POOL = ThreadPoolExecutor(max_workers=MAX_CONCURRENT,
 
 from app.measure_overrides import LAUNCH_OVERRIDES  # noqa: E402
 _INFLIGHT = threading.BoundedSemaphore(MAX_CONCURRENT)
+# Observability for the failure mode a timed-out client can't see: when the
+# browser aborts at its own deadline the server thread does NOT stop —
+# fut.result() runs the whole job to completion regardless. Each abandoned
+# scan is a zombie holding one of MAX_CONCURRENT slots and a full CPU share,
+# and the next scan runs slower for it. /healthz now reports how many jobs
+# are actually running, plus which build is serving, so this is visible.
+_INFLIGHT_COUNT = 0
+_INFLIGHT_LOCK = threading.Lock()
+_STARTED_AT = time.time()
+BUILD_SHA = (os.environ.get("RAILWAY_GIT_COMMIT_SHA")      # set by Railway
+             or os.environ.get("AFIB_BUILD_SHA") or "unknown")[:12]
+
+
+def _inflight(delta: int) -> int:
+    global _INFLIGHT_COUNT
+    with _INFLIGHT_LOCK:
+        _INFLIGHT_COUNT += delta
+        return _INFLIGHT_COUNT
 
 
 from app.measure_prep import DEFAULT_SCALE, DEFAULT_WINDOW_S, trim_tail, downscale  # noqa: E402,F401
@@ -355,6 +373,9 @@ class MeasureHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if urlparse(self.path).path in ("/healthz", "/api/healthz"):
             self._json(200, {"ok": True, "service": "afib-measure",
+                             "build": BUILD_SHA,
+                             "uptime_s": int(time.time() - _STARTED_AT),
+                             "inflight_jobs": _inflight(0),
                              "launch_overrides": LAUNCH_OVERRIDES or None,
                              "max_concurrent": MAX_CONCURRENT,
                              "max_upload_mb": MAX_UPLOAD_BYTES // (1024 * 1024)})
@@ -408,6 +429,10 @@ class MeasureHandler(BaseHTTPRequestHandler):
             self._json(503, {"error": "measure workers busy — retry",
                              "max_concurrent": MAX_CONCURRENT})
             return
+        n = _inflight(+1)
+        print(f"[measure] job start (inflight now {n}/{MAX_CONCURRENT})",
+              flush=True)
+        t_job = time.perf_counter()
         try:
             fut = _POOL.submit(self._run, video_bytes, header)
             self._json(200, fut.result())
@@ -415,6 +440,9 @@ class MeasureHandler(BaseHTTPRequestHandler):
             traceback.print_exc()
             self._json(500, {"error": str(e)})
         finally:
+            n = _inflight(-1)
+            print(f"[measure] job end after {time.perf_counter() - t_job:.1f}s "
+                  f"(inflight now {n}/{MAX_CONCURRENT})", flush=True)
             _INFLIGHT.release()
 
     @staticmethod
