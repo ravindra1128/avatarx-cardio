@@ -25,9 +25,16 @@ if str(_ROOT) not in sys.path:
 
 
 def main() -> int:
+    # Railway (and most PaaS hosts) assign the port at runtime via $PORT and
+    # expect the process to bind 0.0.0.0, not localhost. Local dev has no
+    # $PORT set, so it falls back to the previous 127.0.0.1:8790 default —
+    # an explicit --host/--port flag still wins over both.
+    default_host = "0.0.0.0" if os.environ.get("PORT") else "127.0.0.1"
+    default_port = int(os.environ.get("PORT", "8790"))
+
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--host", default="127.0.0.1")
-    ap.add_argument("--port", type=int, default=8790)
+    ap.add_argument("--host", default=default_host)
+    ap.add_argument("--port", type=int, default=default_port)
     ap.add_argument("--allow-origin", default=None,
                     help="CORS origin (default *, or AFIB_ALLOW_ORIGIN)")
     ap.add_argument("--keep-uploads", action="store_true",

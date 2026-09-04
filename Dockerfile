@@ -9,6 +9,10 @@
 # Serves POST /api/process-video and GET /healthz. Stateless: uploads are
 # written to a temp dir, analysed, and deleted unless AFIB_KEEP_UPLOADS=1.
 #
+# PORT: honours $PORT if the host platform sets it (Railway, Render, Cloud
+# Run all inject this and route to whatever port the app actually bound —
+# falls back to 8770 for a plain `docker run` with no PORT set.
+#
 # 3.12, not 3.13/3.14 — see requirements-measure.txt.
 FROM python:3.12-slim
 
@@ -51,7 +55,13 @@ ENV AFIB_MAX_CONCURRENT=2 \
 
 EXPOSE 8770
 
+# Shell form (not the usual exec-array JSON) so $PORT is substituted by the
+# shell at healthcheck time, using whatever the platform actually injected.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \
-  CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8770/healthz',timeout=4).status==200 else 1)"
+  CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:${PORT:-8770}/healthz',timeout=4).status==200 else 1)"
 
-CMD ["python", "run_measure.py", "--host", "0.0.0.0", "--port", "8770"]
+# Shell form + `exec` so python replaces the shell as PID 1 and receives
+# signals directly (SIGTERM on deploy/restart) rather than the shell eating
+# them. ${PORT:-8770}: Railway/Render/Cloud Run set $PORT; a bare
+# `docker run` with none set falls back to 8770, matching EXPOSE above.
+CMD exec python run_measure.py --host 0.0.0.0 --port ${PORT:-8770}
