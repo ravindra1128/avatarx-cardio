@@ -211,15 +211,18 @@ def measure_video(video_path: str, *, manifest=None,
     # upload-bound scan from a downscale-bound one from an analysis-bound
     # one on a host whose CPU hasn't been measured yet (Railway's shared
     # vCPU vs the Mac these components were originally tuned on).
+    timing = {}                      # server-side stage durations, seconds
     t0 = time.perf_counter()
     trim = trim_tail(video_path,
                      DEFAULT_WINDOW_S if window_s is None else float(window_s))
-    print(f"[measure] trim: {time.perf_counter() - t0:.1f}s "
-          f"applied={trim.get('applied')}", flush=True)
+    timing["trim_s"] = round(time.perf_counter() - t0, 2)
+    print(f"[measure] trim: {timing['trim_s']}s applied={trim.get('applied')}",
+          flush=True)
 
     t0 = time.perf_counter()
     scaled = downscale(video_path, DEFAULT_SCALE if scale is None else scale)
-    print(f"[measure] downscale: {time.perf_counter() - t0:.1f}s "
+    timing["downscale_s"] = round(time.perf_counter() - t0, 2)
+    print(f"[measure] downscale: {timing['downscale_s']}s "
           f"applied={scaled.get('applied')} reason={scaled.get('reason')}",
           flush=True)
     if scaled.get("applied") and scaled.get("path"):
@@ -242,7 +245,9 @@ def measure_video(video_path: str, *, manifest=None,
     t0 = time.perf_counter()
     result, det = run_with_details(video_path, manifest=manifest or {},
                                    config=cfg)
-    print(f"[measure] pipeline analysis: {time.perf_counter() - t0:.1f}s "
+    timing["analysis_s"] = round(time.perf_counter() - t0, 2)
+    timing["server_total_s"] = round(sum(timing.values()), 2)
+    print(f"[measure] pipeline analysis: {timing['analysis_s']}s "
           f"outcome={result.outcome.value}", flush=True)
     doc = dataclasses.asdict(result)
     doc["outcome"] = result.outcome.value
@@ -250,6 +255,12 @@ def measure_video(video_path: str, *, manifest=None,
     doc["clock"] = clock
     doc["trim"] = trim
     doc["downscale"] = scaled
+    # The same stage durations the log carries, returned to the caller: the
+    # split between trim / downscale / analysis is otherwise only visible
+    # in a platform log stream the client (and anyone without log access)
+    # can't see. Upload time is NOT here — it belongs to the request, not
+    # the job — the client measures that side itself.
+    doc["timing"] = timing
     # cardio v0.8: the resting biomarker cards and the five gated research
     # tracks. Both are the pipeline's OWN research surfaces (spec B.24) —
     # computed from the same `det`, carrying their own labels, limitations,
