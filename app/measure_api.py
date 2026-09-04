@@ -45,6 +45,7 @@ import os
 import pathlib
 import tempfile
 import threading
+import time
 import traceback
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -186,9 +187,23 @@ def measure_video(video_path: str, *, manifest=None,
     # away everything outside the window: with a 75 s recording trimmed to
     # 40 s that was ~47% of the encode wasted. Trimming first hands the
     # encoder only the frames that will actually be analysed.
+    # Stage timing, printed as each stage finishes (not batched at the end):
+    # a request that times out client-side still leaves this trail in the
+    # platform's log stream, which is otherwise the only way to tell an
+    # upload-bound scan from a downscale-bound one from an analysis-bound
+    # one on a host whose CPU hasn't been measured yet (Railway's shared
+    # vCPU vs the Mac these components were originally tuned on).
+    t0 = time.perf_counter()
     trim = trim_tail(video_path,
                      DEFAULT_WINDOW_S if window_s is None else float(window_s))
+    print(f"[measure] trim: {time.perf_counter() - t0:.1f}s "
+          f"applied={trim.get('applied')}", flush=True)
+
+    t0 = time.perf_counter()
     scaled = downscale(video_path, DEFAULT_SCALE if scale is None else scale)
+    print(f"[measure] downscale: {time.perf_counter() - t0:.1f}s "
+          f"applied={scaled.get('applied')} reason={scaled.get('reason')}",
+          flush=True)
     if scaled.get("applied") and scaled.get("path"):
         video_path = scaled["path"]              # container changed on downscale
     if scaled.get("applied") or trim.get("applied"):
@@ -206,8 +221,11 @@ def measure_video(video_path: str, *, manifest=None,
         cfg = load_config()
         override_notes = _apply_overrides(cfg, config_overrides)
 
+    t0 = time.perf_counter()
     result, det = run_with_details(video_path, manifest=manifest or {},
                                    config=cfg)
+    print(f"[measure] pipeline analysis: {time.perf_counter() - t0:.1f}s "
+          f"outcome={result.outcome.value}", flush=True)
     doc = dataclasses.asdict(result)
     doc["outcome"] = result.outcome.value
     doc["user_facing_text"] = result.user_facing_text()
@@ -362,7 +380,18 @@ class MeasureHandler(BaseHTTPRequestHandler):
                                       f"{MAX_UPLOAD_BYTES // (1024 * 1024)} MB"})
             return
 
+        # Real mobile scan timed out client-side at 240s with no visibility
+        # into where server time went — the client aborts before any
+        # response reaches it, so `trim`/`downscale` never get returned.
+        # This is the fix: stage timing that lands in the platform's log
+        # stream (Railway, etc.) as it happens, not just in a response body
+        # that a timed-out request never receives.
+        t_upload0 = time.perf_counter()
         body = self.rfile.read(length)
+        upload_s = time.perf_counter() - t_upload0
+        print(f"[measure] upload received: {length / 1e6:.1f} MB in "
+              f"{upload_s:.1f}s ({length / 1e6 / max(upload_s, 0.001):.2f} "
+              f"MB/s)", flush=True)
         try:
             video_bytes, header = _parse_envelope(
                 body, (self.headers.get("Content-Type") or "").lower(),
