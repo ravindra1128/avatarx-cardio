@@ -459,6 +459,13 @@ class MeasureHandler(BaseHTTPRequestHandler):
         except Exception as e:
             self._json(400, {"error": f"bad request envelope: {e}"})
             return
+        # How long THIS process spent receiving the body. Behind a platform
+        # edge proxy that is the proxy->app relay, not the client's uplink:
+        # measured, a 37 MB body a fast client finished sending in <1 s took
+        # ~55 s to arrive here while the job itself took 14 s. Without this
+        # number in the response, that gap is invisible from outside.
+        header["_upload_received_s"] = round(upload_s, 2)
+        header["_upload_bytes"] = got
         if not video_bytes:
             self._json(400, {"error": "no video bytes in request"})
             return
@@ -525,6 +532,9 @@ class MeasureHandler(BaseHTTPRequestHandler):
                 scale=header.get("scale"))
             doc["session"] = sid
             doc["size_bytes"] = len(video_bytes)
+            if isinstance(doc.get("timing"), dict):
+                doc["timing"]["upload_received_s"] = header.get("_upload_received_s")
+                doc["timing"]["upload_bytes"] = header.get("_upload_bytes")
             # Ground truth in the server log: without this the access log only
             # says 200, which is indistinguishable from "the pipeline refused
             # the clip". Callers debugging an integration need the verdict.
