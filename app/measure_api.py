@@ -357,12 +357,19 @@ class MeasureHandler(BaseHTTPRequestHandler):
 
     def _json(self, code: int, doc: dict):
         body = json.dumps(doc, default=str).encode()
-        self.send_response(code)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self._cors()
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self._cors()
+            self.end_headers()
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            # The client gave up (its own timeout, a locked phone, a dropped
+            # link) while the job was still running. The work is done and
+            # thrown away; say so in one line instead of a traceback.
+            print(f"[measure] client gone before response could be sent "
+                  f"(would have been HTTP {code})", flush=True)
 
     def do_OPTIONS(self):
         self.send_response(204)
@@ -410,9 +417,24 @@ class MeasureHandler(BaseHTTPRequestHandler):
         t_upload0 = time.perf_counter()
         body = self.rfile.read(length)
         upload_s = time.perf_counter() - t_upload0
-        print(f"[measure] upload received: {length / 1e6:.1f} MB in "
-              f"{upload_s:.1f}s ({length / 1e6 / max(upload_s, 0.001):.2f} "
-              f"MB/s)", flush=True)
+        got = len(body)
+        print(f"[measure] upload received: {got / 1e6:.1f} MB of "
+              f"{length / 1e6:.1f} MB declared, in {upload_s:.1f}s "
+              f"({got / 1e6 / max(upload_s, 0.001):.2f} MB/s)", flush=True)
+        # rfile.read() returns SHORT at EOF — it does not raise. Measured:
+        # a client that aborted after sending 6.3 MB of a declared 37 MB
+        # body had the 6.3 MB analysed as a whole clip, through trim,
+        # downscale and the full pipeline, to a verdict with NaN rhythm
+        # features. A phone upload cut by a network blip would do the
+        # same. Refuse an incomplete body before any work is done — and
+        # before the worker slot is taken.
+        if got != length:
+            print(f"[measure] REJECTED incomplete upload: {got} of {length} "
+                  f"bytes — client disconnected mid-body", flush=True)
+            self._json(400, {"error": "incomplete upload",
+                             "received_bytes": got,
+                             "declared_bytes": length})
+            return
         try:
             video_bytes, header = _parse_envelope(
                 body, (self.headers.get("Content-Type") or "").lower(),
