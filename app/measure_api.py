@@ -347,7 +347,6 @@ class MeasureHandler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         print(f"[measure] {self.address_string()} {fmt % args}", flush=True)
-
     def _cors(self):
         self.send_header("Access-Control-Allow-Origin", ALLOW_ORIGIN)
         self.send_header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
@@ -370,6 +369,7 @@ class MeasureHandler(BaseHTTPRequestHandler):
             # thrown away; say so in one line instead of a traceback.
             print(f"[measure] client gone before response could be sent "
                   f"(would have been HTTP {code})", flush=True)
+            self.close_connection = True
 
     def do_OPTIONS(self):
         self.send_response(204)
@@ -434,6 +434,12 @@ class MeasureHandler(BaseHTTPRequestHandler):
             self._json(400, {"error": "incomplete upload",
                              "received_bytes": got,
                              "declared_bytes": length})
+            # The peer is gone. With HTTP/1.1 keep-alive the handler would
+            # otherwise loop to read the NEXT request line on this socket
+            # and raise ConnectionResetError from the stdlib — outside any
+            # handler code. Ending the connection here means there is no
+            # next read to fail.
+            self.close_connection = True
             return
         try:
             video_bytes, header = _parse_envelope(
@@ -530,8 +536,26 @@ class MeasureHandler(BaseHTTPRequestHandler):
                     pass
 
 
+class _MeasureServer(ThreadingHTTPServer):
+    """handle_error is a SERVER hook (socketserver.BaseServer), called from
+    the request thread — not a handler method. A peer that resets the
+    connection before a request line even arrives raises from the stdlib's
+    own readline, before any handler code runs, so this is the only place
+    it can be made quiet. One line for a dropped connection; anything else
+    is a real error and gets the default traceback."""
+
+    def handle_error(self, request, client_address):
+        import sys
+        exc = sys.exc_info()[1]
+        if isinstance(exc, (ConnectionError, TimeoutError)):
+            print(f"[measure] connection dropped by {client_address[0]}: "
+                  f"{type(exc).__name__}", flush=True)
+            return
+        super().handle_error(request, client_address)
+
+
 def serve(host: str = "127.0.0.1", port: int = 8790):
-    httpd = ThreadingHTTPServer((host, port), MeasureHandler)
+    httpd = _MeasureServer((host, port), MeasureHandler)
     print(f"[measure] afib measure API on http://{host}:{port}", flush=True)
     print(f"[measure]   POST /api/process-video   GET /healthz", flush=True)
     print(f"[measure]   allow-origin={ALLOW_ORIGIN} "
