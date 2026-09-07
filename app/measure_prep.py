@@ -123,6 +123,34 @@ def downscale(video_path: str, scale: str) -> dict:
     return info
 
 
+def _packet_duration_s(ffmpeg_path: str, video_path: str) -> float:
+    """Second-to-last video packet pts in seconds via ffprobe (what the
+    OpenCV decode loop reported — see trim_tail); 0.0 if unavailable."""
+    ffprobe = os.path.join(os.path.dirname(ffmpeg_path), "ffprobe")
+    if not os.path.exists(ffprobe):
+        ffprobe = shutil.which("ffprobe")
+    if not ffprobe:
+        return 0.0
+    try:
+        out = subprocess.run(
+            [ffprobe, "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "packet=pts_time", "-of", "csv=p=0", video_path],
+            capture_output=True, text=True, timeout=60).stdout
+    except Exception:
+        return 0.0
+    pts = []
+    for line in out.splitlines():
+        tok = line.split(",", 1)[0].strip()
+        try:
+            pts.append(float(tok))
+        except ValueError:
+            continue
+    if len(pts) < 2:
+        return 0.0
+    pts.sort()
+    return pts[-2]
+
+
 # ------------------------------------------------------------------ trim
 DEFAULT_WINDOW_S = float(os.environ.get("AFIB_WINDOW_S", "40"))
 
@@ -162,18 +190,37 @@ def trim_tail(video_path: str, window_s: float) -> dict:
         info["reason"] = "ffmpeg not on PATH — analysing the whole clip"
         return info
 
-    import cv2
-    cap = cv2.VideoCapture(video_path)
-    dur = 0.0
-    if cap.isOpened():
-        while True:
-            t = cap.get(cv2.CAP_PROP_POS_MSEC)
-            ok, _ = cap.read()
-            if not ok:
-                break
-            if t and t > 0:
-                dur = t / 1000.0
-    cap.release()
+    # Duration from the container's PACKET timestamps, not from decoding.
+    # The old probe decoded every frame with OpenCV just to read the last
+    # frame's clock — measured 13.75 s on a 1080x720 phone recording (57%
+    # of the whole request) and 3.0 s on a 30 s demo clip that then wasn't
+    # even trimmed. MediaRecorder webm carries no duration in its header,
+    # which is why decoding looked necessary; but the per-packet pts are
+    # exactly what OpenCV's CAP_PROP_POS_MSEC reports, so scanning packets
+    # (I/O only, no decode) gives the same number. One subtlety, kept on
+    # purpose: POS_MSEC read before each cap.read() is the clock of the frame
+    # ALREADY decoded, so the loop's answer was the SECOND-to-last frame's
+    # time, one frame short of the true duration. The cut point below is
+    # relative to that value, and every result to date was computed from
+    # it — so this returns the same second-to-last timestamp, not the last.
+    # Verified equal to the loop within 1 ms on every clip of the eval corpus
+    # (webm/vp8, webm/vp9, avi/ffv1); the decode loop remains the fallback.
+    dur = _packet_duration_s(ff, video_path)
+    info["duration_probe"] = "packets"
+    if dur <= 0:
+        import cv2
+        cap = cv2.VideoCapture(video_path)
+        dur = 0.0
+        if cap.isOpened():
+            while True:
+                t = cap.get(cv2.CAP_PROP_POS_MSEC)
+                ok, _ = cap.read()
+                if not ok:
+                    break
+                if t and t > 0:
+                    dur = t / 1000.0
+        cap.release()
+        info["duration_probe"] = "decode"
     info["source_duration_s"] = round(dur, 2)
     if dur <= window_s + 1.0:
         info["reason"] = f"clip is {dur:.1f}s — already within the window"

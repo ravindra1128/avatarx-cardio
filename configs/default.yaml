@@ -95,7 +95,14 @@ decision:                  # T5. INTERIM hand-set rules — replaced by the
     # the morphology itself survives in >=2 ROIs.  These LIMITED-evidence
     # floors never relax the rhythm verdict above.
     endpoint_min_coherence: 0.10
-    endpoint_max_timing_precision_ms: 40
+    # 2026-09-07 owner decision: 40 -> 50. On the 17-recording eval corpus every
+    # scan with beats clears endpoint_min_coherence, and the timing ceiling was
+    # the ONLY endpoint blocker (6/17 under 40 ms, 8/17 under 50). A real laptop
+    # scan missed at 0.11 / 44 ms / 0.42. This relaxes the LIMITED-evidence
+    # morphology path only; the rhythm verdict's 40 ms any-class ceiling above
+    # is unchanged. Values that appear between 40 and 50 ms are lower-evidence
+    # research estimates and the card's confidence block says so.
+    endpoint_max_timing_precision_ms: 50
     endpoint_min_timing_matched: 0.35
   readiness:                      # v0.1.4 PRE-SCAN gate. PARITY RULE: the
                                   # signal thresholds (coverage, coherence,
