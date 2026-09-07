@@ -143,14 +143,22 @@ def stiffness_contour(contour: dict) -> dict:
     return out
 
 
-def amplitude_series(waves: dict, seg_ts: np.ndarray,
-                     windows: dict) -> list:
-    """Per-beat pulse amplitude, self-normalised per ROI then pooled.
+MIN_SEGMENT_BEATS = 4             # enough for a segment's own median to mean something
 
-    Normalising by each ROI's own median makes the series dimensionless
-    and removes the per-ROI optical scale, which is the confound that
-    makes an ABSOLUTE amplitude unusable across sessions (v0.5 T1/W-c)."""
-    pooled: list = []
+
+def segment_amplitudes(waves: dict, seg_ts: np.ndarray,
+                       windows: dict) -> dict:
+    """Per-ROI (time, amplitude / this segment's ROI median) for ONE capture
+    segment. Normalising within the segment removes the per-ROI optical
+    scale AND the camera-gain jump between segments (auto-exposure is not
+    locked on a phone), which is the confound that makes an ABSOLUTE
+    amplitude unusable across sessions (v0.5 T1/W-c).
+
+    No 12-beat floor here. That floor exists so the scan's pooled envelope
+    has a spectrum; applied per segment it dropped every region of a
+    5-segment phone recording whose regions held 23-27 usable beats in
+    total, because no single fragment reached 12."""
+    out: dict = {}
     for roi, wave in waves.items():
         amps = []
         for f1, f2 in windows.get(roi, []):
@@ -158,12 +166,25 @@ def amplitude_series(waves: dict, seg_ts: np.ndarray,
             if seg.size >= 4 and np.all(np.isfinite(seg)):
                 amps.append((float(seg_ts[f1]),
                              float(np.max(seg) - np.min(seg))))
-        if len(amps) < MIN_AMPLITUDE_BEATS:
+        if len(amps) < MIN_SEGMENT_BEATS:
             continue
         med = float(np.median([a for _, a in amps]))
         if med <= 1e-12:
             continue
-        pooled.append([(t, a / med) for t, a in amps])
+        out[roi] = [(t, a / med) for t, a in amps]
+    return out
+
+
+def pool_amplitudes(per_roi: dict) -> list:
+    """Pool the (already normalised) per-ROI series beat by beat. A ROI
+    needs MIN_AMPLITUDE_BEATS over the whole scan. Region order is the
+    insertion order of `per_roi` (ROI_NAMES) — it decides the reference
+    series on ties, so it must not change."""
+    pooled: list = []
+    for roi, amps in per_roi.items():
+        if len(amps) < MIN_AMPLITUDE_BEATS:
+            continue
+        pooled.append(sorted(amps, key=lambda x: x[0]))
     if not pooled:
         return []
     longest = max(pooled, key=len)
@@ -177,6 +198,13 @@ def amplitude_series(waves: dict, seg_ts: np.ndarray,
         if vals:
             out.append((t, float(np.median(vals))))
     return out
+
+
+def amplitude_series(waves: dict, seg_ts: np.ndarray,
+                     windows: dict) -> list:
+    """One-segment convenience, identical to the pre-split behaviour for a
+    single segment: normalise within the segment, pool with the 12 floor."""
+    return pool_amplitudes(segment_amplitudes(waves, seg_ts, windows))
 
 
 def vasomotor_indices(series: list, locked: bool) -> dict:
@@ -531,7 +559,7 @@ def resting_hemodynamics(det, *, outcome, participant=None, capture=None,
                         np.asarray(lattice.beat_confidence, float), mc)
     roi_segments = {r: [] for r in ROI_NAMES}
     per_beat: list = []
-    amp_series: list = []
+    seg_amps: dict = {r: [] for r in ROI_NAMES}     # insertion order = ROI_NAMES
     for a, b in capture_segments(ts, fps):
         seg_ts = ts[a:b]
         waves = orient_rois_consistently(
@@ -546,7 +574,11 @@ def resting_hemodynamics(det, *, outcome, participant=None, capture=None,
                 roi_segments[roi].append(waves[roi][f1:f2])
                 per_beat.append(beat_morphology(waves[roi][f1:f2], fps,
                                                 native_fs=fps))
-        amp_series += amplitude_series(waves, seg_ts, windows)
+        for roi, amps in segment_amplitudes(waves, seg_ts, windows).items():
+            seg_amps[roi] += amps
+    # Pool ONCE over the whole scan; the 12-beat floor applies to the total
+    # (see segment_amplitudes for why not per segment).
+    amp_series = pool_amplitudes({r: v for r, v in seg_amps.items() if v})
     roi_feats = []
     for roi in ROI_NAMES:
         ens, dur = ensemble_beat(roi_segments[roi], fps)
