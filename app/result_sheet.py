@@ -171,6 +171,19 @@ def _worksheet():
     so the next attempt re-opens."""
     global _ws, _header
     if _ws is not None:
+        # Re-read the header on EVERY write. Someone (or --reorder) can move
+        # columns while the service runs; a header cached at first write
+        # then places every later value in the wrong column. Found live:
+        # a row landed shifted after the tab was reordered. One cheap API
+        # call per scan is the price of never doing that.
+        _header = _ws.row_values(1) or list(_header)
+        missing = [c for c in COLUMNS if c not in _header]
+        if missing:
+            from gspread.utils import rowcol_to_a1
+            start = len(_header) + 1
+            a1 = f"{rowcol_to_a1(1, start)}:{rowcol_to_a1(1, start + len(missing) - 1)}"
+            _ws.update(range_name=a1, values=[missing], value_input_option="RAW")
+            _header = _header + missing
         return _ws, _header
     import gspread
     from google.oauth2.service_account import Credentials
