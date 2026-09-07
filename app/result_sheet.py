@@ -47,17 +47,20 @@ RETRIES = (0.0, 2.0, 6.0)          # seconds to wait before each attempt
 # values are placed by column NAME, missing names are appended to the header,
 # so re-ordering columns in the sheet never breaks the writer.
 COLUMNS = [
-    "Timestamp (UTC)", "Session", "Build", "Config Hash", "Outcome", "Stars",
+    # The three cards first (owner's request), then identity and verdict,
+    # then the cards' unit/status/reason, then evidence, capture and timing.
+    "Timestamp (UTC)", "Arterial Stiffness", "Vascular Tone", "Fitness",
+    "Session", "Outcome", "Stars",
+    "AS Unit", "AS Status", "AS Reason",
+    "VT Unit", "VT Status", "VT Reason",
+    "Fit Unit", "Fit Status", "Fit Reason",
     "Limiting Factor", "SQI", "Coherence", "Timing ms", "Timing Matched",
     "Coverage", "Clean Intervals", "Usable Beats", "Analysed s",
     "Capture Segments", "Pulse bpm", "FPS", "Width", "Height", "Codec",
     "Clock Source", "Capture Profile", "No-Read Reasons",
-    "Arterial Stiffness", "AS Unit", "AS Status", "AS Reason",
-    "Vascular Tone", "VT Unit", "VT Status", "VT Reason",
-    "Fitness", "Fit Unit", "Fit Status", "Fit Reason",
     "Upload MB", "Upload s", "Trim s", "Trim Probe", "Downscale s",
     "Analysis s", "Server Total s", "Client Duration ms", "Launch Overrides",
-    "User Agent",
+    "Build", "Config Hash", "User Agent",
 ]
 
 _POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sheet")
@@ -187,7 +190,7 @@ def _worksheet():
             from gspread.utils import rowcol_to_a1
             start = len(header) + 1
             a1 = f"{rowcol_to_a1(1, start)}:{rowcol_to_a1(1, start + len(missing) - 1)}"
-            ws.update(a1, [missing], value_input_option="RAW")
+            ws.update(range_name=a1, values=[missing], value_input_option="RAW")
             header = header + missing
     _ws, _header = ws, header
     with _LOCK:
@@ -232,3 +235,34 @@ def schedule_append(doc: dict, extra: dict | None = None) -> None:
         _POOL.submit(_append, row)
     except Exception as e:  # noqa: BLE001
         print(f"[sheet] could not queue row: {type(e).__name__}: {e}", flush=True)
+
+
+# ------------------------------------------------------------ maintenance
+def reorder_existing_tab() -> str:
+    """Rewrite the target tab so its columns follow COLUMNS. Existing rows are
+    re-mapped by header name (unknown columns are kept at the end). One-off
+    tool: `python -m app.result_sheet --reorder`. Rows written after this by
+    ANY build land correctly, because writes are placed by column name."""
+    ws, header = _worksheet()
+    rows = ws.get_all_values()
+    if not rows:
+        return "empty tab, nothing to do"
+    old_header, body = rows[0], rows[1:]
+    extra = [c for c in old_header if c not in COLUMNS]
+    new_header = list(COLUMNS) + extra
+    idx = {c: i for i, c in enumerate(old_header)}
+    new_rows = [[(r[idx[c]] if c in idx and idx[c] < len(r) else "") for c in new_header]
+                for r in body]
+    ws.clear()
+    ws.update(range_name="A1", values=[new_header] + new_rows, value_input_option="RAW")
+    global _ws, _header
+    _ws, _header = None, []                      # re-read the header next time
+    return f"reordered {len(body)} row(s); {len(new_header)} columns" + (f" (kept extra: {extra})" if extra else "")
+
+
+if __name__ == "__main__":
+    import sys
+    if "--reorder" in sys.argv:
+        print(reorder_existing_tab())
+    else:
+        print(json.dumps(status(), indent=1))
