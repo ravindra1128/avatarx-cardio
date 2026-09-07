@@ -52,6 +52,8 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
+from app import result_sheet
+
 MAX_UPLOAD_BYTES = int(os.environ.get("AFIB_MAX_UPLOAD_MB", "256")) * 1024 * 1024
 MAX_CONCURRENT = int(os.environ.get("AFIB_MAX_CONCURRENT", "2"))
 ALLOW_ORIGIN = os.environ.get("AFIB_ALLOW_ORIGIN", "*")
@@ -395,6 +397,7 @@ class MeasureHandler(BaseHTTPRequestHandler):
                              "uptime_s": int(time.time() - _STARTED_AT),
                              "inflight_jobs": _inflight(0),
                              "launch_overrides": LAUNCH_OVERRIDES or None,
+                             "sheet": result_sheet.status(),
                              "max_concurrent": MAX_CONCURRENT,
                              "max_upload_mb": MAX_UPLOAD_BYTES // (1024 * 1024)})
             return
@@ -481,7 +484,14 @@ class MeasureHandler(BaseHTTPRequestHandler):
         t_job = time.perf_counter()
         try:
             fut = _POOL.submit(self._run, video_bytes, header)
-            self._json(200, fut.result())
+            doc = fut.result()
+            self._json(200, doc)
+            # AFTER the response is on the wire: queue the tracking-sheet row.
+            # Runs on its own thread, never delays or fails the scan result.
+            result_sheet.schedule_append(doc, extra={
+                "build": BUILD_SHA,
+                "duration_ms": header.get("duration_ms"),
+                "user_agent": self.headers.get("User-Agent", "")})
         except Exception as e:
             traceback.print_exc()
             self._json(500, {"error": str(e)})

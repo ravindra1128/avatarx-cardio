@@ -23,3 +23,8 @@ opencv-python-headless==4.12.0.88
 # the tail trim. Without it both steps no-op and say so in the response —
 # the service still returns a result, but from the full-resolution clip,
 # which measurably fails the cross-ROI coherence gate.
+
+# Result tracking sheet (app/result_sheet.py). Optional at runtime: without
+# credentials the service runs exactly as before and /healthz says sheet.configured=false.
+gspread==6.2.1
+google-auth==2.52.0

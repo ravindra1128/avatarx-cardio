@@ -30,3 +30,10 @@ afib_measure/
 # record of what was claimed and when) — only bulk artifacts are ignored.
 research/runs/**/decoder_*.npz
 research/runs/**/*.png
+
+# Replay corpus for .claude/skills/cardio-pipeline-optimizer (~1.6 GB of real
+# recordings; rebuilt from retained uploads, never committed).
+data/eval_corpus/
+data/eval_cache/
+credentials/
+*.sa.json
