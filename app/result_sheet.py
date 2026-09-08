@@ -61,6 +61,8 @@ COLUMNS = [
     "Upload MB", "Upload s", "Trim s", "Trim Probe", "Downscale s",
     "Analysis s", "Server Total s", "Client Duration ms", "Launch Overrides",
     "Build", "Config Hash", "User Agent",
+    # Reference vitals the client attached (ShenAI) and the agreement column.
+    "Ref HR", "Ref HRV", "Ref SBP", "Ref DBP", "Ref Source", "Pulse - Ref HR",
 ]
 
 _POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sheet")
@@ -123,6 +125,7 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
     v_t = _card(items, "vascular_tone")
     fit = _card(items, "cardiorespiratory_fitness")
     ex = extra or {}
+    ref = doc.get("reference") or {}
     return {
         "Timestamp (UTC)": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
         "Session": doc.get("session") or "",
@@ -161,7 +164,28 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
         "Client Duration ms": ex.get("duration_ms") if ex.get("duration_ms") is not None else "",
         "Launch Overrides": json.dumps(doc.get("launch_overrides")) if doc.get("launch_overrides") else "",
         "User Agent": (ex.get("user_agent") or "")[:200],
+        "Ref HR": _num(ref.get("ref_hr"), 1),
+        "Ref HRV": _num(ref.get("ref_hrv"), 1),
+        "Ref SBP": _num(ref.get("ref_sbp"), 0),
+        "Ref DBP": _num(ref.get("ref_dbp"), 0),
+        "Ref Source": ref.get("ref_source") or "",
+        "Pulse - Ref HR": (_num(float(pulse) - float(ref["ref_hr"]), 1)
+                           if pulse != "" and ref.get("ref_hr") is not None else ""),
     }
+
+
+def _extend_header(ws, header: list, missing: list) -> list:
+    """Append `missing` column names to row 1, growing the grid first: a tab
+    left exactly as wide as its header (e.g. after --reorder) rejects a
+    header write past its last column with 'exceeds grid limits'."""
+    from gspread.utils import rowcol_to_a1
+    need = len(header) + len(missing)
+    if ws.col_count < need:
+        ws.add_cols(need - ws.col_count)
+    start = len(header) + 1
+    a1 = f"{rowcol_to_a1(1, start)}:{rowcol_to_a1(1, need)}"
+    ws.update(range_name=a1, values=[missing], value_input_option="RAW")
+    return header + missing
 
 
 # ------------------------------------------------------------ sheet access
@@ -179,11 +203,7 @@ def _worksheet():
         _header = _ws.row_values(1) or list(_header)
         missing = [c for c in COLUMNS if c not in _header]
         if missing:
-            from gspread.utils import rowcol_to_a1
-            start = len(_header) + 1
-            a1 = f"{rowcol_to_a1(1, start)}:{rowcol_to_a1(1, start + len(missing) - 1)}"
-            _ws.update(range_name=a1, values=[missing], value_input_option="RAW")
-            _header = _header + missing
+            _header = _extend_header(_ws, _header, missing)
         return _ws, _header
     import gspread
     from google.oauth2.service_account import Credentials
@@ -200,11 +220,7 @@ def _worksheet():
     else:
         missing = [c for c in COLUMNS if c not in header]
         if missing:
-            from gspread.utils import rowcol_to_a1
-            start = len(header) + 1
-            a1 = f"{rowcol_to_a1(1, start)}:{rowcol_to_a1(1, start + len(missing) - 1)}"
-            ws.update(range_name=a1, values=[missing], value_input_option="RAW")
-            header = header + missing
+            header = _extend_header(ws, header, missing)
     _ws, _header = ws, header
     with _LOCK:
         _stats["worksheet"] = ws.title
@@ -267,6 +283,8 @@ def reorder_existing_tab() -> str:
     new_rows = [[(r[idx[c]] if c in idx and idx[c] < len(r) else "") for c in new_header]
                 for r in body]
     ws.clear()
+    if ws.col_count < len(new_header):
+        ws.add_cols(len(new_header) - ws.col_count)
     ws.update(range_name="A1", values=[new_header] + new_rows, value_input_option="RAW")
     global _ws, _header
     _ws, _header = None, []                      # re-read the header next time

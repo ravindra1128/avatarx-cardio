@@ -335,6 +335,21 @@ def _parse_envelope(body: bytes, ctype: str, query: dict) -> tuple:
         header["session"] = _one("session")
     if _one("capture_profile"):
         header["capture_profile"] = _one("capture_profile")
+    # Reference vitals from the client's OTHER measurement (ShenAI) for the
+    # tracking sheet's agreement columns. Never used by the pipeline; echoed
+    # back under doc["reference"] so a row can be audited. Non-numeric -> ignored.
+    ref = {}
+    for k in ("ref_hr", "ref_hrv", "ref_sbp", "ref_dbp"):
+        v = _one(k)
+        if v not in (None, ""):
+            try:
+                ref[k] = float(v)
+            except ValueError:
+                pass
+    if _one("ref_source"):
+        ref["ref_source"] = str(_one("ref_source"))[:40]
+    if ref:
+        header["reference"] = ref
     if _one("window_s"):
         header["window_s"] = float(_one("window_s"))
     if _one("scale") is not None:
@@ -542,6 +557,8 @@ class MeasureHandler(BaseHTTPRequestHandler):
                 scale=header.get("scale"))
             doc["session"] = sid
             doc["size_bytes"] = len(video_bytes)
+            if header.get("reference"):
+                doc["reference"] = header["reference"]     # additive; audit only
             if isinstance(doc.get("timing"), dict):
                 doc["timing"]["upload_received_s"] = header.get("_upload_received_s")
                 doc["timing"]["upload_bytes"] = header.get("_upload_bytes")

@@ -37,3 +37,4 @@ data/eval_corpus/
 data/eval_cache/
 credentials/
 *.sa.json
+.claude/owner-approved
