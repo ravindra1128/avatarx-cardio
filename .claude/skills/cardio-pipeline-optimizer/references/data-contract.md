@@ -145,6 +145,68 @@ Measured during the integration work, all on these same recordings:
   51.4 / 62.2 %CV; tune: the 5-segment clip 0 → 49.6 %CV with 3/3 cards.
   Lesson for the gate: a per-record "unchanged where it should be unchanged" check is
   stronger than the aggregate metrics — read the table, not just the verdict.
+- **Iteration 4 (2026-09-08), REJECTED: face-normalised downscale (target inter-ocular
+  d = 55 px, never shrinking less than the fixed 480).** Diagnostic first: after the fixed
+  480 prep, demo clips sit at d = 50–57 px and phone clips at d = 90–100 (the face fills
+  the frame). Holdout: signal 0.783 → 0.885, cards 9/18 → 14/18, determinism 1.0 — and
+  consistency 0.640 → 0.171. Card values scattered: on one 1080 clip an 8 % shrink
+  (480 → 420 px) moved arterial stiffness 0.38 → 0.86 and vascular tone 62 → 28 % CV;
+  another clip produced fitness 7.2/100. Two clips flipped 0 → 3 cards from 8–12 %
+  shrinks. Conclusion: the cards are NOT robust to small input perturbations; pixel
+  count is not the limiting factor (third time the corpus says so — 360, POS window,
+  face-normalised). The probe also runs on the trimmed clip in production, so any
+  preview on the full clip picks different widths. Next lever: estimator robustness
+  (stability of the card values themselves), measured by `screen_sensitivity.json`
+  (same clips at 480/440/400).
+- **Sensitivity screen (2026-09-08, `screen_sensitivity.json`): same tune clips prepared
+  at 480 / 440 / 400 px.** Of the 4 clips with beats, 3 flip their cards with an 8–17 %
+  input change — demo_3e0d 3/3 → 0/3 → 0/3 (coherence 0.103 → 0.062 → 0.050),
+  demo_7f56 0/3 → 0/3 → 3/3 (timing 50.6 → 51.7 → 42.1 ms), phone 9b3023 3/3 → 0/3 →
+  0/3 (coherence 0.109 → 0.068 → 0.149). The one stable clip (demo_ca90, 3/3 at all
+  widths) keeps vascular tone (32.8 / 33.6 / 35.2) and fitness (60.6 / 64.3 / 59.8) but
+  prints arterial stiffness as 0.99 ratio → 258 ms (marker switched to rise time) → 0.43
+  ratio. Two conclusions: (1) card AVAILABILITY sits on the evidence knife-edge —
+  coherence = 0.5 × share of beats seen by ≥ 3 regions, and a handful of beats crossing
+  the 60 ms fusion tolerance flips the gate; (2) among the card VALUES, arterial
+  stiffness is the unstable one (first-available marker off one ensemble beat), tone
+  and fitness are steady when their inputs are. This is the mechanism behind the
+  owner's "same person, 30 minutes" requirement failing; resolution is not.
+- **Per-region timing offset (2026-09-08, `diag_roi_lag.json`): NO systematic offset —
+  rolling shutter is not it.** Median lag of each region's beats vs the forehead has no
+  consistent sign or row order (cheek_l −36…+13 ms, cheek_r −40…+43, nose −44…+15) and
+  is the same on demos and the phone clip. The spread is the finding: per-clip IQR of
+  54–160 ms, wider than the 60 ms fusion tolerance, and only 30–64 % of forehead beats
+  have any counterpart within ±120 ms. This is per-region beat-timing jitter, not
+  geometry. Don't try offset compensation.
+- **Fiducial calibration (synthetic, 30 fps, 0.7–4 Hz, 3-point refinement):** timing
+  jitter SD at 6 / 3 / 0 / −3 dB — apex 7.5 / 10 / 27 / 48 ms, max upstroke slope
+  8.5 / 13 / 35 / 96 ms, foot unusable. The apex (current) is already the best
+  single-point fiducial; slope- or foot-based timing is closed. Matched-filter timing
+  (each beat window correlated with the region's own ensemble template, sub-sample
+  peak) was also calibrated: 7.9 / 12.3 / 17.6 / 35.2 ms at 6 / 3 / 0 / −3 dB vs apex
+  7.2 / 10.9 / 18.2 / 52.9 — no gain at the ~0 dB operating point, helps only below it.
+  **The timing route is closed at these SNRs.** The only lever left on the evidence
+  gate is per-region SNR at extraction (e.g. sub-ROI patches combined by pulse-band
+  SNR): +3 dB would take apex jitter from ~27 to ~10 ms, which is what fusion needs.
+- **Stiffness marker stability (2026-09-08, `diag_marker_stability.json`, tune, 480/440/400):
+  NO contour marker is reproducible at this SNR.** Median relative change under an 8–17 %
+  input change: reflection index 0.375 (n=6), rise time 0.463 (n=8), normalised upstroke
+  slope 0.351 (n=8), pulse width 0.342 (n=8); aging index never available at 30 fps.
+  One person's reflection index spans 0.2–1.2 across clips. "Pick a steadier marker"
+  is closed — the instability is in which beats are selected/ensembled, upstream of
+  the marker. Options left: (a) raise per-region SNR at extraction (needs an additive
+  per-patch field in capture/ingest.py — owner approval); (b) a split-half
+  self-consistency rule for the stiffness card (compute on odd/even beats; print only
+  when the halves agree within tolerance) — reliability over availability, which the
+  gate's `cards` guardrail (CARD_SLACK = 0) currently forbids; owner's call.
+- **Iteration 6 (2026-09-08), REJECTED: RMSSD enters the fitness proxy only with ≥ 10
+  successive differences, else the heart-rate-only basis.** Signal/cards unchanged,
+  determinism 1.0 — consistency 0.640 → 0.222. The two bases are on DIFFERENT SCALES:
+  the same clips read 50.3 / 60.4 with HR+RMSSD and 24.8 / 23.9 with HR only. Switching
+  basis by data quality makes the number jump for one person. Lesson: a bad RMSSD must
+  become "not computed (RMSSD from n < 10 differences)", not a different formula —
+  which lowers availability and needs the owner's reliability-over-availability call
+  (the gate's `cards` guardrail forbids it today).
 - **Per-ROI diagnosis (tune split).** No region is dead: beat counts are balanced across
   forehead/cheeks/nose (≈30–40 each per clip). Coherence is low because the four regions
   place the *same* beat > 60 ms apart and fail to cluster — ~40 % of per-ROI beats pair
