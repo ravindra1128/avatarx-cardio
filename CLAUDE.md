@@ -82,6 +82,8 @@ separately; never blend them into one "accuracy" number.
 |---|---|---|
 | 2026-09-07 | card timing ceiling 40 → 50 ms (`endpoint_max_timing_precision_ms`) | corpus screen: 26 → 31 of 51 cards, values in band; 60 ms rejected (implausible values) |
 | 2026-09-07 | vascular-tone 12-beat floor applies to the whole scan, not per capture segment | gated accept; single-segment clips identical |
+| 2026-09-08 | reliability over availability: the gate accepts a consistency gain (≥ +0.05, signal/determinism held) even if fewer cards compute | `gate.py` reliability clause; iterations 7–8 tried under it, both rejected on evidence |
+| 2026-09-08 | lever 1 approved: additive per-patch traces in `capture/ingest.py` + SNR-based combination in evidence | three variants gated, all rejected (values scatter); reverted; design kept in the skill's known results |
 
 ## How to start a session on this repo
 
