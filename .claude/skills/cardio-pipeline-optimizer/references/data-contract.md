@@ -244,6 +244,36 @@ Measured during the integration work, all on these same recordings:
   are not reproducible. The card estimators are noise-dominated at this SNR regardless
   of extraction. All four files reverted; the ingest field design is in this entry if a
   future capture (better light / fps) makes it worth retrying.
+- **RMSSD is inflated on EVERY clip (2026-09-08 pre-check for iteration 10).** The
+  rhythm module's RMSSD (from "clean" runs) is 122–534 ms on all 13 clips that compute
+  fitness, demos included; resting adults sit at ~20–80 ms. Cause: an interval of 2× RR
+  (missed beat) or 0.5× RR (false beat) stays inside the 250–2200 ms plausibility window,
+  so successive differences of ±hundreds of ms survive. Consequence: the fitness proxy's
+  0.5·ln(RMSSD/40) term is ≈ +1 for everyone — the "consistent 50–80" fitness band is
+  that inflation, not fitness. Live example: a production scan read 52.8 with pulse 81,
+  which implies RMSSD ≈ 295 ms, while the pipeline flagged 16 % split beats on it.
+  Iteration 10 gives the card its own artefact-filtered RMSSD (intervals within 30 % of
+  the run median) plus a 150 ms resting guard; the rhythm module's dispersion is untouched.
+  NOTE: fitness values before/after iteration 10 are NOT comparable in the sheet.
+- **Iteration 10 (2026-09-08), REJECTED: card-only artefact-filtered RMSSD (intervals
+  within 30 % of the run median, ≥ 10 differences) + 150 ms resting guard.** Holdout
+  cards 9/18 → 6/18: every fitness value abstains because after filtering only 5–6
+  successive differences remain; on the one clip where nothing is filtered (demo_ca90,
+  25 intervals, 0 dropped) RMSSD is still 122 ms — the jitter itself, not missed beats.
+  Consistency 0.640 → 0.663 (under the +0.05 clause). Conclusion: the HRV term cannot be
+  rescued by filtering at this timing precision; iteration 11 puts every scan on the
+  heart-rate-only basis unless the HRV term clears 2× the scan's own noise floor.
+- **Iteration 11 (2026-09-08), REJECTED BY THE CORPUS METRIC, OWNER DECISION PENDING:
+  fitness uses its HRV term only when the artefact-filtered RMSSD clears 2× the scan's
+  own timing-noise floor (max of the module's quantisation budget and √6 × measured
+  timing precision); otherwise every scan uses the heart-rate-only basis.** No corpus
+  scan resolves HRV (floors 55–132 ms vs RMSSD 122–232 after filtering), so all land on
+  the HR-only scale: 79.6 / 50.3 / 60.4 → 53.4 / 24.8 / 23.9. Cards and signal unchanged,
+  det 1.0; consistency 0.640 → 0.429 because this person's resting pulse is 58 in the
+  demo sessions and 73–74 in the phone sessions — real spread, which the cross-session CV
+  reads as noise. The old composite looked "stable" only because its inflated RMSSD
+  term is roughly constant noise. A 30-minute repeat would agree under this rule; the
+  corpus has no such pairs to prove it. Patch saved: `data/eval_cache/fitness_hr_only.patch`.
 - **Per-ROI diagnosis (tune split).** No region is dead: beat counts are balanced across
   forehead/cheeks/nose (≈30–40 each per clip). Coherence is low because the four regions
   place the *same* beat > 60 ms apart and fail to cluster — ~40 % of per-ROI beats pair
