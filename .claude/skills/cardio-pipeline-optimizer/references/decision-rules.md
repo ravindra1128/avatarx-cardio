@@ -140,3 +140,13 @@ the product targets; the corpus metrics above are how a single change is judged.
 Report the three separately. Never combine them into one "accuracy" figure, and never
 report a proxy computed on fewer than `MIN_ROWS = 10` rows as a result — say "n = …,
 not yet meaningful" instead.
+
+
+## Reliability clause (owner decision 2026-09-08)
+
+Accept also when **consistency rises by ≥ `CONS_MARGIN` (0.05)** with `signal` not down
+and `determinism` held, **even if `cards` falls**. Reason: a card that prints a number a
+10 % input perturbation would change is not a measurement; fewer, reproducible values
+serve the owner's "same person, 30 minutes" goal better than more, scattered ones. The
+card drop is written into the verdict's reasons so it is never silent. Everything else
+(guard, returned = 1.0, latency slack) still applies.

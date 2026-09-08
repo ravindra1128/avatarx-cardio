@@ -207,6 +207,43 @@ Measured during the integration work, all on these same recordings:
   become "not computed (RMSSD from n < 10 differences)", not a different formula —
   which lowers availability and needs the owner's reliability-over-availability call
   (the gate's `cards` guardrail forbids it today).
+- **Iteration 7 (2026-09-08), REJECTED: fitness abstains when RMSSD rests on < 10
+  successive differences.** Holdout: cards 9/18 → 7/18 (the two removed values were
+  50.3 and 60.4 — plausible ones, resting on 6 and 7 differences), consistency
+  0.640 → 0.663 (under the reliability clause's +0.05), signal identical, det 1.0. The
+  6.6 / 7.2 outliers that motivated it only appear at a 60 ms card ceiling, which the
+  deployed 50 ms config never admits — so at the current config the rule costs
+  availability and buys nothing. Also: job 10.2 s on a quiet machine vs the baseline's
+  18.4 s — that baseline latency was CPU contention, not code.
+- **Iteration 8 (2026-09-08), REJECTED: stiffness split-half self-consistency (even vs
+  odd beats, same marker within 30 %).** EVERY holdout stiffness value fails it — the
+  demo (287.5 ms) and both phone clips (0.37, 0.38 ratio) — so cards 9/18 → 6/18 with
+  consistency unchanged (the stiffness group vanished) and two fixture tests that
+  expect a value fail. Finding, not a fix: at this SNR the arterial-stiffness card is
+  not reproducible on ANY recording in the corpus. Keeping or hiding it is a product
+  decision; the gate cannot make it. Lever 1 (per-region SNR) is the only thing that
+  can change the input to this card.
+- **Lever 1 build note (2026-09-08): read per-patch SNR from the UNFILTERED extractor
+  output.** The band-passed POS output has no out-of-band power left, so an in-band /
+  out-of-band ratio on it reads 6–25 dB for every patch and the weights collapse to
+  uniform. On the raw (band=None) pulse the same ratio spreads −5…+25 dB (median 4–6)
+  and a few patches drop out — that is the intended weighting. Smoke (3 clips): coverage
+  up strongly (0.21 → 0.53, 0.43 → 0.67, 0.74 → 0.94), coherence +0.01–0.02, timing
+  precision worse (22 → 46 ms on one clip); +0.6 s per scan. Gate decides (iteration 9).
+- **Iteration 9 (2026-09-08), lever 1 CLOSED after three variants — per-patch
+  extraction.** Ingest collected a 2×2 grid of sub-region means per ROI (additive
+  field), evidence.py built the detection wave from them. v1 SNR-weighted average:
+  gate ACCEPT (signal 0.783 → 0.841, cards 9 → 12/18) but the clean demo clip fell
+  3 → 0 cards (coverage 0.61 → 0.21) — held by the per-record rule. v2 (use only when
+  it beats the region's SNR): same demo collapse — the in-band ratio rises while the
+  pulse shape smears (phase spread between sub-regions); whole-region SNR is 2–10 dB
+  on demo and phone alike, so no floor separates them. v3 (best single sub-region by
+  +3 dB, no averaging): signal 0.854, cards 15/18, det 1.0 — consistency 0.640 → 0.266
+  (stiffness 0.49–0.94, tone 37–93, fitness 1.6). Fifth independent confirmation:
+  anything that raises card availability on these phone recordings yields values that
+  are not reproducible. The card estimators are noise-dominated at this SNR regardless
+  of extraction. All four files reverted; the ingest field design is in this entry if a
+  future capture (better light / fps) makes it worth retrying.
 - **Per-ROI diagnosis (tune split).** No region is dead: beat counts are balanced across
   forehead/cheeks/nose (≈30–40 each per clip). Coherence is low because the four regions
   place the *same* beat > 60 ms apart and fail to cluster — ~40 % of per-ROI beats pair

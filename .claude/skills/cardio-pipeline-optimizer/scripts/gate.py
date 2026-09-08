@@ -24,6 +24,7 @@ DET_SLACK = env_float("DET_SLACK", 0.0)
 CONS_SLACK = env_float("CONS_SLACK", 0.05)
 LAT_SLACK = env_float("LAT_SLACK", 0.05)
 MIN_IMPROVED_RECORDS = env_int("MIN_IMPROVED_RECORDS", 3)
+CONS_MARGIN = env_float("CONS_MARGIN", 0.05)   # reliability clause: consistency must rise by this
 
 
 def _ge(a, b, slack):
@@ -61,11 +62,23 @@ def main() -> None:
     sig_up = cm["signal"] >= bm["signal"] + MIN_MARGIN
     cards_up = (cm["cards"] >= bm["cards"] + MIN_MARGIN
                 and cm["signal"] >= bm["signal"] - SIG_SLACK)
-    cond2 = sig_up or cards_up
+    # Reliability clause (owner decision 2026-09-08, "reliability over availability"):
+    # a change that makes the remaining card values steadier across scans is an
+    # improvement even if fewer cards compute — provided signal and determinism hold.
+    # The card drop is reported in the reasons, never hidden.
+    bc, cc = bm.get("consistency"), cm.get("consistency")
+    cons_up = (bc is not None and cc is not None and cc >= bc + CONS_MARGIN
+               and cm["signal"] >= bm["signal"] - SIG_SLACK
+               and _ge(cm.get("determinism"), bm.get("determinism"), DET_SLACK))
+    cond2 = sig_up or cards_up or cons_up
     if sig_up:
         reasons.append(f"signal {bm['signal']:.3f} -> {cm['signal']:.3f} (>= +{MIN_MARGIN})")
     if cards_up:
         reasons.append(f"cards {bm['cards']:.3f} -> {cm['cards']:.3f} with signal held")
+    if cons_up:
+        reasons.append(f"consistency {bc:.3f} -> {cc:.3f} (>= +{CONS_MARGIN}) with signal held"
+                       + (f"; cards {bm['cards']:.3f} -> {cm['cards']:.3f} (accepted drop)"
+                          if cm["cards"] < bm["cards"] else ""))
     if not cond2:
         regressions.append(f"no improvement: signal {bm['signal']:.3f}->{cm['signal']:.3f}, "
                            f"cards {bm['cards']:.3f}->{cm['cards']:.3f} (need +{MIN_MARGIN})")
@@ -74,6 +87,8 @@ def main() -> None:
     cond3 = True
     for name, slack in (("cards", CARD_SLACK), ("determinism", DET_SLACK),
                         ("consistency", CONS_SLACK), ("latency", LAT_SLACK)):
+        if name == "cards" and cons_up:
+            continue                      # the reliability clause allows a card drop
         if not _ge(cm.get(name), bm.get(name), slack):
             cond3 = False
             regressions.append(f"{name} regressed {bm.get(name)} -> {cm.get(name)} "
@@ -84,7 +99,7 @@ def main() -> None:
     improved = [p["id"] for p in cand["per_record"]
                 if p["id"] in bid and p["signal"] > bid[p["id"]]["signal"] + 1e-6]
     need = min(MIN_IMPROVED_RECORDS, max(1, cand["n"] // 2 + 1))
-    cond4 = len(improved) >= need or (cards_up and not sig_up)
+    cond4 = len(improved) >= need or (cards_up and not sig_up) or (cons_up and not sig_up)
     if not cond4:
         regressions.append(f"only {len(improved)} record(s) improved (need >= {need}); "
                            f"may be a fluke")

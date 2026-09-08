@@ -32,7 +32,12 @@ PROTECTED = [
 ]
 FROZEN_FILES = ["configs/default.yaml", "configs/gates.yaml"]
 ALLOWED_DIRS = ("rppg/", "beats/", "preprocessing/", "features/", "inference/")
-ALLOWED_FILES = ("app/measure_prep.py",)
+# capture/ingest.py and inference/pipeline.py: owner-approved on 2026-09-08 for ONE
+# additive change — per-patch region traces flowing into the evidence stage
+# (lever 1, per-region SNR at extraction). Their floors/constants stay protected
+# by the PROTECTED symbol check above; the PreToolUse hook still demands the
+# owner-approval sentinel for every edit to them.
+ALLOWED_FILES = ("app/measure_prep.py", "capture/ingest.py", "inference/pipeline.py")
 
 
 def _read_symbol(rel: str, name: str):
