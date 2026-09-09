@@ -317,3 +317,20 @@ Measured during the integration work, all on these same recordings:
   `presentedFrames`, the pre-check repeating until the scan begins, and the lock's own
   account in the sheet's `Capture Note`. Lesson: every camera-state change needs a
   brightness guard, and the sheet must be able to explain every `AE Locked = FALSE`.
+- **Corpus incident, 2026-09-09.** A diagnostic called `measure_video` directly on the
+  corpus paths. It trims IN PLACE and deletes its input after downscaling (the upload is
+  a temp file in production), so the eight phone originals were destroyed. Two were
+  restored from byte-identical duplicates in the folder (`d2da8e`, `ebe749`); the other
+  six now point at their trimmed (last 40 s) + downscaled FFV1 equivalents, verified to
+  reproduce the baseline rows exactly (`restored` key in the manifest). Consequence: those
+  six cannot serve longer-window experiments. `measure_video` now copies any input under
+  `data/` before touching it (`_protect_input`). Rule: never hand a corpus path to the
+  service; use `replay._run_once` or a copy.
+- **Pulse vs spectrum (diagnostic, 2026-09-09).** On the same POS waveforms a Welch peak
+  agrees with the pipeline's clean-interval pulse within 6 bpm on 4 of the 6 corpus
+  recordings that report one; the four skin regions agree on the spectral peak on only 6
+  of 15 recordings. The phone scans that day: pulse 65 vs ShenAI 53, and 100 vs 55 on the
+  scan with the BEST coherence (0.63) and timing (9.5 ms) — a consistent 600 ms lattice
+  across all regions, i.e. cross-region agreement does not catch a rhythm counted at the
+  wrong multiple. Both estimators fail alone at this SNR; their agreement is the
+  reliability signal that is missing.

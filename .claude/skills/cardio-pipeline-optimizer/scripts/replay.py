@@ -86,7 +86,10 @@ def _same(a: dict, b: dict) -> bool:
     return True
 
 
-def _run_once(rel_path: str) -> dict:
+def _run_once(rel_path: str, pretrimmed: bool = False) -> dict:
+    # `pretrimmed` (manifest flag, 2026-09-09 repair): the file already IS the
+    # analysed 40 s window; re-trimming would drop leading frames and delete
+    # the sidecar clock the baseline was scored with.
     src = repo() / rel_path
     d = tempfile.mkdtemp(prefix="cardio-replay-")
     try:
@@ -96,7 +99,8 @@ def _run_once(rel_path: str) -> dict:
         if side.exists():
             shutil.copy(side, v + ".timestamps.json")
         t0 = time.perf_counter()
-        doc = measure_video(v, manifest={"capture_profile": "consumer"})
+        doc = measure_video(v, manifest={"capture_profile": "consumer"},
+                            window_s=(0 if pretrimmed else None))
         row = _collect(doc)
         row["wall_s"] = round(time.perf_counter() - t0, 2)
         row["returned"] = True
@@ -121,7 +125,7 @@ def main() -> None:
         runs, err = [], None
         for i in range(max(1, args.repeat)):
             try:
-                runs.append(_run_once(m["path"]))
+                runs.append(_run_once(m["path"], bool(m.get("pretrimmed"))))
             except Exception as e:  # noqa: BLE001 — a crash IS the finding
                 err = f"{type(e).__name__}: {e}"
                 traceback.print_exc()

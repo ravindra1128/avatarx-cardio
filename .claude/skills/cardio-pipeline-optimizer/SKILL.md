@@ -248,3 +248,12 @@ It does not validate anything clinically, and an accepted change is not evidence
 pipeline is *right* — only that it is cleaner, steadier and faster on these clips.
 Keep deploy manual, and keep the language honest: "coherence improved on 6 of 8 holdout
 scans" is a result; "accuracy improved" is not something this skill can say.
+
+**The corpus is not a scratch input.** `measure_video` trims in place and deletes its
+input after downscaling — right for a temp upload, destructive for a corpus file. It now
+copies anything under `data/` first (`_protect_input`), but the rule stands: replay and
+diagnostics go through `replay._run_once` or an explicit copy, never the manifest path.
+On 2026-09-09 a diagnostic broke this rule and eight phone originals were lost; two came
+back from duplicates, six survive only as their trimmed 40 s equivalents (see the known
+results). Before any script that reads the corpus, ask: does anything downstream write to
+the path it is given?

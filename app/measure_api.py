@@ -43,6 +43,7 @@ import dataclasses
 import json
 import os
 import pathlib
+import shutil
 import tempfile
 import threading
 import time
@@ -196,10 +197,38 @@ def _apply_overrides(cfg: dict, overrides: dict) -> list:
     return notes
 
 
+_REPO_DATA = pathlib.Path(__file__).resolve().parents[1] / "data"
+
+
+def _protect_input(video_path: str, protected_root: pathlib.Path = _REPO_DATA) -> str:
+    """measure_video trims and downscales IN PLACE — the upload is a temp
+    file, so that is the cheap thing to do. A recording under the repo's
+    data/ directory is never a temp file: on 2026-09-09 a diagnostic called
+    measure_video on the evaluation corpus and destroyed eight phone
+    recordings. Such an input (and its sidecar) is copied to a temp dir and
+    the copy is measured; the caller's file is never touched."""
+    try:
+        p = pathlib.Path(video_path).resolve()
+        root = pathlib.Path(protected_root).resolve()
+        if root not in p.parents:
+            return video_path
+    except OSError:
+        return video_path
+    d = tempfile.mkdtemp(prefix="afib_measure_copy-")
+    dst = os.path.join(d, p.name)
+    shutil.copy(p, dst)
+    side = str(p) + ".timestamps.json"
+    if os.path.exists(side):
+        shutil.copy(side, dst + ".timestamps.json")
+    print(f"[measure] input under {root}: measuring a copy at {dst}", flush=True)
+    return dst
+
+
 def measure_video(video_path: str, *, manifest=None,
                   client_timestamps_s=None, duration_ms=None,
                   config_overrides=None, window_s=None, scale=None) -> dict:
     """Run THE production path and return a JSON-ready ScanResult."""
+    video_path = _protect_input(video_path)
     # TRIM BEFORE DOWNSCALE. Both orders give the same analysis window, but
     # trim_tail is an ffmpeg stream COPY (no re-encode, ~instant) while
     # downscale is a full FFV1 re-encode — the most expensive step in the
