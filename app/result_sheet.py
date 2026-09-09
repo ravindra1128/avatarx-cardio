@@ -64,7 +64,7 @@ COLUMNS = [
     # Reference vitals the client attached (ShenAI) and the agreement column.
     "Ref HR", "Ref HRV", "Ref SBP", "Ref DBP", "Ref Source", "Pulse - Ref HR",
     # Capture state reported by the client (step 1: exposure lock + pre-check).
-    "AE Locked", "AWB Locked", "Client FPS", "Face Luma",
+    "AE Locked", "AWB Locked", "Client FPS", "Face Luma", "Capture Note",
 ]
 
 _POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sheet")
@@ -178,6 +178,7 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
         "AWB Locked": ("TRUE" if cap.get("awb_locked") else "FALSE") if "awb_locked" in cap else "",
         "Client FPS": _num(cap.get("client_fps"), 1),
         "Face Luma": _num(cap.get("face_luma"), 0),
+        "Capture Note": str(cap.get("note") or "")[:300],
     }
 
 

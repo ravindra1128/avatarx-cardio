@@ -96,6 +96,13 @@ under similar conditions. Order of work, with the evidence in the skill's known 
    `client_fps`, `face_luma`) → manifest + sheet. Then, as separate gated changes:
    60 fps where the device allows (raises phone load and needs more bitrate) and a
    60–90 s resting recording. **Slice 1 built 2026-09-08** (`src/lib/capture/cameraCapture.js`).
+   **2026-09-09 mobile finding:** on Android Chrome `exposureMode: "manual"` is auto-exposure
+   OFF with the last exposure time but the driver's default gain (Chromium
+   `VideoCaptureCamera2.java`); Chrome never reports the automatic ISO, the picture went
+   dark (face luma 127 → ~27, "illuminance 83 lux < floor 100") and the mode read back
+   "none". The lock now matches the gain to the pre-lock brightness and reverts unless the
+   picture stays within ±20 %; the sheet's `Capture Note` column carries its account.
+   Never ship a camera-state change without a brightness guard.
 2. **Fitness card:** heart-rate-only unless the HRV term clears 2× the scan's timing-noise
    floor (`data/eval_cache/fitness_hr_only.patch`); relabel as a resting-rate proxy.
 3. **Vascular tone:** require ≥ 30 amplitude beats and a locked-exposure capture; report the

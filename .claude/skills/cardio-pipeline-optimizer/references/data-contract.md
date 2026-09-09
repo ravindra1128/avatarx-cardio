@@ -305,3 +305,15 @@ Measured during the integration work, all on these same recordings:
   either way, but trimming first hands the encoder only the frames that will be used.
 - **Every scan already returns a structured outcome** by design (`run_with_details`
   never raises for quality problems). Constraint 2 is about keeping that true.
+- **Capture, 2026-09-09 (owner's Android 10 / Chrome 151 phone).** The first exposure-lock
+  slice darkened the recording: Android Chrome's `exposureMode: "manual"` is auto-exposure
+  OFF with the last exposure time and the driver's default gain (Chromium
+  `VideoCaptureCamera2.java`: `if (mIso > 0) set(SENSOR_SENSITIVITY)`), and the current ISO
+  is reported only after a page has set one. Pre-check face luma 127 → recording ≈ 27
+  ("illuminance 83 lux < floor 100"); the mode read back "none", so the flag said unlocked.
+  The other scan that day: pre-check 23.5 fps from a callback count under the SDK's load
+  (the recording measured 30.3 fps) and 3 clean intervals in 40 s. Fix in the webapp:
+  brightness-matched gain search with a ±20 % guard and revert, fps from rVFC
+  `presentedFrames`, the pre-check repeating until the scan begins, and the lock's own
+  account in the sheet's `Capture Note`. Lesson: every camera-state change needs a
+  brightness guard, and the sheet must be able to explain every `AE Locked = FALSE`.

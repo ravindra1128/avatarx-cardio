@@ -366,6 +366,11 @@ def _parse_envelope(body: bytes, ctype: str, query: dict) -> tuple:
                 cap[k] = float(v)
             except ValueError:
                 pass
+    # The client's own account of the lock (gain steps, brightness before/after,
+    # mode read back, or why it was skipped) — free text for the sheet only.
+    v = _one("capture_note")
+    if isinstance(v, str) and v.strip():
+        cap["note"] = v.strip()[:300]
     if cap:
         header["client_capture"] = cap
         m = header.setdefault("manifest", {}) if isinstance(header.get("manifest"), (dict, type(None))) else {}
