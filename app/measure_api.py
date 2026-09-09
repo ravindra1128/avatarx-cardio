@@ -136,6 +136,10 @@ def _assemble_parts(upload_id: str, ext: str) -> str:
     parts = sorted(d.glob("part-*"))
     if not parts:
         raise ValueError("no parts received for that upload")
+    # The phone's real upload duration: first slice landing -> now. The
+    # single-shot path reports this as upload_received_s and the sheet reads
+    # it; without it the sliced path silently lost both upload columns.
+    first_at = min(p.stat().st_mtime for p in parts)
     total = int((d / "total").read_text().strip())
     if len(parts) != total:
         have = {int(p.name.split("-")[1]) for p in parts}
@@ -147,7 +151,7 @@ def _assemble_parts(upload_id: str, ext: str) -> str:
         for part in parts:
             fh.write(part.read_bytes())
             part.unlink()
-    return str(out)
+    return str(out), max(0.0, time.time() - first_at)
 
 
 def _sweep_parts(max_age_s: float = 3600.0) -> None:
@@ -857,7 +861,7 @@ class MeasureHandler(BaseHTTPRequestHandler):
         upload_id = str((q.get("upload_id") or [""])[0])
         ext = str(header.get("ext") or (q.get("ext") or ["webm"])[0]).lstrip(".")
         try:
-            path = _assemble_parts(upload_id, ext)
+            path, upload_s = _assemble_parts(upload_id, ext)
         except (ValueError, OSError) as e:
             self._json(400, {"error": str(e), "upload_id": upload_id})
             return
@@ -883,6 +887,12 @@ class MeasureHandler(BaseHTTPRequestHandler):
                 doc = {"error": f"{type(e).__name__}: {e}"}
             try:
                 doc["size_bytes"] = size
+                # Keep the upload columns meaningful on this path too.
+                t = doc.setdefault("timing", {}) if isinstance(doc.get("timing"), (dict, type(None))) else {}
+                if isinstance(t, dict):
+                    t.setdefault("upload_bytes", size)
+                    t.setdefault("upload_received_s", round(upload_s, 2))
+                    doc["timing"] = t
                 _remember_result(upload_id, doc)
                 result_sheet.schedule_append(doc, extra={
                     "build": BUILD_SHA,
@@ -897,8 +907,13 @@ class MeasureHandler(BaseHTTPRequestHandler):
                       f"{time.perf_counter() - t0:.1f}s", flush=True)
 
         _POOL.submit(job)
+        # Tell the client roughly when to bother asking. Measured on Railway:
+        # ~1.6 s of work per MB (downscale + analysis), floor 12 s. Without a
+        # hint the client polls blindly from t=0 and burns a dozen requests
+        # before the answer can possibly exist.
+        eta = max(12.0, round(size / (1024 * 1024) * 1.6, 1))
         self._json(202, {"status": "processing", "upload_id": upload_id,
-                         "size_bytes": size,
+                         "size_bytes": size, "eta_s": eta,
                          "poll": f"/api/result?upload_id={upload_id}"})
 
     @staticmethod

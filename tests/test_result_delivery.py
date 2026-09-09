@@ -188,7 +188,8 @@ def test_parts_assemble_in_index_order(tmp_path, monkeypatch):
     (d / "total").write_text("3")
     for i, chunk in enumerate((b"aaa", b"bbb", b"ccc")):
         (d / f"part-{i:04d}").write_bytes(chunk)
-    path = measure_api._assemble_parts("up-1", "webm")
+    path, upload_s = measure_api._assemble_parts("up-1", "webm")
+    assert upload_s >= 0
     assert pathlib.Path(path).read_bytes() == b"aaabbbccc"
     assert not list(d.glob("part-*"))          # slices freed after assembly
 
@@ -243,5 +244,5 @@ def test_slices_may_differ_in_size_and_the_last_total_wins(tmp_path, monkeypatch
     (d / "part-0001").write_bytes(b"b" * 16)        # bigger, after measuring
     (d / "total").write_text("3")                  # the last slice's true total
     (d / "part-0002").write_bytes(b"c" * 5)
-    path = measure_api._assemble_parts("up-3", "webm")
+    path, _ = measure_api._assemble_parts("up-3", "webm")
     assert pathlib.Path(path).read_bytes() == b"a" * 4 + b"b" * 16 + b"c" * 5
