@@ -101,30 +101,17 @@ PULSE_CHECK_MODE = "gate"         # "report" | "gate"
 MIN_PROVISIONAL_BEATS = 4             # morphology beats (median per ROI) for a provisional contour
 MIN_PROVISIONAL_AMPLITUDE_BEATS = 5   # amplitude beats for a provisional tone score
 MIN_PROVISIONAL_RATE_INTERVALS = 5    # clean intervals for a provisional clean-interval rate
-RI_TYPICAL = (40.0, 80.0)             # reflection index x 100: healthy adults ~0.4-0.8
-RISE_MS_TO_SCORE = ((120.0, 30.0), (320.0, 90.0))   # crest time 120 ms -> 30, 320 ms -> 90, linear
+# Stiffness keeps its own natural units (owner, 2026-09-09): the reflection
+# index as a ratio, the way it read before the 0-100 rescale. Tone and fitness
+# stay on 0-100, where a percentage and a bounded proxy already belong.
+RI_TYPICAL = (0.4, 0.8)               # reflection index, healthy adults
+RISE_TYPICAL_MS = (120.0, 320.0)      # pulse crest time, the no-notch fallback marker
 TONE_TYPICAL = (20.0, 60.0)           # amplitude CV %: the range seen on this prototype's resting scans
 FITNESS_TYPICAL = (30.0, 70.0)        # by construction of the resting-rate logistic
 
 
 def _clip100(x):
     return None if x is None else float(min(100.0, max(0.0, float(x))))
-
-
-def stiffness_score_from_reflection_index(ri):
-    """Reflection index x 100, clipped. Rises with arterial stiffness."""
-    return None if ri is None else round(_clip100(100.0 * float(ri)), 1)
-
-
-def stiffness_score_from_rise_time(rise_s):
-    """Crest time mapped onto the same 0-100 scale, for scans with no dicrotic
-    notch. Crest time lengthens with age and stiffness; this is a weaker,
-    different marker and is only ever shown as provisional."""
-    if rise_s is None:
-        return None
-    (x0, y0), (x1, y1) = RISE_MS_TO_SCORE
-    ms = float(rise_s) * 1000.0
-    return round(_clip100(y0 + (ms - x0) * (y1 - y0) / (x1 - x0)), 1)
 
 
 def tone_score_from_cv(cv):
@@ -258,34 +245,37 @@ def stiffness_contour(contour: dict) -> dict:
     # when a research frame rate makes it available, is reported beside them.
     tier_reasons = []
     if ri is not None:
-        score = stiffness_score_from_reflection_index(ri)
+        score, unit, typical = round(float(ri), 3), "ratio", RI_TYPICAL
         tier = "measured"
-        raw = (round(float(ri), 5), "ratio", "reflection_index")
-        name = "arterial_stiffness_index"
-        method = ("reflection index (reflected-wave height / systolic-wave "
-                  "height) x 100; uncalibrated, rises with arterial stiffness")
+        name = "reflection_index"
+        method = ("reflection index: reflected-wave height / systolic-wave "
+                  "height on the ensemble pulse; dimensionless and "
+                  "uncalibrated, rises with arterial stiffness")
     elif rise is not None:
-        score = stiffness_score_from_rise_time(rise)
+        # A DIFFERENT quantity in different units, shown only because a card
+        # with no value is worse than a labelled one. The tier and the reason
+        # carry that; nothing here silently swaps one marker for another.
+        score, unit, typical = round(float(rise) * 1000.0, 1), "ms", RISE_TYPICAL_MS
         tier = "provisional"
-        tier_reasons.append("no dicrotic notch was found, so the score comes "
-                            "from the pulse crest time, a weaker marker")
-        raw = (round(float(rise) * 1000.0, 1), "ms", "pulse_rise_time")
-        name = "arterial_stiffness_index_provisional"
-        method = ("pulse crest time (foot to systolic peak) mapped onto the "
-                  "0-100 stiffness scale: 120 ms -> 30, 320 ms -> 90; used only "
-                  "when no dicrotic notch was found")
+        tier_reasons.append("no dicrotic notch was found, so this is the pulse "
+                            "crest time in milliseconds, a different and weaker "
+                            "marker than the reflection index")
+        name = "pulse_rise_time"
+        method = ("pulse crest time, foot to systolic peak, on the ensemble "
+                  "waveform; reported only when no dicrotic notch was found, "
+                  "and never as a reflection index")
     else:
-        score, tier, raw, name, method = None, None, (None, None, None), None, None
+        score, unit, typical, tier, name, method = None, None, None, None, None, None
     out["estimate"] = (None if score is None else {
         "label": RESEARCH_ESTIMATE_LABEL,
-        "name": name, "value": score, "unit": "/100", "method": method,
+        "name": name, "value": score, "unit": unit, "method": method,
     })
     out["available"] = score is not None
     out["tier"] = tier
     out["tier_reasons"] = tier_reasons
     out["score"] = score
-    out["score_typical_range"] = list(RI_TYPICAL)
-    out["raw_value"], out["raw_unit"], out["raw_name"] = raw
+    out["score_typical_range"] = None if typical is None else list(typical)
+    out["raw_value"], out["raw_unit"], out["raw_name"] = score, unit, name
     out["marker_completeness"] = sum(
         out.get(k) is not None for k in
         ("aging_index", "reflection_index", "rise_time_s",
