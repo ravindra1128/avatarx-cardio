@@ -82,8 +82,14 @@ def test_amplitude_cv_and_vasomotion_band():
 
 
 def test_tone_refuses_too_few_beats_and_too_short_an_envelope():
+    # Display tiers (2026-09-09): below the measured floor the CV is still
+    # shown, labelled provisional; below the provisional floor nothing is.
+    from features.hemodynamics import MIN_PROVISIONAL_AMPLITUDE_BEATS
     few = vasomotor_indices(_series(MIN_AMPLITUDE_BEATS - 1), True)
-    assert few["available"] is False and "usable beats" in few["reason"]
+    assert few["available"] is True and few["tier"] == "provisional"
+    assert "amplitude beats" in few["tier_reasons"][0]
+    none = vasomotor_indices(_series(MIN_PROVISIONAL_AMPLITUDE_BEATS - 1), True)
+    assert none["available"] is False and "usable beats" in none["reason"]
     short = vasomotor_indices(_series(20, dt=0.85), True)   # ~16 s span
     assert short["available"] is True
     assert short["amplitude_cv"] is not None
@@ -122,11 +128,13 @@ def test_autonomic_index_is_bounded_and_monotone():
     assert autonomic_index(None, 40) is None
     assert autonomic_index(60, None) is None
     assert autonomic_index(0, 40) is None and autonomic_index(60, 0) is None
-    mid = autonomic_index(60, 40)
+    from features.hemodynamics import HR_REF_BPM, RMSSD_REF_MS
+    # the mid-point sits at the population anchors, wherever they are set
+    mid = autonomic_index(HR_REF_BPM, RMSSD_REF_MS)
     assert 0.0 < mid < 1.0 and mid == pytest.approx(0.5, abs=0.02)
     # a lower resting pulse reads higher; a higher RMSSD reads higher
-    assert autonomic_index(50, 40) > mid > autonomic_index(80, 40)
-    assert autonomic_index(60, 80) > mid > autonomic_index(60, 20)
+    assert autonomic_index(HR_REF_BPM - 12, RMSSD_REF_MS) > mid > autonomic_index(HR_REF_BPM + 12, RMSSD_REF_MS)
+    assert autonomic_index(HR_REF_BPM, RMSSD_REF_MS * 2) > mid > autonomic_index(HR_REF_BPM, RMSSD_REF_MS / 2)
     for hr in (35, 60, 120):
         for rm in (5, 40, 200):
             assert 0.0 < autonomic_index(hr, rm) < 1.0
@@ -296,9 +304,15 @@ def test_endpoint_limited_path_still_rejects_unverified_regions(scans):
         det["evidence"], cross_roi_coherence=0.09,
         timing_precision_ms=41.0, timing_matched_fraction=0.34)
     h = resting_hemodynamics(unverified, outcome="REPEAT_SCAN")
-    assert h["available"] is False
-    assert h["quality_gate"]["evidence_mode"] == "unverified"
-    assert "independently verified" in h["reasons"][0]
+    # Display tiers (2026-09-09): the cards compute, but nothing is labelled
+    # measured, and the evidence mode still says unverified.
+    assert h["available"] is True and h["tier"] == "provisional"
+    assert h["quality"]["endpoint_evidence"]["mode"] == "unverified"
+    assert h["quality"]["endpoint_evidence"]["pass"] is False
+    assert any("independently verified" in r for r in h["tier_reasons"])
+    for k in ("arterial_stiffness", "vascular_tone", "cardiorespiratory_fitness"):
+        if h[k]["available"]:
+            assert h[k]["tier"] == "provisional"
 
 
 def test_abstention_still_exposes_method_and_signal_gate(scans):
@@ -314,6 +328,10 @@ def test_abstention_still_exposes_method_and_signal_gate(scans):
     payload = report_biomarkers(
         SimpleNamespace(outcome=SimpleNamespace(value="REPEAT_SCAN")),
         unverified, hemodynamics=h)
-    assert all(x["status"] == "not_computed" and x["method"] and
-               x["confidence"].get("pass") is False
+    # Display tiers (2026-09-09): values are shown as provisional; the
+    # method and the failed signal gate are still exposed on every item.
+    assert all(x["method"] and
+               x["confidence"]["endpoint_evidence"]["pass"] is False and
+               (x["status"] == "not_computed" or x["tier"] == "provisional")
                for x in payload["items"])
+    assert any(x["status"] == "computed" for x in payload["items"])

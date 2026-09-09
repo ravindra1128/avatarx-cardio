@@ -63,15 +63,24 @@ def availability(rows: list[dict]) -> dict:
     no beats is a capture failure, not the pipeline's to answer for."""
     quality = [r for r in rows if r.get("Outcome") and r.get("Outcome") != "NO_RESULT"
                and _f(r.get("Coherence")) is not None]
-    full = [r for r in quality if all(r.get(f"{k} Status" if k != "Fitness" else "Fit Status",
-                                            "") == "computed"
-                                      for k in ("AS", "VT", "Fitness"))]
-    per_card = {c: sum(1 for r in quality if r.get(s) == "computed") for c, s in
-                (("Arterial Stiffness", "AS Status"), ("Vascular Tone", "VT Status"),
-                 ("Fitness", "Fit Status"))}
-    return {"n_scans": len(rows), "n_quality": len(quality), "n_all_three": len(full),
+    status_cols = (("Arterial Stiffness", "AS Status", "AS Tier"),
+                   ("Vascular Tone", "VT Status", "VT Tier"),
+                   ("Fitness", "Fit Status", "Fit Tier"))
+    full = [r for r in quality if all(r.get(sc) == "computed" for _, sc, _ in status_cols)]
+    # Display tiers (2026-09-09): "computed" now includes provisional scores.
+    # Measured-only availability is the number the standing goal is about;
+    # rows written before the tier columns existed count as measured, since
+    # every gate had to hold for them to compute at all.
+    def measured(r, sc, tc):
+        return r.get(sc) == "computed" and (r.get(tc) or "measured") == "measured"
+    full_measured = [r for r in quality if all(measured(r, sc, tc) for _, sc, tc in status_cols)]
+    per_card = {c: sum(1 for r in quality if r.get(sc) == "computed") for c, sc, _ in status_cols}
+    per_card_measured = {c: sum(1 for r in quality if measured(r, sc, tc)) for c, sc, tc in status_cols}
+    return {"n_scans": len(rows), "n_quality": len(quality),
+            "n_all_three": len(full), "n_all_three_measured": len(full_measured),
             "availability": round(len(full) / len(quality), 3) if quality else None,
-            "per_card_computed": per_card}
+            "availability_measured": round(len(full_measured) / len(quality), 3) if quality else None,
+            "per_card_computed": per_card, "per_card_measured": per_card_measured}
 
 
 def _find_pairs(rows: list[dict]) -> list[tuple]:
@@ -160,7 +169,9 @@ def main() -> None:
         Path(args.json).write_text(json.dumps(rep, indent=1, default=str))
     a, t, pa = rep["availability"], rep["retest"], rep["pulse_agreement"]
     print(f"[sheet] rows={rep['rows']}" + ("" if rep["meaningful"] else f"  (n < {MIN_ROWS}: not yet meaningful)"))
-    print(f"  availability   {a['availability']}  ({a['n_all_three']}/{a['n_quality']} quality scans; per card {a['per_card_computed']})")
+    print(f"  availability   any tier {a['availability']} ({a['n_all_three']}/{a['n_quality']}); "
+          f"measured only {a['availability_measured']} ({a['n_all_three_measured']}/{a['n_quality']}); "
+          f"per card {a['per_card_computed']} / measured {a['per_card_measured']}")
     print(f"  retest ({t['window_min']} min) {t['n_pairs']} pair(s), target ±{t['target']:.0%}: " + "; ".join(
         f"{c}: median |Δ|/mean {v['median_rel_diff']} within-20% {v['within_20pct']} (n={v['n_pairs_with_value']})"
         for c, v in t["cards"].items()))

@@ -128,9 +128,9 @@ def test_fitness_needs_the_pipelines_own_publish_a_rate_floor():
     below = cardiorespiratory_indices(_Reg(), 60.0, None,
                                       rate_method="clean_interval_median",
                                       rate_intervals=MIN_RATE_INTERVALS - 1)
-    assert below["available"] is False
-    assert below["reason_code"] == "insufficient_clean_intervals"
-    assert str(MIN_RATE_INTERVALS) in below["reason"]
+    # Display tiers (2026-09-09): shown, but never as a measured value.
+    assert below["available"] is True and below["tier"] == "provisional"
+    assert str(MIN_RATE_INTERVALS) in below["tier_reasons"][0]
 
 
 def test_a_rate_from_unsplit_intervals_is_inadmissible_at_any_count():
@@ -139,8 +139,10 @@ def test_a_rate_from_unsplit_intervals_is_inadmissible_at_any_count():
     out = cardiorespiratory_indices(_Reg(), 60.0, None,
                                     rate_method="calibrated_fused_beat_median",
                                     rate_intervals=30)
-    assert out["available"] is False
-    assert out["reason_code"] == "rate_not_from_clean_intervals"
+    # Display tiers (2026-09-09): the weakest admissible rate is shown as
+    # provisional; thirty of them still do not make it measured.
+    assert out["available"] is True and out["tier"] == "provisional"
+    assert "unverified beat intervals" in out["tier_reasons"][0]
 
 
 def test_legacy_callers_without_rate_provenance_still_work():

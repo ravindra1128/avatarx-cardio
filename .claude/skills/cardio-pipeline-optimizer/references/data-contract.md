@@ -389,3 +389,18 @@ Measured during the integration work, all on these same recordings:
   by AST - a `NameError` there would silently replace all three cards with an error dict);
   and the webapp had the whole "why not computed" paragraph inside a JSX comment, so an
   abstaining card gave no reason anywhere on the page.
+- **Display tiers (2026-09-09 evening, owner-directed).** Every card carries `tier`
+  ("measured" | "provisional"), `tier_reasons`, `score` (0-100, = `estimate.value`, unit
+  "/100"), `score_typical_range`, and `raw_value/raw_unit/raw_name` (reflection index ratio,
+  amplitude CV %, resting rate bpm). Stiffness: reflection index x 100 (measured), else crest
+  time 120 ms -> 30 / 320 ms -> 90 (provisional). Tone: CV % (measured >= 12 amplitude beats,
+  provisional >= 5). Fitness: resting-rate logistic with population anchors 72/14; the rate is
+  the clean-interval median (measured >= 15 intervals and pulse check not "disagree"), else the
+  waveform's dominant rhythm (on "disagree" or < 5 clean intervals), else a 5-14 interval clean
+  rate, else the fused-beat median - each provisional with its reason. The scan-level gates
+  (SQI, tracking, coherence/timing evidence, pulse check, morphology floor) no longer blank the
+  cards; they set the scan tier to provisional. Blank only with no beat lattice or < 4
+  morphology beats. The sheet's card columns now hold the SCORE; `AS/VT/Fit Tier` and
+  `AS Raw / VT Raw / Fit HR` keep the evidence grade and the marker, so measured-only
+  availability is still computable. `sheet_stats` availability counts computed cards of
+  either tier until it is taught to split them.

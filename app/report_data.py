@@ -26,17 +26,17 @@ _BIOMARKERS = (
 
 _BIOMARKER_METHODS = {
     "arterial_stiffness": (
-        "pulse-contour reflection index; at sufficient native frame rate, "
-        "second-derivative aging index"
+        "0-100 index from the pulse-contour reflection index (x100); when no "
+        "dicrotic notch is found, provisionally from the pulse crest time"
     ),
     "vascular_tone": (
-        "coefficient of variation of per-beat facial pulse amplitude after "
-        "within-region median normalization"
+        "0-100 index: coefficient of variation of per-beat facial pulse "
+        "amplitude after within-region median normalization, in percent"
     ),
     "cardiorespiratory_fitness": (
-        "resting-heart-rate research proxy over at least 15 clean beat "
-        "intervals; interval variability is reported beside it but never "
-        "enters the score, and no value is ever imputed"
+        "0-100 resting-heart-rate research proxy; provisionally from the "
+        "waveform's dominant rhythm when the beat count is thin or unverified; "
+        "interval variability is reported beside it and never enters the score"
     ),
 }
 
@@ -105,6 +105,17 @@ def report_biomarkers(scan_result, det: dict, *, capture: dict = None,
             "calibrated": bool(endpoint.get("calibrated", False)),
             "confidence": confidence,
             "details": endpoint,
+            # Display tiers (2026-09-09): "measured" when every floor held,
+            # "provisional" when the value comes from thinner evidence, with
+            # the reasons; the typical range of the 0-100 score; and the raw
+            # marker the score was derived from, so nothing is hidden.
+            "tier": endpoint.get("tier") if computed else None,
+            "tier_reasons": (list(endpoint.get("tier_reasons") or [])
+                             if computed else []),
+            "typical_range": endpoint.get("score_typical_range"),
+            "raw": {"name": endpoint.get("raw_name"),
+                    "value": endpoint.get("raw_value"),
+                    "unit": endpoint.get("raw_unit")},
         }
         if not computed:
             row["reason"] = _failure_reason(endpoint, hemo)

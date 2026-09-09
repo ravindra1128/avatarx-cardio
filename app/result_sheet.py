@@ -68,6 +68,7 @@ COLUMNS = [
     "Pulse Spectral", "Pulse Check", "Spectral ROI Agree",
     "Pulse Lattice", "Pulse Lattice N", "Pulse Check Mode",
     "Fit Basis", "Rate Method", "Rate Intervals",
+    "AS Tier", "VT Tier", "Fit Tier", "AS Raw", "VT Raw", "Fit HR",
 ]
 
 _POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sheet")
@@ -106,6 +107,14 @@ def _num(v, nd=4):
     except (TypeError, ValueError):
         return ""
     return round(f, nd) if f == f else ""      # NaN -> ""
+
+
+def _tier(items: dict, key: str) -> str:
+    return str((items.get(key) or {}).get("tier") or "")
+
+
+def _raw(items: dict, key: str, nd: int = 3):
+    return _num(((items.get(key) or {}).get("raw") or {}).get("value"), nd)
 
 
 def _card(items: dict, key: str) -> tuple:
@@ -235,6 +244,15 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
         "Rate Method": str(fit_d.get("resting_rate_method") or ""),
         "Rate Intervals": (fit_d.get("resting_rate_intervals")
                            if fit_d.get("resting_rate_intervals") is not None else ""),
+        # Display tiers (2026-09-09): the card columns above hold the 0-100
+        # score the user saw; these say how well it was evidenced and what
+        # marker it came from, so "measured" availability can still be read.
+        "AS Tier": _tier(items, "arterial_stiffness"),
+        "VT Tier": _tier(items, "vascular_tone"),
+        "Fit Tier": _tier(items, "cardiorespiratory_fitness"),
+        "AS Raw": _raw(items, "arterial_stiffness", 4),
+        "VT Raw": _raw(items, "vascular_tone", 2),
+        "Fit HR": _raw(items, "cardiorespiratory_fitness", 1),
     }
 
 

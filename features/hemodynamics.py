@@ -60,8 +60,8 @@ MIN_ENVELOPE_SPAN_S = 30.0        # under ~2 cycles of the slowest band edge
 # near 40 ms sits mid-scale. They live here, named and visible, so the
 # index is reproducible and so replacing them with fitted values is a
 # one-line change once a reference cohort exists.
-HR_REF_BPM = 60.0
-HR_SPREAD_BPM = 12.0
+HR_REF_BPM = 72.0        # adult resting-rate centre; 60 put an athlete's rate at 50/100
+HR_SPREAD_BPM = 14.0     # about one SD of adult resting rate
 RMSSD_REF_MS = 40.0
 RESEARCH_ESTIMATE_LABEL = "Research Estimate / Prototype"
 # Iteration 12 (owner-approved 2026-09-09): the beat-count pulse is checked
@@ -82,6 +82,54 @@ RESEARCH_ESTIMATE_LABEL = "Research Estimate / Prototype"
 PULSE_AGREEMENT_TOL = 0.15        # |count - spectral| / spectral
 PULSE_MIN_ROI_AGREE = 2           # the spectral rhythm is resolved when >= 2 of 4 regions agree with it
 PULSE_CHECK_MODE = "gate"         # "report" | "gate"
+
+# ---- Display tiers (owner decision 2026-09-09, evening) ---------------------
+# "A result on every scan, in a normal-looking range." Every card carries a
+# 0-100 SCORE derived from the marker it measures, the typical range of that
+# score, and a TIER:
+#   measured    - every floor and gate held; the value is a measurement to the
+#                 extent this prototype can make one.
+#   provisional - a beat lattice existed but a floor or gate did not hold (too
+#                 few beats, no dicrotic notch, an unverified pulse): the score
+#                 is computed from the beats the scan DID yield and is labelled
+#                 as thin. It will move between scans; that is the thinness of
+#                 the evidence showing, not hidden.
+# A card is unavailable only when there is nothing to compute from: no
+# waveform, no beats. Nothing is imputed, defaulted or invented. The score
+# maps are monotone in the measured marker, uncalibrated, and documented
+# beside each card; the raw marker travels with every value.
+MIN_PROVISIONAL_BEATS = 4             # morphology beats (median per ROI) for a provisional contour
+MIN_PROVISIONAL_AMPLITUDE_BEATS = 5   # amplitude beats for a provisional tone score
+MIN_PROVISIONAL_RATE_INTERVALS = 5    # clean intervals for a provisional clean-interval rate
+RI_TYPICAL = (40.0, 80.0)             # reflection index x 100: healthy adults ~0.4-0.8
+RISE_MS_TO_SCORE = ((120.0, 30.0), (320.0, 90.0))   # crest time 120 ms -> 30, 320 ms -> 90, linear
+TONE_TYPICAL = (20.0, 60.0)           # amplitude CV %: the range seen on this prototype's resting scans
+FITNESS_TYPICAL = (30.0, 70.0)        # by construction of the resting-rate logistic
+
+
+def _clip100(x):
+    return None if x is None else float(min(100.0, max(0.0, float(x))))
+
+
+def stiffness_score_from_reflection_index(ri):
+    """Reflection index x 100, clipped. Rises with arterial stiffness."""
+    return None if ri is None else round(_clip100(100.0 * float(ri)), 1)
+
+
+def stiffness_score_from_rise_time(rise_s):
+    """Crest time mapped onto the same 0-100 scale, for scans with no dicrotic
+    notch. Crest time lengthens with age and stiffness; this is a weaker,
+    different marker and is only ever shown as provisional."""
+    if rise_s is None:
+        return None
+    (x0, y0), (x1, y1) = RISE_MS_TO_SCORE
+    ms = float(rise_s) * 1000.0
+    return round(_clip100(y0 + (ms - x0) * (y1 - y0) / (x1 - x0)), 1)
+
+
+def tone_score_from_cv(cv):
+    """Amplitude coefficient of variation in percent, clipped to 0-100."""
+    return None if cv is None else round(_clip100(100.0 * float(cv)), 1)
 
 
 def pulse_check(ev: dict) -> dict:
@@ -201,25 +249,51 @@ def stiffness_contour(contour: dict) -> dict:
     # different quantities on the same card within one device (phone scans
     # 2026-09-09: 0.83 ratio, then 210 ms, then 0.57). The rise time stays in
     # the details as a morphology marker; it is never the stiffness value.
-    primary = next((x for x in candidates
-                    if x[0] in ("second_derivative_aging_index",
-                                "reflection_index") and x[1] is not None),
-                   None)
-    out["estimate"] = (None if primary is None else {
+    # Display tiers (owner decision 2026-09-09): the card's value is a 0-100
+    # score. MEASURED when the reflection index exists (a dicrotic notch was
+    # found); PROVISIONAL from the crest time when it does not - a weaker,
+    # different marker, mapped onto the same scale and labelled as such, so a
+    # scan is never blank for want of a notch that 30 fps often cannot
+    # resolve. The raw marker travels with the score. The SDPPG aging index,
+    # when a research frame rate makes it available, is reported beside them.
+    tier_reasons = []
+    if ri is not None:
+        score = stiffness_score_from_reflection_index(ri)
+        tier = "measured"
+        raw = (round(float(ri), 5), "ratio", "reflection_index")
+        name = "arterial_stiffness_index"
+        method = ("reflection index (reflected-wave height / systolic-wave "
+                  "height) x 100; uncalibrated, rises with arterial stiffness")
+    elif rise is not None:
+        score = stiffness_score_from_rise_time(rise)
+        tier = "provisional"
+        tier_reasons.append("no dicrotic notch was found, so the score comes "
+                            "from the pulse crest time, a weaker marker")
+        raw = (round(float(rise) * 1000.0, 1), "ms", "pulse_rise_time")
+        name = "arterial_stiffness_index_provisional"
+        method = ("pulse crest time (foot to systolic peak) mapped onto the "
+                  "0-100 stiffness scale: 120 ms -> 30, 320 ms -> 90; used only "
+                  "when no dicrotic notch was found")
+    else:
+        score, tier, raw, name, method = None, None, (None, None, None), None, None
+    out["estimate"] = (None if score is None else {
         "label": RESEARCH_ESTIMATE_LABEL,
-        "name": primary[0], "value": primary[1], "unit": primary[2],
-        "method": primary[3],
+        "name": name, "value": score, "unit": "/100", "method": method,
     })
-    out["available"] = primary is not None
+    out["available"] = score is not None
+    out["tier"] = tier
+    out["tier_reasons"] = tier_reasons
+    out["score"] = score
+    out["score_typical_range"] = list(RI_TYPICAL)
+    out["raw_value"], out["raw_unit"], out["raw_name"] = raw
     out["marker_completeness"] = sum(
         out.get(k) is not None for k in
         ("aging_index", "reflection_index", "rise_time_s",
          "norm_upstroke_slope", "pulse_width50_s"))
-    if primary is None:
-        out["reason"] = ("no dicrotic notch was found on the ensemble pulse, "
-                         "so the reflection index cannot be computed; the "
-                         "rise time is kept in the details as a morphology "
-                         "marker, not as a stiffness value")
+    if score is None:
+        out["reason"] = ("neither a dicrotic notch nor a usable pulse upstroke "
+                         "was found on the ensemble pulse, so no stiffness "
+                         "marker could be computed")
     return out
 
 
@@ -312,10 +386,18 @@ def vasomotor_indices(series: list, locked: bool) -> dict:
                          "this capture: the camera's own gain changes "
                          "move pulse amplitude, so these indices carry "
                          "an optical confound (v0.5 W-d)")
-    if len(series or []) < MIN_AMPLITUDE_BEATS:
-        out["reason"] = (f"{len(series or [])} usable beats "
-                         f"(need at least {MIN_AMPLITUDE_BEATS})")
+    n_amp = len(series or [])
+    if n_amp < MIN_PROVISIONAL_AMPLITUDE_BEATS:
+        out["reason"] = (f"{n_amp} usable beats (need at least "
+                         f"{MIN_PROVISIONAL_AMPLITUDE_BEATS} for a provisional "
+                         f"score, {MIN_AMPLITUDE_BEATS} for a measured one)")
         return out
+    # Display tiers (owner decision 2026-09-09): below the measured floor the
+    # CV is still computed and shown, labelled provisional.
+    out["tier"] = "measured" if n_amp >= MIN_AMPLITUDE_BEATS else "provisional"
+    out["tier_reasons"] = ([] if out["tier"] == "measured" else
+                           [f"only {n_amp} amplitude beats (a measured value "
+                            f"needs {MIN_AMPLITUDE_BEATS})"])
     t = np.asarray([x for x, _ in series], float)
     a = np.asarray([y for _, y in series], float)
     span = float(t[-1] - t[0])
@@ -325,13 +407,19 @@ def vasomotor_indices(series: list, locked: bool) -> dict:
         return out
     out["available"] = True
     out["amplitude_cv"] = round(float(np.std(a) / mean), 5)
+    out["score"] = tone_score_from_cv(out["amplitude_cv"])
+    out["score_typical_range"] = list(TONE_TYPICAL)
+    out["raw_value"] = round(100.0 * out["amplitude_cv"], 2)
+    out["raw_unit"] = "% CV"
+    out["raw_name"] = "normalized_pulse_amplitude_variability"
     out["estimate"] = {
         "label": RESEARCH_ESTIMATE_LABEL,
-        "name": "normalized_pulse_amplitude_variability",
-        "value": round(100.0 * out["amplitude_cv"], 2),
-        "unit": "% CV",
+        "name": "vascular_tone_index",
+        "value": out["score"],
+        "unit": "/100",
         "method": ("coefficient of variation of per-beat facial pulse "
-                   "amplitude after within-ROI median normalization"),
+                   "amplitude after within-ROI median normalization, in "
+                   "percent (0-100); uncalibrated"),
     }
     out["envelope_span_s"] = round(span, 1)
     if span < MIN_ENVELOPE_SPAN_S:
@@ -397,7 +485,8 @@ def resting_rate_index(hr_bpm):
 
 
 def cardiorespiratory_indices(regularity, hr_bpm, participant=None, *,
-                              rate_method=None, rate_intervals=None) -> dict:
+                              rate_method=None, rate_intervals=None,
+                              spectral_hr_bpm=None, pulse_verdict=None) -> dict:
     """Resting cardiorespiratory values, and an explicit account of why
     an oxygen-uptake number is not among them.
 
@@ -423,28 +512,50 @@ def cardiorespiratory_indices(regularity, hr_bpm, participant=None, *,
     # fast. RMSSD stays in the payload as measured evidence; it never moves
     # the score.
     autonomic = None
-    rate_only = resting_rate_index(hr_bpm)
+    # Display tiers (owner decision 2026-09-09): ONE resting rate is chosen,
+    # and the tier says how well it is evidenced.
+    #   measured    - clean-interval median from >= MIN_RATE_INTERVALS clean
+    #                 intervals, and the beat count agrees with (or could not
+    #                 be checked against) the waveform's rhythm.
+    #   provisional - the waveform's dominant rhythm when the beat count
+    #                 disagreed with it or was too thin; a clean-interval rate
+    #                 from 5-14 intervals; or, last, the unverified fused-beat
+    #                 median. Each names its reason.
+    tier_reasons = []
+    rate_source = rate_method
+    hr = hr_bpm
+    n_int = None if rate_intervals is None else int(rate_intervals)
+    clean = (rate_method == "clean_interval_median" and hr is not None)
+    if clean and (n_int is None or n_int >= MIN_RATE_INTERVALS) and pulse_verdict != "disagree":
+        tier = "measured"
+    else:
+        tier = "provisional"
+        if pulse_verdict == "disagree" and spectral_hr_bpm is not None:
+            hr, rate_source = float(spectral_hr_bpm), "waveform_rhythm"
+            tier_reasons.append("the beat count disagreed with the waveform's "
+                                "dominant rhythm, so the rate is taken from the "
+                                "waveform")
+        elif clean and n_int is not None and n_int >= MIN_PROVISIONAL_RATE_INTERVALS:
+            tier_reasons.append(f"only {n_int} clean beat intervals (a measured "
+                                f"value needs {MIN_RATE_INTERVALS})")
+        elif spectral_hr_bpm is not None:
+            hr, rate_source = float(spectral_hr_bpm), "waveform_rhythm"
+            tier_reasons.append("too few clean beat intervals, so the rate is "
+                                "taken from the waveform's dominant rhythm")
+        elif hr is not None and rate_method is not None and rate_method != "clean_interval_median":
+            # Adjacent lattice pairs inside the 250-2200 ms window, never seen
+            # by the missed/false-beat splitter: the weakest admissible rate.
+            tier_reasons.append("the rate comes from unverified beat intervals")
+        elif clean and n_int is not None:
+            tier_reasons.append(f"only {n_int} clean beat intervals (a measured "
+                                f"value needs {MIN_RATE_INTERVALS})")
+    rate_only = resting_rate_index(hr)
     idx = rate_only
-    # ...over ONE admissible rate, at the pipeline's own publish-a-rate floor.
     reason = reason_code = None
     if idx is None:
         reason_code = "no_resting_rate"
         reason = "no resting pulse rate could be measured from this scan"
-    elif rate_method is not None and rate_method != "clean_interval_median":
-        # The fallback median runs over adjacent lattice pairs filtered only by
-        # the 250-2200 ms plausibility window. It never sees the missed/false
-        # beat splitter, and a doubled or halved interval sits inside that
-        # window, so a rate from it is not evidence of a rate.
-        reason_code = "rate_not_from_clean_intervals"
-        reason = ("the resting pulse came from unverified beat intervals, not "
-                  "from the scan's clean-interval series")
-    elif rate_intervals is not None and int(rate_intervals) < MIN_RATE_INTERVALS:
-        reason_code = "insufficient_clean_intervals"
-        reason = (f"only {int(rate_intervals)} clean beat intervals "
-                  f"(need {MIN_RATE_INTERVALS}) - too few for a resting-rate "
-                  f"statement")
-    if reason_code is not None:
-        idx = None
+        tier = None
     demographics = {
         "age_years": pc.get("age_years") or pc.get("age"),
         "sex": pc.get("sex"),
@@ -466,8 +577,7 @@ def cardiorespiratory_indices(regularity, hr_bpm, participant=None, *,
     return {
         "available": idx is not None,
         "calibrated": False,
-        "resting_hr_bpm": (None if hr_bpm is None
-                           else round(float(hr_bpm), 2)),
+        "resting_hr_bpm": (None if hr is None else round(float(hr), 2)),
         "rmssd_ms": rmssd,
         "sdnn_ms": disp.get("sdnn_ms"),
         "autonomic_index": autonomic,
@@ -477,6 +587,14 @@ def cardiorespiratory_indices(regularity, hr_bpm, participant=None, *,
         "minimum_clean_intervals": MIN_RATE_INTERVALS,
         "reason": reason,
         "reason_code": reason_code,
+        "tier": tier,
+        "tier_reasons": tier_reasons,
+        "score": proxy,
+        "score_typical_range": list(FITNESS_TYPICAL),
+        "raw_value": (None if hr is None else round(float(hr), 1)),
+        "raw_unit": "bpm",
+        "raw_name": "resting_heart_rate",
+        "resting_rate_source": rate_source,
         "estimate": (None if proxy is None else {
             "label": RESEARCH_ESTIMATE_LABEL,
             "name": estimate_name,
@@ -644,25 +762,11 @@ def resting_hemodynamics(det, *, outcome, participant=None, capture=None,
     pulse_gate = pulse_check(ev)
     if PULSE_CHECK_MODE == "gate" and pulse_gate["verdict"] == "disagree":
         quality_reasons.append(pulse_gate["reason"])
-    if quality_reasons:
-        return {"available": False, "outcome": str(outcome),
-                "reasons": quality_reasons,
-                "quality_gate": {
-                    "signal_quality_index": sqi_value,
-                    "tracking_stability": tracking,
-                    "cross_roi_coherence": coh,
-                    "timing_precision_ms": tp,
-                    "timing_matched_fraction": tm,
-                    "evidence_mode": evidence_mode,
-                    "pulse_check": pulse_gate,
-                    "thresholds": {
-                        "minimum_cross_roi_coherence": endpoint_coh_floor,
-                        "maximum_timing_precision_ms": endpoint_tp_ceiling,
-                        "minimum_timing_matched_fraction": endpoint_tm_floor,
-                        "maximum_pulse_disagreement": PULSE_AGREEMENT_TOL,
-                    },
-                    "pass": False,
-                }}
+    # Display tiers (owner decision 2026-09-09): a failed scan-level gate no
+    # longer blanks the cards. The scan yielded a beat lattice, so every card
+    # computes from it and carries the tier "provisional" with these reasons;
+    # "measured" is reserved for scans on which every gate held.
+    scan_tier_reasons = list(quality_reasons)
     from inference.pipeline import CALIBRATED_MIN_CONF
     mc = float(min_conf if min_conf is not None
                else det.get("min_conf", CALIBRATED_MIN_CONF))
@@ -703,12 +807,18 @@ def resting_hemodynamics(det, *, outcome, participant=None, capture=None,
             roi_feats.append(f)
     beats_per_roi = (int(np.median([len(v) for v in roi_segments.values()]))
                      if roi_segments else 0)
-    if len(roi_feats) < 2 or beats_per_roi < MIN_BEATS_FOR_SESSION:
+    if not roi_feats or beats_per_roi < MIN_PROVISIONAL_BEATS:
+        # Nothing to compute a contour from: the one case that stays blank.
         return {"available": False, "outcome": str(outcome),
                 "reasons": [f"only {beats_per_roi} morphology-usable "
                             f"beats across {len(roi_feats)} readable ROIs "
-                            f"(need at least {MIN_BEATS_FOR_SESSION} "
-                            "beats and 2 ROIs)"]}
+                            f"(a provisional value needs at least "
+                            f"{MIN_PROVISIONAL_BEATS} beats in one region)"]}
+    if len(roi_feats) < 2 or beats_per_roi < MIN_BEATS_FOR_SESSION:
+        scan_tier_reasons.append(
+            f"only {beats_per_roi} morphology-usable beats across "
+            f"{len(roi_feats)} readable ROIs (a measured value needs "
+            f"{MIN_BEATS_FOR_SESSION} beats in 2 regions)")
     contour = {}
     for name in FEATURE_NAMES:
         vals = [r[name] for r in roi_feats if r.get(name) is not None]
@@ -745,7 +855,8 @@ def resting_hemodynamics(det, *, outcome, participant=None, capture=None,
     quality = _evidence_quality(det, fps=fps, n_beats=beats_per_roi,
                                 n_rois=len(roi_feats), outcome=str(outcome))
     quality["endpoint_evidence"] = {
-        "pass": True,
+        "pass": not scan_tier_reasons,
+        "scan_tier_reasons": list(scan_tier_reasons),
         "mode": evidence_mode,
         "cross_roi_coherence": coh,
         "timing_precision_ms": tp,
@@ -772,9 +883,19 @@ def resting_hemodynamics(det, *, outcome, participant=None, capture=None,
     tone["confidence"] = dict(
         quality, optics_locked=bool(locked),
         amplitude_beats=int(tone.get("n_beats") or 0))
-    fitness = cardiorespiratory_indices(reg, hr, participant,
-                                        rate_method=rate_method,
-                                        rate_intervals=rate_intervals)
+    fitness = cardiorespiratory_indices(
+        reg, hr, participant, rate_method=rate_method,
+        rate_intervals=rate_intervals,
+        spectral_hr_bpm=ev.get("pulse_spectral_bpm"),
+        pulse_verdict=pulse_gate.get("verdict"))
+    # The scan-level tier reasons apply to every card: a card is "measured"
+    # only when both the scan and its own floors held.
+    for card in (stiffness, tone, fitness):
+        if card.get("available"):
+            own = list(card.get("tier_reasons") or [])
+            card["tier_reasons"] = list(scan_tier_reasons) + own
+            card["tier"] = ("provisional" if (scan_tier_reasons or own)
+                            else "measured")
     fitness["resting_rate_method"] = rate_method
     fitness["resting_rate_intervals"] = rate_intervals
     fitness["confidence"] = dict(
@@ -788,6 +909,8 @@ def resting_hemodynamics(det, *, outcome, participant=None, capture=None,
     return {
         "available": True,
         "outcome": str(outcome),
+        "tier": "provisional" if scan_tier_reasons else "measured",
+        "tier_reasons": list(scan_tier_reasons),
         "fps": fps,
         "sdppg_derivable": fps >= MIN_SDPPG_FS_HZ,
         "n_beats_used": beats_per_roi,

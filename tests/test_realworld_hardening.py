@@ -389,10 +389,16 @@ def test_unverified_pulse_never_forces_biomarker_values(clean_pipeline):
     bad["ingest"].track = copy.copy(det["ingest"].track)
     bad["ingest"].track.stability = 0.2
     hemo = resting_hemodynamics(bad, outcome="NO_RESULT")
-    assert hemo["available"] is False
+    # Display tiers (2026-09-09): the worst evidence still yields scores, but
+    # never a MEASURED one, and every card says why it is provisional.
+    assert hemo["available"] is True and hemo["tier"] == "provisional"
+    assert len(hemo["tier_reasons"]) >= 3          # sqi, tracking, evidence
     payload = report_biomarkers(
         SimpleNamespace(outcome=SimpleNamespace(value="NO_RESULT")), bad,
         hemodynamics=hemo)
-    assert payload["complete"] is False
-    assert all(x["status"] == "not_computed" and x["value"] is None and
-               x["reason"] for x in payload["items"])
+    for x in payload["items"]:
+        if x["status"] == "computed":
+            assert x["tier"] == "provisional" and x["tier_reasons"]
+            assert 0.0 <= float(x["value"]) <= 100.0
+        else:
+            assert x["value"] is None and x["reason"]
