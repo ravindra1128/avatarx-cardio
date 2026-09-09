@@ -52,6 +52,15 @@ separately; never blend them into one "accuracy" number.
   appears because a floor moved is not an improvement; it is a fabricated one.
 - **The response contract is frozen.** The webapp reads `outcome`, `biomarkers.items[]`,
   `timing`, `trim`, `clock`. Add fields; never rename or remove.
+- **A finished scan outlives its connection (2026-09-09).** `/api/process-video` answers
+  with a CHUNKED body, emitting a space every 5 s while the analysis runs, so the socket
+  never sits idle for the 20–45 s it takes (a real phone scan died there with
+  `ERR_HTTP2_PING_FAILED` after the work was done). Leading whitespace is valid JSON, so
+  parsers are unaffected; the trade is that a job which raises returns HTTP 200 with
+  `{"error": ...}` instead of a 500, which clients already treat as a failure. The job
+  also runs to completion when the client vanishes, and the result is held for
+  `AFIB_RESULT_TTL_S` (15 min) under the client's `upload_id` — `GET /api/result?upload_id=…`
+  collects it. Never key that cache on `session`: the webapp sends a constant one.
 - **Evidence fields are additive.** `debug.evidence` gained `pulse_lattice_bpm`,
   `pulse_spectral_bpm`, `pulse_spectral_snr`, `pulse_spectral_roi_bpm`,
   `pulse_spectral_roi_agree`, `pulse_agreement` (2026-09-09); the cards' confidence carries

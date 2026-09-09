@@ -49,7 +49,8 @@ import threading
 import time
 import traceback
 import uuid
-from concurrent.futures import ThreadPoolExecutor
+from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FutureTimeout
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -74,6 +75,43 @@ _INFLIGHT = threading.BoundedSemaphore(MAX_CONCURRENT)
 # are actually running, plus which build is serving, so this is visible.
 _INFLIGHT_COUNT = 0
 _INFLIGHT_LOCK = threading.Lock()
+
+# A finished result outlives the connection that asked for it.
+#
+# WHY: a scan is ~10 s of upload followed by 20-45 s of analysis during which
+# no bytes move, and a phone on a mobile radio does not always survive that
+# quiet stretch — 2026-09-09 a scan died with ERR_HTTP2_PING_FAILED after the
+# work was done, and the completed analysis was thrown away because the socket
+# it belonged to was gone. Results are held briefly by session id so the
+# client can come back and collect one instead of re-recording and re-uploading
+# 30 MB. In memory only, small and short-lived: this is a delivery retry, not
+# storage, and the tracking sheet remains the durable record.
+RESULT_TTL_S = float(os.environ.get("AFIB_RESULT_TTL_S", "900"))    # 15 min
+MAX_CACHED_RESULTS = int(os.environ.get("AFIB_MAX_CACHED_RESULTS", "32"))
+_RESULTS: "OrderedDict[str, tuple]" = OrderedDict()
+_RESULTS_LOCK = threading.Lock()
+
+
+def _remember_result(session, doc: dict) -> None:
+    if not session or not isinstance(doc, dict):
+        return
+    with _RESULTS_LOCK:
+        _RESULTS[str(session)] = (time.time(), doc)
+        _RESULTS.move_to_end(str(session))
+        while len(_RESULTS) > MAX_CACHED_RESULTS:
+            _RESULTS.popitem(last=False)
+
+
+def _recall_result(session):
+    """The most recent completed result for `session`, or None. Expired
+    entries are dropped on the way past."""
+    now = time.time()
+    with _RESULTS_LOCK:
+        for k in [k for k, (ts, _) in _RESULTS.items()
+                  if now - ts > RESULT_TTL_S]:
+            _RESULTS.pop(k, None)
+        item = _RESULTS.get(str(session or ""))
+    return None if item is None else item[1]
 _STARTED_AT = time.time()
 BUILD_SHA = (os.environ.get("RAILWAY_GIT_COMMIT_SHA")      # set by Railway
              or os.environ.get("AFIB_BUILD_SHA") or "unknown")[:12]
@@ -410,6 +448,12 @@ def _parse_envelope(body: bytes, ctype: str, query: dict) -> tuple:
     v = _one("capture_note")
     if isinstance(v, str) and v.strip():
         cap["note"] = v.strip()[:300]
+    # A per-attempt id, used ONLY as the key a dropped client collects its
+    # result under. The session id cannot serve: the webapp sends a constant
+    # one in development, so keying on it could hand back a previous scan.
+    v = _one("upload_id")
+    if isinstance(v, str) and v.strip():
+        header["upload_id"] = v.strip()[:80]
     if cap:
         header["client_capture"] = cap
         m = header.setdefault("manifest", {}) if isinstance(header.get("manifest"), (dict, type(None))) else {}
@@ -467,6 +511,81 @@ class MeasureHandler(BaseHTTPRequestHandler):
                   f"(would have been HTTP {code})", flush=True)
             self.close_connection = True
 
+    def _json_streaming(self, fut, *, heartbeat_s: float = 5.0):
+        """Answer a long job without letting the connection go quiet.
+
+        The response starts NOW, chunked, and a single space is emitted every
+        `heartbeat_s` until the job's JSON is ready. Leading whitespace is
+        valid JSON, so every client still parses the body unchanged — but the
+        socket never sits idle for the 20-45 s the analysis takes, which is
+        what killed a real phone scan on 2026-09-09 (ERR_HTTP2_PING_FAILED).
+
+        The status line goes out before the job finishes, so a job that raises
+        cannot become an HTTP 500 here; it becomes a 200 whose body is
+        {"error": ...}. Clients already treat a body-level `error` as a
+        failure, so this is the same outcome by a different route.
+
+        Returns (doc, delivered): `doc` is always the job's result — the
+        caller still records it even when `delivered` is False because the
+        client vanished mid-heartbeat.
+        """
+        gone = False
+
+        def _write(data: bytes) -> bool:
+            try:
+                self.wfile.write(data)
+                self.wfile.flush()
+                return True
+            except (BrokenPipeError, ConnectionResetError,
+                    ConnectionAbortedError, OSError):
+                return False
+
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Transfer-Encoding", "chunked")
+            self.send_header("Cache-Control", "no-store")
+            self._cors()
+            self.end_headers()
+            self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError,
+                ConnectionAbortedError, OSError):
+            gone = True
+
+        beats = 0
+        while True:
+            try:
+                doc = fut.result(timeout=heartbeat_s)
+                break
+            except _FutureTimeout:
+                if gone:
+                    continue                      # finish the job regardless
+                beats += 1
+                if not _write(b"1\r\n \r\n"):
+                    gone = True
+                    print("[measure] client gone mid-analysis; finishing the "
+                          "job so the result can be collected later",
+                          flush=True)
+            except Exception as e:                # noqa: BLE001
+                traceback.print_exc()
+                doc = {"error": f"{type(e).__name__}: {e}"}
+                break
+
+        if gone:
+            self.close_connection = True
+            return doc, False
+        body = json.dumps(doc, default=str).encode()
+        ok = _write(f"{len(body):X}\r\n".encode() + body + b"\r\n")
+        ok = _write(b"0\r\n\r\n") and ok
+        if not ok:
+            self.close_connection = True
+            print("[measure] client gone before the result could be written",
+                  flush=True)
+        elif beats:
+            print(f"[measure] kept the connection warm with {beats} "
+                  f"heartbeat(s)", flush=True)
+        return doc, ok
+
     def do_OPTIONS(self):
         self.send_response(204)
         self._cors()
@@ -483,6 +602,19 @@ class MeasureHandler(BaseHTTPRequestHandler):
                              "sheet": result_sheet.status(),
                              "max_concurrent": MAX_CONCURRENT,
                              "max_upload_mb": MAX_UPLOAD_BYTES // (1024 * 1024)})
+            return
+        if urlparse(self.path).path in ("/api/result", "/api/results"):
+            # Collect a result whose connection died. Additive: the normal
+            # path is unchanged and nothing depends on this being called.
+            q = parse_qs(urlparse(self.path).query)
+            sid = (q.get("upload_id") or q.get("session") or [""])[0]
+            doc = _recall_result(sid)
+            if doc is None:
+                self._json(404, {"error": "no completed result for that "
+                                          "session", "session": sid,
+                                 "ttl_s": RESULT_TTL_S})
+                return
+            self._json(200, doc)
             return
         self._json(404, {"error": "not found"})
 
@@ -567,8 +699,19 @@ class MeasureHandler(BaseHTTPRequestHandler):
         t_job = time.perf_counter()
         try:
             fut = _POOL.submit(self._run, video_bytes, header)
-            doc = fut.result()
-            self._json(200, doc)
+            # Streamed: the connection stays warm while the analysis runs, and
+            # the job is finished even if the client disappears mid-way.
+            doc, delivered = self._json_streaming(fut)
+            # Hold the finished result briefly so a client whose connection
+            # died can collect it from GET /api/result?session=... instead of
+            # losing a completed scan.
+            _remember_result(header.get("upload_id") or header.get("session"),
+                             doc)
+            if not delivered:
+                print(f"[measure] result kept as "
+                      f"{(header.get('upload_id') or header.get('session'))!r} "
+                      f"for {RESULT_TTL_S:.0f}s — client may collect it",
+                      flush=True)
             # AFTER the response is on the wire: queue the tracking-sheet row.
             # Runs on its own thread, never delays or fails the scan result.
             result_sheet.schedule_append(doc, extra={
