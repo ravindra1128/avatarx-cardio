@@ -365,13 +365,21 @@ def segment_amplitudes(waves: dict, seg_ts: np.ndarray,
 
 
 def pool_amplitudes(per_roi: dict) -> list:
-    """Pool the (already normalised) per-ROI series beat by beat. A ROI
-    needs MIN_AMPLITUDE_BEATS over the whole scan. Region order is the
+    """Pool the (already normalised) per-ROI series beat by beat. A ROI needs
+    MIN_PROVISIONAL_AMPLITUDE_BEATS over the whole scan. Region order is the
     insertion order of `per_roi` (ROI_NAMES) — it decides the reference
-    series on ties, so it must not change."""
+    series on ties, so it must not change.
+
+    The floor here is the PROVISIONAL one, not the measured one (fixed
+    2026-09-09): pooling at 12 meant a scan whose beats were spread across
+    capture segments had every region dropped and reached the card with ZERO
+    amplitude beats, so the card could never produce the provisional score the
+    lower floor was meant to allow. A real scan showed exactly that — 18 usable
+    beats over 4 segments, and "0 usable beats" on the card. Deciding measured
+    from provisional is the CARD's job, on the pooled count."""
     pooled: list = []
     for roi, amps in per_roi.items():
-        if len(amps) < MIN_AMPLITUDE_BEATS:
+        if len(amps) < MIN_PROVISIONAL_AMPLITUDE_BEATS:
             continue
         pooled.append(sorted(amps, key=lambda x: x[0]))
     if not pooled:
@@ -391,8 +399,8 @@ def pool_amplitudes(per_roi: dict) -> list:
 
 def amplitude_series(waves: dict, seg_ts: np.ndarray,
                      windows: dict) -> list:
-    """One-segment convenience, identical to the pre-split behaviour for a
-    single segment: normalise within the segment, pool with the 12 floor."""
+    """One-segment convenience: normalise within the segment, then pool at the
+    provisional floor (see pool_amplitudes)."""
     return pool_amplitudes(segment_amplitudes(waves, seg_ts, windows))
 
 

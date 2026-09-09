@@ -417,3 +417,11 @@ Measured during the integration work, all on these same recordings:
   raw crest time also shortens with a faster pulse, which is why this path is band-only and
   provisional-only. The results page no longer renders `limitation` or `warning`: both are
   constant caveats that repeated on every card, burying the per-scan reason.
+- **Amplitude pooling starved the provisional tone score (fixed 2026-09-09).**
+  `pool_amplitudes` dropped any region holding fewer than `MIN_AMPLITUDE_BEATS` (12) BEFORE
+  the card ever saw the series, so lowering the card's provisional floor to 5 bought nothing:
+  a scan whose beats were spread across capture segments arrived at the card with an empty
+  series and reported "0 usable beats". Observed on a real scan with 18 usable beats over 4
+  segments. Pooling now uses `MIN_PROVISIONAL_AMPLITUDE_BEATS`; deciding measured from
+  provisional is the card's job, on the pooled count. Lesson: when a floor is lowered, check
+  every earlier stage that also filters on it.

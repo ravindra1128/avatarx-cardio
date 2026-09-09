@@ -166,3 +166,23 @@ def test_a_research_frame_rate_card_uses_the_aging_index_not_the_reflection_inde
         assert out["band"] is None
     else:                       # this fixture's keys are not the SDPPG shape
         assert out["estimate"]["name"] == "reflection_index"
+
+
+def test_pooling_does_not_starve_the_provisional_tone_score():
+    """2026-09-09: a real scan had 18 usable beats over 4 capture segments and
+    the tone card still read "0 usable beats". Pooling dropped every region for
+    holding fewer than the MEASURED floor, so the card never saw the beats the
+    provisional floor was lowered to admit. Pooling uses the provisional floor;
+    the card decides the tier from what it receives."""
+    from features.hemodynamics import pool_amplitudes
+    n = MIN_PROVISIONAL_AMPLITUDE_BEATS
+    per_roi = {"forehead": [(i * 1.0, 1.0 + 0.1 * i) for i in range(n)],
+               "cheek_l": [(i * 1.0, 1.0 + 0.1 * i) for i in range(n)]}
+    pooled = pool_amplitudes(per_roi)
+    assert len(pooled) >= n
+    out = vasomotor_indices(pooled, locked=True)
+    assert out["available"] and out["tier"] == "provisional"
+
+    # below the provisional floor there is still nothing to pool
+    thin = {"forehead": [(i * 1.0, 1.0) for i in range(n - 1)]}
+    assert pool_amplitudes(thin) == []
