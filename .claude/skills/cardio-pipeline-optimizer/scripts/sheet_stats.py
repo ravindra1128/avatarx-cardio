@@ -24,7 +24,13 @@ from app import result_sheet as rs  # noqa: E402
 
 RETEST_WINDOW_MIN = 30
 HR_TOL_BPM = 5.0
-CV_TOL = 0.5
+# The owner's stated target for a repeat scan of the same person under similar
+# conditions: each card within +/-10-20 %. The metric below is the RELATIVE
+# DIFFERENCE |a - b| / mean(a, b), not a coefficient of variation - with two
+# samples the two differ by a constant factor, and the relative difference is
+# what "within 20 %" actually means. Judged against both ends of the target.
+RETEST_TARGET = 0.20
+RETEST_STRETCH = 0.10
 MIN_ROWS = 10
 CARDS = ("Arterial Stiffness", "Vascular Tone", "Fitness")
 
@@ -68,29 +74,67 @@ def availability(rows: list[dict]) -> dict:
             "per_card_computed": per_card}
 
 
-def retest(rows: list[dict]) -> dict:
-    """Pairs = consecutive rows from the same User Agent within the window."""
+def _find_pairs(rows: list[dict]) -> list[tuple]:
+    """Consecutive scans from the same phone inside the retest window."""
     by_ua: dict[str, list[dict]] = {}
     for r in sorted(rows, key=lambda r: r["_ts"]):
         by_ua.setdefault(r.get("User Agent", ""), []).append(r)
     pairs = []
-    for ua, rs_ in by_ua.items():
+    for _ua, rs_ in by_ua.items():
         for a, b in zip(rs_, rs_[1:]):
             if b["_ts"] - a["_ts"] <= timedelta(minutes=RETEST_WINDOW_MIN):
                 pairs.append((a, b))
-    out = {"n_pairs": len(pairs), "window_min": RETEST_WINDOW_MIN, "cards": {}}
+    return pairs
+
+
+def _rel_diff(x, y):
+    if x is None or y is None:
+        return None
+    m = (x + y) / 2
+    return None if not m else abs(x - y) / m
+
+
+def retest(rows: list[dict]) -> dict:
+    pairs = _find_pairs(rows)
+    out = {"n_pairs": len(pairs), "window_min": RETEST_WINDOW_MIN,
+           "target": RETEST_TARGET, "cards": {}}
     for c in CARDS:
-        cvs = []
-        for a, b in pairs:
+        ds = [d for d in (_rel_diff(_f(a.get(c)), _f(b.get(c))) for a, b in pairs)
+              if d is not None]
+        out["cards"][c] = {
+            "n_pairs_with_value": len(ds),
+            "median_rel_diff": round(st.median(ds), 3) if ds else None,
+            "within_20pct": round(sum(d <= RETEST_TARGET for d in ds) / len(ds), 3) if ds else None,
+            "within_10pct": round(sum(d <= RETEST_STRETCH for d in ds) / len(ds), 3) if ds else None,
+        }
+    return out
+
+
+def pair_detail(rows: list[dict]) -> list[dict]:
+    """One row per pair, with the evidence needed to read it honestly.
+
+    A card differing between two scans only means the MEASUREMENT is unstable
+    if the person did not change. The reference pulse from the other device is
+    the independent check on that, so it is reported beside every card."""
+    out = []
+    for a, b in _find_pairs(rows):
+        gap = (b["_ts"] - a["_ts"]).total_seconds() / 60.0
+        d = {"first": a["Timestamp (UTC)"], "second": b["Timestamp (UTC)"],
+             "gap_min": round(gap, 1),
+             "outcomes": [a.get("Outcome"), b.get("Outcome")],
+             "ref_hr": [_f(a.get("Ref HR")), _f(b.get("Ref HR"))],
+             "ref_hr_rel_diff": _rel_diff(_f(a.get("Ref HR")), _f(b.get("Ref HR"))),
+             "pulse": [_f(a.get("Pulse bpm")), _f(b.get("Pulse bpm"))],
+             "pulse_check": [a.get("Pulse Check"), b.get("Pulse Check")],
+             "cards": {}}
+        for c in CARDS:
             x, y = _f(a.get(c)), _f(b.get(c))
-            if x is None or y is None:
-                continue
-            m = (x + y) / 2
-            if m:
-                cvs.append(abs(x - y) / m)     # 2-sample CV proxy: |Δ| / mean
-        out["cards"][c] = {"n_pairs_with_value": len(cvs),
-                           "median_cv": round(st.median(cvs), 3) if cvs else None,
-                           "within_tol": round(sum(v <= CV_TOL for v in cvs) / len(cvs), 3) if cvs else None}
+            rd = _rel_diff(x, y)
+            d["cards"][c] = {"values": [x, y], "rel_diff": None if rd is None else round(rd, 3),
+                             "verdict": ("no value" if rd is None else
+                                         "within 10%" if rd <= RETEST_STRETCH else
+                                         "within 20%" if rd <= RETEST_TARGET else "outside 20%")}
+        out.append(d)
     return out
 
 
@@ -105,18 +149,33 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--since", default=None)
     ap.add_argument("--json", default=None)
+    ap.add_argument("--pairs", action="store_true",
+                    help="print every pair in full - the view for a deliberate test-retest")
     args = ap.parse_args()
     rows = load_rows(args.since)
     rep = {"rows": len(rows), "availability": availability(rows), "retest": retest(rows),
+           "pairs": pair_detail(rows),
            "pulse_agreement": pulse_agreement(rows), "meaningful": len(rows) >= MIN_ROWS}
     if args.json:
         Path(args.json).write_text(json.dumps(rep, indent=1, default=str))
     a, t, pa = rep["availability"], rep["retest"], rep["pulse_agreement"]
     print(f"[sheet] rows={rep['rows']}" + ("" if rep["meaningful"] else f"  (n < {MIN_ROWS}: not yet meaningful)"))
     print(f"  availability   {a['availability']}  ({a['n_all_three']}/{a['n_quality']} quality scans; per card {a['per_card_computed']})")
-    print(f"  retest ({t['window_min']} min) {t['n_pairs']} pair(s): " + "; ".join(
-        f"{c}: median CV {v['median_cv']} within-tol {v['within_tol']} (n={v['n_pairs_with_value']})" for c, v in t["cards"].items()))
+    print(f"  retest ({t['window_min']} min) {t['n_pairs']} pair(s), target ±{t['target']:.0%}: " + "; ".join(
+        f"{c}: median |Δ|/mean {v['median_rel_diff']} within-20% {v['within_20pct']} (n={v['n_pairs_with_value']})"
+        for c, v in t["cards"].items()))
     print(f"  pulse vs ref   within ±{pa['tol_bpm']} bpm: {pa['within_tol']}  median |Δ| {pa['median_abs_diff']}  (n={pa['n_with_reference']})")
+    if args.pairs:
+        for d in rep["pairs"]:
+            print(f"\n  --- {d['first']} -> {d['second']}  ({d['gap_min']} min apart)")
+            print(f"      outcomes {d['outcomes']}   pipeline pulse {d['pulse']}   pulse check {d['pulse_check']}")
+            rd = d["ref_hr_rel_diff"]
+            same = "unknown" if rd is None else ("the person barely changed" if rd <= 0.05
+                                                 else f"the person's own pulse moved {rd:.0%}")
+            print(f"      reference pulse {d['ref_hr']}  -> {same}")
+            for c, v in d["cards"].items():
+                pct = "" if v["rel_diff"] is None else f"{v['rel_diff']:.0%}"
+                print(f"      {c:20} {str(v['values']):24} {pct:>5}  {v['verdict']}")
 
 
 if __name__ == "__main__":
