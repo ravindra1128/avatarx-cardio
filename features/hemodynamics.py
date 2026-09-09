@@ -105,7 +105,30 @@ MIN_PROVISIONAL_RATE_INTERVALS = 5    # clean intervals for a provisional clean-
 # index as a ratio, the way it read before the 0-100 rescale. Tone and fitness
 # stay on 0-100, where a percentage and a bounded proxy already belong.
 RI_TYPICAL = (0.4, 0.8)               # reflection index, healthy adults
-RISE_TYPICAL_MS = (120.0, 320.0)      # pulse crest time, the no-notch fallback marker
+AGING_TYPICAL = (-2.0, 1.0)           # SDPPG aging index (Takazawa), young -> old
+# Pulse crest time, the no-notch fallback marker. Direction (checked against
+# the PPG literature 2026-09-09, and OPPOSITE to what this file assumed at
+# first): the pulse wave reaches the periphery sooner through stiffer
+# arteries, so a SHORTER crest time reads as higher stiffness. These bounds
+# are population rules of thumb, not calibrated thresholds, and raw crest time
+# also shortens with a faster pulse - both reasons this marker is only ever
+# reported as a band, and only as provisional.
+RISE_TYPICAL_MS = (120.0, 320.0)
+
+
+def stiffness_band_from_rise_time(rise_s):
+    """"High" / "Typical" / "Low" from the pulse crest time, or None.
+
+    A word rather than a number, because the crest time is a different
+    quantity from the reflection index this card normally reports and the two
+    must never share a number slot (owner, 2026-09-09)."""
+    if rise_s is None:
+        return None
+    ms = float(rise_s) * 1000.0
+    lo, hi = RISE_TYPICAL_MS
+    if ms < lo:
+        return "High"
+    return "Low" if ms > hi else "Typical"
 TONE_TYPICAL = (20.0, 60.0)           # amplitude CV %: the range seen on this prototype's resting scans
 FITNESS_TYPICAL = (30.0, 70.0)        # by construction of the resting-rate logistic
 
@@ -244,38 +267,60 @@ def stiffness_contour(contour: dict) -> dict:
     # resolve. The raw marker travels with the score. The SDPPG aging index,
     # when a research frame rate makes it available, is reported beside them.
     tier_reasons = []
-    if ri is not None:
+    band = None
+    if agi is not None:
+        # ONE metric per capture class (iteration 13): at a research frame rate
+        # the second-derivative aging index is the better marker and is the
+        # card's value; a device always sits in one class, so its card never
+        # changes quantity between scans.
+        score, unit, typical = round(float(agi), 3), "index", AGING_TYPICAL
+        tier = "measured"
+        name = "second_derivative_aging_index"
+        method = ("second-derivative aging index (b - c - d - e)/a on the "
+                  "ensemble pulse (Takazawa 1998); dimensionless, rises with "
+                  "arterial stiffness. Needs a research frame rate")
+        out["raw_value"], out["raw_unit"], out["raw_name"] = (
+            round(float(agi), 5), "index", "second_derivative_aging_index")
+    elif ri is not None:
         score, unit, typical = round(float(ri), 3), "ratio", RI_TYPICAL
+        out["raw_value"], out["raw_unit"], out["raw_name"] = (
+            round(float(ri), 5), "ratio", "reflection_index")
         tier = "measured"
         name = "reflection_index"
         method = ("reflection index: reflected-wave height / systolic-wave "
                   "height on the ensemble pulse; dimensionless and "
                   "uncalibrated, rises with arterial stiffness")
     elif rise is not None:
-        # A DIFFERENT quantity in different units, shown only because a card
-        # with no value is worse than a labelled one. The tier and the reason
-        # carry that; nothing here silently swaps one marker for another.
-        score, unit, typical = round(float(rise) * 1000.0, 1), "ms", RISE_TYPICAL_MS
+        # A DIFFERENT quantity from the reflection index, so it is reported as
+        # a BAND rather than a number: two unrelated numbers must never share
+        # this card's value slot (owner, 2026-09-09). The crest time itself
+        # still travels in raw_value and reaches the tracking sheet.
+        score, unit, typical = None, None, None
+        band = stiffness_band_from_rise_time(rise)
         tier = "provisional"
-        tier_reasons.append("no dicrotic notch was found, so this is the pulse "
-                            "crest time in milliseconds, a different and weaker "
+        tier_reasons.append("no dicrotic notch was found, so this is a band "
+                            "from the pulse crest time, a different and weaker "
                             "marker than the reflection index")
-        name = "pulse_rise_time"
-        method = ("pulse crest time, foot to systolic peak, on the ensemble "
-                  "waveform; reported only when no dicrotic notch was found, "
-                  "and never as a reflection index")
+        name = "pulse_crest_time_band"
+        method = ("band from the pulse crest time (foot to systolic peak) "
+                  "against a 120-320 ms rule-of-thumb range: a shorter crest "
+                  "time reads as stiffer. Uncalibrated, confounded by pulse "
+                  "rate, and reported only when no dicrotic notch was found")
+        out["raw_value"], out["raw_unit"], out["raw_name"] = (
+            round(float(rise) * 1000.0, 1), "ms", "pulse_rise_time")
     else:
         score, unit, typical, tier, name, method = None, None, None, None, None, None
-    out["estimate"] = (None if score is None else {
+    out["estimate"] = (None if (score is None and band is None) else {
         "label": RESEARCH_ESTIMATE_LABEL,
-        "name": name, "value": score, "unit": unit, "method": method,
+        "name": name, "value": score, "unit": unit, "band": band,
+        "method": method,
     })
-    out["available"] = score is not None
+    out["available"] = score is not None or band is not None
     out["tier"] = tier
     out["tier_reasons"] = tier_reasons
     out["score"] = score
+    out["band"] = band
     out["score_typical_range"] = None if typical is None else list(typical)
-    out["raw_value"], out["raw_unit"], out["raw_name"] = score, unit, name
     out["marker_completeness"] = sum(
         out.get(k) is not None for k in
         ("aging_index", "reflection_index", "rise_time_s",

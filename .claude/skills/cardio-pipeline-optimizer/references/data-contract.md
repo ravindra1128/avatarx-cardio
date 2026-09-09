@@ -404,3 +404,16 @@ Measured during the integration work, all on these same recordings:
   `AS Raw / VT Raw / Fit HR` keep the evidence grade and the marker, so measured-only
   availability is still computable. `sheet_stats` availability counts computed cards of
   either tier until it is taught to split them.
+- **Stiffness units and the crest-time band (2026-09-09 late, owner-directed).** The card
+  reports `reflection_index` as a dimensionless ratio (typical 0.4-0.8), as it did before the
+  brief 0-100 rescale. With no dicrotic notch it reports `band` ("High" | "Typical" | "Low")
+  from the pulse crest time against 120-320 ms, and `value`/`unit` stay None - two unrelated
+  numbers must never share the card's value slot. `estimate.band` and `item.band` are the new
+  contract fields; the sheet's card cell holds whichever of number or band the scan produced,
+  and `AS Raw` keeps the crest time in ms. **Direction correction:** a stiffer artery carries
+  the pulse wave faster, so a SHORTER crest time means HIGHER stiffness. The first version of
+  the 0-100 map in this repo had it backwards (120 ms -> 30, 320 ms -> 90); it was never
+  deployed in a released scan and is now gone. The thresholds are population rules of thumb and
+  raw crest time also shortens with a faster pulse, which is why this path is band-only and
+  provisional-only. The results page no longer renders `limitation` or `warning`: both are
+  constant caveats that repeated on every card, burying the per-scan reason.

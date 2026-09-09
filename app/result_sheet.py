@@ -119,7 +119,12 @@ def _raw(items: dict, key: str, nd: int = 3):
 
 def _card(items: dict, key: str) -> tuple:
     it = items.get(key) or {}
-    return (_num(it.get("value"), 3), it.get("unit") or "", it.get("status") or "",
+    # A card may report a band ("Typical") rather than a number; the cell holds
+    # whichever it produced, and the raw marker is in its own column.
+    value = _num(it.get("value"), 3)
+    if value == "" and it.get("band"):
+        value = str(it["band"])
+    return (value, it.get("unit") or "", it.get("status") or "",
             it.get("reason") or "")
 
 

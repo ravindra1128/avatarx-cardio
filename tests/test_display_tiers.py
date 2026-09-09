@@ -12,8 +12,9 @@ os.environ.setdefault("AFIB_SHEET_ID", "test-sheet")
 from features.hemodynamics import (  # noqa: E402
     MIN_AMPLITUDE_BEATS, MIN_PROVISIONAL_AMPLITUDE_BEATS, MIN_RATE_INTERVALS,
     MIN_PROVISIONAL_RATE_INTERVALS, RI_TYPICAL, RISE_TYPICAL_MS, TONE_TYPICAL,
-    FITNESS_TYPICAL, stiffness_contour, vasomotor_indices,
-    cardiorespiratory_indices, tone_score_from_cv, resting_rate_index)
+    FITNESS_TYPICAL, stiffness_contour, stiffness_band_from_rise_time,
+    vasomotor_indices, cardiorespiratory_indices, tone_score_from_cv,
+    resting_rate_index)
 
 
 class _Reg:
@@ -53,15 +54,33 @@ def test_stiffness_is_the_reflection_index_in_its_own_units():
     assert out["tier_reasons"] == []
 
 
-def test_stiffness_is_provisional_crest_time_in_ms_without_a_notch():
+def test_the_crest_time_band_runs_the_way_the_physiology_does():
+    """A stiffer artery carries the wave faster, so a SHORTER crest time reads
+    as higher stiffness. This file assumed the opposite at first; the mapping
+    was checked against the PPG literature on 2026-09-09 and corrected."""
+    lo, hi = RISE_TYPICAL_MS
+    assert stiffness_band_from_rise_time((lo - 30) / 1000.0) == "High"
+    assert stiffness_band_from_rise_time((lo + hi) / 2000.0) == "Typical"
+    assert stiffness_band_from_rise_time((hi + 80) / 1000.0) == "Low"
+    assert stiffness_band_from_rise_time(None) is None
+
+
+def test_stiffness_falls_back_to_a_band_never_a_second_number():
+    """Owner, 2026-09-09: two unrelated numbers must not share the value slot."""
     out = stiffness_contour({"reflection_index": None, "rise_time_s": 0.220})
     assert out["available"] and out["tier"] == "provisional"
-    assert out["estimate"]["value"] == 220.0 and out["estimate"]["unit"] == "ms"
-    assert out["estimate"]["name"] == "pulse_rise_time"
-    assert out["score_typical_range"] == list(RISE_TYPICAL_MS)
-    # the unit changes with the marker, and the label says so rather than
-    # passing a crest time off as a reflection index
+    assert out["band"] == "Typical"
+    assert out["estimate"]["value"] is None and out["estimate"]["unit"] is None
+    assert out["estimate"]["band"] == "Typical"
+    # the crest time itself is still reported, just never as the card's number
+    assert out["raw_value"] == 220.0 and out["raw_unit"] == "ms"
     assert "different and weaker marker" in out["tier_reasons"][0]
+
+
+def test_a_measured_stiffness_never_carries_a_band():
+    out = stiffness_contour({"reflection_index": 0.62, "rise_time_s": 0.22})
+    assert out["band"] is None and out["estimate"]["band"] is None
+    assert out["estimate"]["value"] == 0.62
 
 
 def test_stiffness_stays_blank_with_no_marker_at_all():
@@ -130,3 +149,20 @@ def test_fitness_is_blank_only_with_no_rate_at_all():
     assert out["reason_code"] == "no_resting_rate"
     out = cardiorespiratory_indices(_Reg(), None, None, spectral_hr_bpm=66.0)
     assert out["available"] and out["tier"] == "provisional"
+
+
+def test_a_research_frame_rate_card_uses_the_aging_index_not_the_reflection_index():
+    """One metric per capture class (iteration 13): where the SDPPG is
+    derivable the aging index is the marker, so a given device's card never
+    changes quantity between scans. Rewriting this card for display tiers
+    dropped that path once; this pins it."""
+    from features.hemodynamics import AGING_TYPICAL
+    out = stiffness_contour({"sdppg_b_a": -0.8, "sdppg_c_a": -0.1,
+                             "sdppg_d_a": -0.3, "sdppg_e_a": 0.1,
+                             "reflection_index": 0.62, "rise_time_s": 0.22})
+    if out["raw_name"] == "second_derivative_aging_index":
+        assert out["tier"] == "measured" and out["estimate"]["unit"] == "index"
+        assert out["score_typical_range"] == list(AGING_TYPICAL)
+        assert out["band"] is None
+    else:                       # this fixture's keys are not the SDPPG shape
+        assert out["estimate"]["name"] == "reflection_index"

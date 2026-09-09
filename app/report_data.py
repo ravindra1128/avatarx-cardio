@@ -27,7 +27,8 @@ _BIOMARKERS = (
 _BIOMARKER_METHODS = {
     "arterial_stiffness": (
         "pulse-contour reflection index (dimensionless ratio); when no dicrotic "
-        "notch is found, the pulse crest time in ms instead, marked provisional"
+        "notch is found, a band from the pulse crest time instead, marked "
+        "provisional and never given as a number on the same scale"
     ),
     "vascular_tone": (
         "0-100 index: coefficient of variation of per-beat facial pulse "
@@ -80,7 +81,11 @@ def report_biomarkers(scan_result, det: dict, *, capture: dict = None,
         endpoint = dict(hemo.get(key) or {})
         estimate = dict(endpoint.get("estimate") or {})
         value = estimate.get("value")
-        computed = bool(endpoint.get("available")) and value is not None
+        # A card may report a BAND instead of a number when its marker is not
+        # the one the card normally reports (stiffness without a dicrotic
+        # notch). Both count as a result; only one of them is ever a number.
+        band = estimate.get("band")
+        computed = bool(endpoint.get("available")) and (value is not None or band is not None)
         confidence = dict(endpoint.get("confidence") or
                           hemo.get("quality") or
                           hemo.get("quality_gate") or {})
@@ -97,6 +102,7 @@ def report_biomarkers(scan_result, det: dict, *, capture: dict = None,
             "label": "Research Estimate / Prototype",
             "status": "computed" if computed else "not_computed",
             "value": value if computed else None,
+            "band": band if computed else None,
             "unit": estimate.get("unit") if computed else None,
             "metric": estimate.get("name") if computed else None,
             "method": (estimate.get("method") or
