@@ -363,3 +363,29 @@ Measured during the integration work, all on these same recordings:
   says about the metric itself: one person's reflection index across 10 recordings spans
   0.21–1.20 (CV ≈ 0.57). One metric removes the unit switch; it does not make the number
   repeatable at this capture quality — that needs ≥ 50 fps + locked exposure (plan step 4).
+- **Iteration 14 (2026-09-09, owner-directed): the pulse check binds, the fitness card
+  gets one basis and one floor.** `PULSE_CHECK_MODE = "gate"`, so a RESOLVED disagreement
+  (>= 2 of 4 regions backing the spectrum, |count - spectral| / spectral > 0.15) abstains
+  all three cards; an unresolved or unread spectrum changes nothing. The fitness card is
+  `resting_rate_index(hr)` unconditionally - RMSSD is reported and never scored - over a
+  rate that must come from `clean_interval_median` (the `calibrated_fused_beat_median`
+  fallback never sees the missed/false-beat splitter, so a doubled or halved interval
+  survives it) and from >= `MIN_RATE_INTERVALS` = 15 clean intervals, the same floor
+  `heads/head_rate_flags.MIN_INTERVALS` and `decision.evidence.min_intervals_any` already
+  use to decide whether a rate may be published at all.
+  Holdout: cards 0.4445 -> 0.2222, signal 0.7828 and determinism 1.0 held, consistency
+  became unmeasurable. Per record: **b45221 loses all three** (lattice 74 bpm from 10
+  intervals vs spectral 51, regions 48/69/51/51, agreement 0.45 - no reference exists for
+  the corpus, and that is exactly the point: a 45 % disagreement means the rate is
+  unknown); **95cc7e loses fitness only** (8 clean intervals < 15, pulses agree, stiffness
+  and tone still compute); **demo_9340 unchanged**. Gate rejects by construction - an
+  abstention rule can only lower `cards`, and with `MIN_CARDS_FOR_CV = 3` on a 6-record
+  holdout it takes `consistency` to None rather than raising it, so the reliability clause
+  can never fire either. Do not propose loosening the instrument to make this pass.
+  Two production defects found while implementing: `app/measure_api.py` passed no
+  `capture=` to `report_biomarkers`, so the vascular-tone card recorded
+  `optics_locked: False` on every Railway scan while the sheet read TRUE from the same
+  request (the block is fail-soft, so `tests/test_biomarker_wiring.py` now pins the call
+  by AST - a `NameError` there would silently replace all three cards with an error dict);
+  and the webapp had the whole "why not computed" paragraph inside a JSX comment, so an
+  abstaining card gave no reason anywhere on the page.

@@ -66,3 +66,94 @@ def test_verdicts():
     bad = pulse_check({"pulse_agreement": 0.82, "pulse_lattice_bpm": 100,
                        "pulse_spectral_bpm": 55, "pulse_spectral_roi_agree": 4})
     assert bad["verdict"] == "disagree" and "100 bpm" in bad["reason"] and "55 bpm" in bad["reason"]
+
+
+# --- gate mode + the fitness card's single basis (iteration 14, 2026-09-09) ---
+
+from features.hemodynamics import (  # noqa: E402
+    PULSE_CHECK_MODE, PULSE_MIN_ROI_AGREE, MIN_RATE_INTERVALS,
+    autonomic_index, resting_rate_index, cardiorespiratory_indices)
+
+
+class _Reg:
+    """Minimal regularity stand-in: only `dispersion` is read by the card."""
+    def __init__(self, rmssd=None, sdnn=None):
+        self.dispersion = {"rmssd_ms": rmssd, "sdnn_ms": sdnn}
+
+
+def test_the_pulse_check_is_binding():
+    assert PULSE_CHECK_MODE == "gate"
+
+
+def test_the_motivating_production_scan_abstains():
+    """2026-09-09: beat count 84, spectral 60, 2 of 4 regions backing the
+    spectrum, reference device 64. This must be a resolved disagreement."""
+    v = pulse_check({"pulse_lattice_bpm": 84.0, "pulse_spectral_bpm": 60.0,
+                     "pulse_agreement": 0.40, "pulse_spectral_roi_agree": 2})
+    assert v["verdict"] == "disagree"
+    assert v["mode"] == "gate"
+
+
+def test_a_disagreement_the_regions_do_not_back_is_not_a_veto():
+    """The same numbers with one region behind the spectrum must NOT abstain:
+    an unresolved spectrum leaves the cards exactly as they were."""
+    for ra in range(PULSE_MIN_ROI_AGREE):
+        v = pulse_check({"pulse_lattice_bpm": 84.0, "pulse_spectral_bpm": 60.0,
+                         "pulse_agreement": 0.40, "pulse_spectral_roi_agree": ra})
+        assert v["verdict"] == "unresolved", ra
+    # and a missing count fails closed to unresolved, never to a veto
+    assert pulse_check({"pulse_lattice_bpm": 84.0, "pulse_spectral_bpm": 60.0,
+                        "pulse_agreement": 0.40})["verdict"] == "unresolved"
+
+
+def test_fitness_uses_one_basis_regardless_of_rmssd():
+    """The composite is gone: the same rate gives the same score whether or
+    not an RMSSD survived cleaning. This is the 27.1-then-50.1 defect."""
+    kw = {"rate_method": "clean_interval_median", "rate_intervals": 20}
+    with_hrv = cardiorespiratory_indices(_Reg(rmssd=286.0), 83.5, None, **kw)
+    without = cardiorespiratory_indices(_Reg(rmssd=None), 83.5, None, **kw)
+    assert with_hrv["fitness_proxy_score"] == without["fitness_proxy_score"]
+    assert with_hrv["fitness_proxy_score"] == round(100 * resting_rate_index(83.5), 1)
+    assert with_hrv["fitness_proxy_score"] != 50.1      # the composite's answer
+    assert with_hrv["fitness_proxy_basis"] == "resting_hr_only"
+    assert with_hrv["autonomic_index"] is None
+    assert with_hrv["rmssd_ms"] == 286.0                # reported, never scored
+
+
+def test_fitness_needs_the_pipelines_own_publish_a_rate_floor():
+    at = cardiorespiratory_indices(_Reg(), 60.0, None,
+                                   rate_method="clean_interval_median",
+                                   rate_intervals=MIN_RATE_INTERVALS)
+    assert at["available"] is True and at["reason_code"] is None
+    below = cardiorespiratory_indices(_Reg(), 60.0, None,
+                                      rate_method="clean_interval_median",
+                                      rate_intervals=MIN_RATE_INTERVALS - 1)
+    assert below["available"] is False
+    assert below["reason_code"] == "insufficient_clean_intervals"
+    assert str(MIN_RATE_INTERVALS) in below["reason"]
+
+
+def test_a_rate_from_unsplit_intervals_is_inadmissible_at_any_count():
+    """The fallback median never sees the missed/false-beat splitter, so a
+    doubled or halved interval survives it. Count cannot buy that back."""
+    out = cardiorespiratory_indices(_Reg(), 60.0, None,
+                                    rate_method="calibrated_fused_beat_median",
+                                    rate_intervals=30)
+    assert out["available"] is False
+    assert out["reason_code"] == "rate_not_from_clean_intervals"
+
+
+def test_legacy_callers_without_rate_provenance_still_work():
+    """Fixtures that call the function positionally must not start abstaining."""
+    out = cardiorespiratory_indices(_Reg(rmssd=40.0), 60.0)
+    assert out["available"] is True
+    assert out["fitness_proxy_basis"] == "resting_hr_only"
+
+
+def test_autonomic_index_survives_as_a_function_but_not_as_the_basis():
+    """Kept public for its own tests and for research use; never the card."""
+    assert autonomic_index(60.0, 40.0) is not None
+    out = cardiorespiratory_indices(_Reg(rmssd=40.0), 60.0, None,
+                                    rate_method="clean_interval_median",
+                                    rate_intervals=20)
+    assert out["autonomic_index"] is None

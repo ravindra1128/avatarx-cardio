@@ -140,9 +140,14 @@ def test_resting_fitness_proxy_is_numeric_without_fabricating_oxygen_uptake():
                                     {"age_years": 44, "sex": "F"})
     assert out["available"] is True
     assert out["resting_hr_bpm"] == 58.0 and out["rmssd_ms"] == 42.0
-    assert out["autonomic_index"] is not None
+    # One basis since 2026-09-09: RMSSD is reported as measured evidence and
+    # never enters the score, so the composite index is not computed at all.
+    # Two scans of one person read 27.1 then 50.1 out of 100 when the card
+    # chose its formula from whether RMSSD had survived cleaning.
+    assert out["autonomic_index"] is None
+    assert out["fitness_proxy_basis"] == "resting_hr_only"
     assert out["fitness_proxy_score"] == pytest.approx(
-        100.0 * out["autonomic_index"], abs=0.11)
+        100.0 * out["resting_rate_index"], abs=0.11)
     assert out["estimate"]["value"] == out["fitness_proxy_score"]
     assert out["estimate"]["label"] == "Research Estimate / Prototype"
     assert out["estimate"]["unit"] == "/100"
@@ -174,8 +179,8 @@ def test_cardiorespiratory_uses_measured_hr_without_imputing_rmssd():
     assert out["fitness_proxy_score"] == pytest.approx(
         100.0 * out["resting_rate_index"], abs=0.11)
     assert out["fitness_proxy_basis"] == "resting_hr_only"
-    assert "RMSSD was unavailable and was not imputed" in \
-        out["estimate"]["method"]
+    assert "heart-rate-only" in out["estimate"]["method"]
+    assert "never enters the score" in out["estimate"]["method"]
 
 
 # ------------------------------------------------------- end to end

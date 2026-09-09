@@ -34,8 +34,9 @@ _BIOMARKER_METHODS = {
         "within-region median normalization"
     ),
     "cardiorespiratory_fitness": (
-        "resting-heart-rate and RMSSD research proxy; heart-rate-only "
-        "fallback is identified explicitly and RMSSD is never imputed"
+        "resting-heart-rate research proxy over at least 15 clean beat "
+        "intervals; interval variability is reported beside it but never "
+        "enters the score, and no value is ever imputed"
     ),
 }
 

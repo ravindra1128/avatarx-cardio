@@ -46,6 +46,13 @@ import numpy as np
 # calls LF, applied to AMPLITUDE rather than to intervals.
 VASOMOTION_BAND_HZ = (0.04, 0.15)
 MIN_AMPLITUDE_BEATS = 12          # below this the envelope has no spectrum
+# The fitness card's resting rate must clear the same floor the pipeline uses
+# to decide whether a rate or rhythm statement may be published at all
+# (heads/head_rate_flags.MIN_INTERVALS, decision.evidence.min_intervals_any).
+# Until 2026-09-09 the card had no floor of its own: one production scan
+# published a score from FOUR clean intervals while the same response refused
+# to publish a pulse from those same four.
+MIN_RATE_INTERVALS = 15
 MIN_ENVELOPE_SPAN_S = 30.0        # under ~2 cycles of the slowest band edge
 
 # PLANNING reference points for the autonomic index. They are population
@@ -62,13 +69,19 @@ RESEARCH_ESTIMATE_LABEL = "Research Estimate / Prototype"
 # spectral_pulse). The verdict travels with every scan (evidence, cards'
 # confidence, tracking sheet). Mode "gate" additionally abstains the cards
 # on a RESOLVED disagreement — an additional fail-closed check, never a
-# loosening. It ships in "report" mode: the corpus has three card-bearing
-# holdout recordings, so an abstention rule cannot be scored there; the
-# sheet's reference pulse decides which estimate is right when they
-# disagree, and the owner flips the mode on that evidence.
+# loosening. It is BINDING as of 2026-09-09 (owner decision, on production
+# evidence): a phone scan reported a beat count of 84 bpm against a spectral
+# rhythm of 60 bpm, with 2 of 4 regions agreeing on the spectrum, while the
+# reference device measured 64 bpm. The spectrum was right to within 4 bpm,
+# the beat count was 20 bpm wrong, and all three cards computed on the wrong
+# rate. Only a RESOLVED disagreement abstains: an unread or unresolved
+# spectrum leaves the cards exactly as they were. The corpus cannot score
+# this - an abstention rule can only lower the gate's `cards` metric - so it
+# ships on the owner's decision, with every verdict written to the tracking
+# sheet for audit.
 PULSE_AGREEMENT_TOL = 0.15        # |count - spectral| / spectral
 PULSE_MIN_ROI_AGREE = 2           # the spectral rhythm is resolved when >= 2 of 4 regions agree with it
-PULSE_CHECK_MODE = "report"       # "report" | "gate"
+PULSE_CHECK_MODE = "gate"         # "report" | "gate"
 
 
 def pulse_check(ev: dict) -> dict:
@@ -97,7 +110,10 @@ def pulse_check(ev: dict) -> dict:
         out["reason"] = ("the beat count could not be checked: "
                          + ("no clean beat intervals" if not finite(pl)
                             else "no dominant rhythm could be read from the waveform"))
-    elif ra is not None and int(ra) < PULSE_MIN_ROI_AGREE:
+    elif ra is None:
+        out["verdict"] = "unresolved"
+        out["reason"] = "the regions' agreement on the waveform's rhythm was not measured"
+    elif int(ra) < PULSE_MIN_ROI_AGREE:
         out["verdict"] = "unresolved"
         out["reason"] = (f"the facial regions do not agree on the waveform's rhythm "
                          f"({int(ra)} of 4 within 10 % of {float(ps):.0f} bpm)")
@@ -380,7 +396,8 @@ def resting_rate_index(hr_bpm):
     return round(float(1.0 / (1.0 + np.exp(-z))), 5)
 
 
-def cardiorespiratory_indices(regularity, hr_bpm, participant=None) -> dict:
+def cardiorespiratory_indices(regularity, hr_bpm, participant=None, *,
+                              rate_method=None, rate_intervals=None) -> dict:
     """Resting cardiorespiratory values, and an explicit account of why
     an oxygen-uptake number is not among them.
 
@@ -397,9 +414,37 @@ def cardiorespiratory_indices(regularity, hr_bpm, participant=None) -> dict:
         else {}
     pc = participant or {}
     rmssd = disp.get("rmssd_ms")
-    autonomic = autonomic_index(hr_bpm, rmssd)
-    rate_only = resting_rate_index(hr_bpm) if autonomic is None else None
-    idx = autonomic if autonomic is not None else rate_only
+    # ONE basis, always (owner decision 2026-09-09). The card used to switch
+    # between a heart-rate+RMSSD composite and a heart-rate-only transform
+    # depending on whether RMSSD survived cleaning. Those are different scales,
+    # so the same person 14 minutes apart read 27.1 then 50.1 out of 100 - and
+    # the 50.1 needed an RMSSD of 286 ms to appear while the reference device
+    # measured 36 ms, an eightfold inflation cancelling a pulse 20 bpm too
+    # fast. RMSSD stays in the payload as measured evidence; it never moves
+    # the score.
+    autonomic = None
+    rate_only = resting_rate_index(hr_bpm)
+    idx = rate_only
+    # ...over ONE admissible rate, at the pipeline's own publish-a-rate floor.
+    reason = reason_code = None
+    if idx is None:
+        reason_code = "no_resting_rate"
+        reason = "no resting pulse rate could be measured from this scan"
+    elif rate_method is not None and rate_method != "clean_interval_median":
+        # The fallback median runs over adjacent lattice pairs filtered only by
+        # the 250-2200 ms plausibility window. It never sees the missed/false
+        # beat splitter, and a doubled or halved interval sits inside that
+        # window, so a rate from it is not evidence of a rate.
+        reason_code = "rate_not_from_clean_intervals"
+        reason = ("the resting pulse came from unverified beat intervals, not "
+                  "from the scan's clean-interval series")
+    elif rate_intervals is not None and int(rate_intervals) < MIN_RATE_INTERVALS:
+        reason_code = "insufficient_clean_intervals"
+        reason = (f"only {int(rate_intervals)} clean beat intervals "
+                  f"(need {MIN_RATE_INTERVALS}) - too few for a resting-rate "
+                  f"statement")
+    if reason_code is not None:
+        idx = None
     demographics = {
         "age_years": pc.get("age_years") or pc.get("age"),
         "sex": pc.get("sex"),
@@ -409,20 +454,15 @@ def cardiorespiratory_indices(regularity, hr_bpm, participant=None) -> dict:
     }
     missing = [k for k, v in demographics.items() if v is None]
     proxy = None if idx is None else round(100.0 * float(idx), 1)
-    if autonomic is not None:
-        estimate_name = "resting_cardiorespiratory_fitness_proxy"
-        estimate_method = (
-            "logistic transform of equal-weight resting-HR and RMSSD "
-            "terms: 0.5*(60-HR)/12 + 0.5*ln(RMSSD/40)"
-        )
-        basis = "resting_hr_and_rmssd"
-    else:
-        estimate_name = "resting_rate_cardiorespiratory_proxy"
-        estimate_method = (
-            "heart-rate-only logistic research transform: (60-HR)/12; "
-            "RMSSD was unavailable and was not imputed"
-        )
-        basis = "resting_hr_only"
+    estimate_name = "resting_rate_cardiorespiratory_proxy"
+    estimate_method = (
+        "heart-rate-only logistic research transform: (60-HR)/12, over a "
+        f"resting rate taken from at least {MIN_RATE_INTERVALS} clean beat "
+        "intervals. Interval variability is reported beside it and never "
+        "enters the score: on camera captures it is dominated by beat-timing "
+        "noise, so including it would change the scale rather than the meaning."
+    )
+    basis = "resting_hr_only"
     return {
         "available": idx is not None,
         "calibrated": False,
@@ -434,6 +474,9 @@ def cardiorespiratory_indices(regularity, hr_bpm, participant=None) -> dict:
         "resting_rate_index": rate_only,
         "fitness_proxy_score": proxy,
         "fitness_proxy_basis": basis if proxy is not None else None,
+        "minimum_clean_intervals": MIN_RATE_INTERVALS,
+        "reason": reason,
+        "reason_code": reason_code,
         "estimate": (None if proxy is None else {
             "label": RESEARCH_ESTIMATE_LABEL,
             "name": estimate_name,
@@ -729,7 +772,9 @@ def resting_hemodynamics(det, *, outcome, participant=None, capture=None,
     tone["confidence"] = dict(
         quality, optics_locked=bool(locked),
         amplitude_beats=int(tone.get("n_beats") or 0))
-    fitness = cardiorespiratory_indices(reg, hr, participant)
+    fitness = cardiorespiratory_indices(reg, hr, participant,
+                                        rate_method=rate_method,
+                                        rate_intervals=rate_intervals)
     fitness["resting_rate_method"] = rate_method
     fitness["resting_rate_intervals"] = rate_intervals
     fitness["confidence"] = dict(

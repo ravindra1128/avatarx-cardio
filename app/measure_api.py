@@ -301,7 +301,17 @@ def measure_video(video_path: str, *, manifest=None,
     # research panel must never break a measure response.
     try:
         from app.report_data import report_biomarkers
-        doc["biomarkers"] = report_biomarkers(result, det)
+        # The client's lock state must reach the cards, not only the sheet:
+        # without it the vascular-tone card records optics_locked=False on
+        # every scan and carries an "optics not locked" caveat that its own
+        # request contradicts (found 2026-09-09). The request handler merges
+        # header["manifest"] — which carries exposure_locked / awb_locked —
+        # into `manifest`, so that is the dict the cards need. NOTE: this
+        # whole block is fail-soft, so a NameError here would silently
+        # replace every card with an error dict; tests/test_biomarker_wiring.py
+        # pins it.
+        doc["biomarkers"] = report_biomarkers(
+            result, det, capture=manifest or {})
     except Exception as e:                       # noqa: BLE001
         doc["biomarkers"] = {"error": f"{type(e).__name__}: {e}"}
     # The five gated research tracks are OFF by default here. They cost a

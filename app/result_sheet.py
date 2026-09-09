@@ -66,6 +66,8 @@ COLUMNS = [
     # Capture state reported by the client (step 1: exposure lock + pre-check).
     "AE Locked", "AWB Locked", "Client FPS", "Face Luma", "Capture Note",
     "Pulse Spectral", "Pulse Check", "Spectral ROI Agree",
+    "Pulse Lattice", "Pulse Lattice N", "Pulse Check Mode",
+    "Fit Basis", "Rate Method", "Rate Intervals",
 ]
 
 _POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sheet")
@@ -112,6 +114,17 @@ def _card(items: dict, key: str) -> tuple:
             it.get("reason") or "")
 
 
+def _pulse_check_mode(ev: dict) -> str:
+    """"gate" / "report" / "" — which regime this row was measured under."""
+    if not ev or "pulse_agreement" not in ev:
+        return ""
+    try:
+        from features.hemodynamics import PULSE_CHECK_MODE
+        return str(PULSE_CHECK_MODE)
+    except Exception:                       # the sheet never breaks a result
+        return ""
+
+
 def _pulse_check_cell(ev: dict) -> str:
     """'agree 63 vs 60' / 'disagree 100 vs 55' / 'unresolved: ...' / ''."""
     if not ev or "pulse_agreement" not in ev:
@@ -145,6 +158,7 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
     a_s = _card(items, "arterial_stiffness")
     v_t = _card(items, "vascular_tone")
     fit = _card(items, "cardiorespiratory_fitness")
+    fit_d = (items.get("cardiorespiratory_fitness") or {}).get("details") or {}
     ex = extra or {}
     ref = doc.get("reference") or {}
     cap = doc.get("client_capture") or {}
@@ -204,6 +218,19 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
         "Pulse Check": _pulse_check_cell(ev),
         "Spectral ROI Agree": (ev.get("pulse_spectral_roi_agree")
                                if ev.get("pulse_spectral_roi_agree") is not None else ""),
+        # The other side of the cross-check, and the evidence behind it: a blank
+        # "Pulse bpm" is explained by "Pulse Lattice N" below the 15-interval
+        # publish floor. "Pulse Check Mode" tells report-mode rows from
+        # gate-mode rows when reading the history back.
+        "Pulse Lattice": _num(ev.get("pulse_lattice_bpm"), 1),
+        "Pulse Lattice N": (ev.get("pulse_lattice_n_intervals")
+                            if ev.get("pulse_lattice_n_intervals") is not None else ""),
+        "Pulse Check Mode": _pulse_check_mode(ev),
+        # Why the fitness card computed or abstained, without opening the JSON.
+        "Fit Basis": str(fit_d.get("fitness_proxy_basis") or ""),
+        "Rate Method": str(fit_d.get("resting_rate_method") or ""),
+        "Rate Intervals": (fit_d.get("resting_rate_intervals")
+                           if fit_d.get("resting_rate_intervals") is not None else ""),
     }
 
 
