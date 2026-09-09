@@ -208,6 +208,14 @@ def run_with_details(video_path: str, manifest: Optional[dict] = None,
         series, rs, sqi.components,
         per_roi_trains={r: np.array([b.t_s for b in bs])
                         for r, bs in per_roi_beats.items()})
+    # Iteration 12 (owner-approved 2026-09-09): the waveform's dominant
+    # rhythm, independent of beat counting, and its agreement with the
+    # clean-interval pulse. The endpoint cards fail closed on disagreement
+    # (features/hemodynamics.py); the rate head keeps reporting its count.
+    from inference.evidence import spectral_pulse, pulse_agreement
+    evidence.update(spectral_pulse(raw_waveforms, fps))
+    evidence["pulse_agreement"] = pulse_agreement(
+        evidence.get("pulse_lattice_bpm"), evidence.get("pulse_spectral_bpm"))
     evidence["capture_gaps"] = int(n_gaps)
     evidence["capture_segments"] = [(float(ts[a]), float(ts[b - 1]))
                                     for a, b in segments]

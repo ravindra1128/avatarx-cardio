@@ -52,6 +52,10 @@ separately; never blend them into one "accuracy" number.
   appears because a floor moved is not an improvement; it is a fabricated one.
 - **The response contract is frozen.** The webapp reads `outcome`, `biomarkers.items[]`,
   `timing`, `trim`, `clock`. Add fields; never rename or remove.
+- **Evidence fields are additive.** `debug.evidence` gained `pulse_lattice_bpm`,
+  `pulse_spectral_bpm`, `pulse_spectral_snr`, `pulse_spectral_roi_bpm`,
+  `pulse_spectral_roi_agree`, `pulse_agreement` (2026-09-09); the cards' confidence carries
+  `endpoint_evidence.pulse_check`. Legacy evidence without them reads "not_evaluated".
 - **The sheet never delays a result.** `app/result_sheet.py` runs after the response is
   written; keep it that way.
 
@@ -84,6 +88,7 @@ separately; never blend them into one "accuracy" number.
 | 2026-09-07 | vascular-tone 12-beat floor applies to the whole scan, not per capture segment | gated accept; single-segment clips identical |
 | 2026-09-08 | reliability over availability: the gate accepts a consistency gain (≥ +0.05, signal/determinism held) even if fewer cards compute | `gate.py` reliability clause; iterations 7–8 tried under it, both rejected on evidence |
 | 2026-09-08 | lever 1 approved: additive per-patch traces in `capture/ingest.py` + SNR-based combination in evidence | three variants gated, all rejected (values scatter); reverted; design kept in the skill's known results |
+| 2026-09-09 | three changes approved, in order: pulse cross-check, one metric per stiffness card, fitness heart-rate-only | pulse cross-check built in REPORT mode (`features/hemodynamics.py::PULSE_CHECK_MODE`): the corpus cannot score an abstention rule (3 card-bearing holdout records), so every scan reports agree/disagree/unresolved on the sheet (`Pulse Check`) and the owner flips to `gate` on sheet evidence against the reference pulse |
 
 ## Repeatability plan (owner-agreed 2026-09-08, after the literature review)
 

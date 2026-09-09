@@ -57,6 +57,59 @@ HR_REF_BPM = 60.0
 HR_SPREAD_BPM = 12.0
 RMSSD_REF_MS = 40.0
 RESEARCH_ESTIMATE_LABEL = "Research Estimate / Prototype"
+# Iteration 12 (owner-approved 2026-09-09): the beat-count pulse is checked
+# against the waveform's dominant rhythm (inference/evidence.py::
+# spectral_pulse). The verdict travels with every scan (evidence, cards'
+# confidence, tracking sheet). Mode "gate" additionally abstains the cards
+# on a RESOLVED disagreement — an additional fail-closed check, never a
+# loosening. It ships in "report" mode: the corpus has three card-bearing
+# holdout recordings, so an abstention rule cannot be scored there; the
+# sheet's reference pulse decides which estimate is right when they
+# disagree, and the owner flips the mode on that evidence.
+PULSE_AGREEMENT_TOL = 0.15        # |count - spectral| / spectral
+PULSE_MIN_ROI_AGREE = 2           # the spectral rhythm is resolved when >= 2 of 4 regions agree with it
+PULSE_CHECK_MODE = "report"       # "report" | "gate"
+
+
+def pulse_check(ev: dict) -> dict:
+    """Verdict of the beat count against the waveform's dominant rhythm.
+
+    verdict: "not_evaluated" (evidence without the fields: fixtures, legacy
+    callers), "unresolved" (no estimate, or the regions disagree on the
+    rhythm), "agree", "disagree". Pure function of the evidence dict."""
+    pl, ps = ev.get("pulse_lattice_bpm"), ev.get("pulse_spectral_bpm")
+    pa, ra = ev.get("pulse_agreement"), ev.get("pulse_spectral_roi_agree")
+    out = {"pulse_lattice_bpm": pl, "pulse_spectral_bpm": ps,
+           "pulse_agreement": pa, "pulse_spectral_roi_agree": ra,
+           "tolerance": PULSE_AGREEMENT_TOL, "mode": PULSE_CHECK_MODE,
+           "verdict": "not_evaluated", "reason": None}
+    if "pulse_agreement" not in ev:
+        return out
+
+    def finite(v):
+        try:
+            return bool(np.isfinite(float(v)))
+        except (TypeError, ValueError):
+            return False
+
+    if not (finite(pl) and finite(ps) and finite(pa)):
+        out["verdict"] = "unresolved"
+        out["reason"] = ("the beat count could not be checked: "
+                         + ("no clean beat intervals" if not finite(pl)
+                            else "no dominant rhythm could be read from the waveform"))
+    elif ra is not None and int(ra) < PULSE_MIN_ROI_AGREE:
+        out["verdict"] = "unresolved"
+        out["reason"] = (f"the facial regions do not agree on the waveform's rhythm "
+                         f"({int(ra)} of 4 within 10 % of {float(ps):.0f} bpm)")
+    elif float(pa) <= PULSE_AGREEMENT_TOL:
+        out["verdict"] = "agree"
+        out["reason"] = (f"beat count {float(pl):.0f} bpm agrees with the waveform's "
+                         f"dominant rhythm {float(ps):.0f} bpm")
+    else:
+        out["verdict"] = "disagree"
+        out["reason"] = (f"the beat count ({float(pl):.0f} bpm) disagrees with the "
+                         f"waveform's dominant rhythm ({float(ps):.0f} bpm)")
+    return out
 
 
 def aging_index(contour: dict):
@@ -532,6 +585,11 @@ def resting_hemodynamics(det, *, outcome, participant=None, capture=None,
     if not endpoint_evidence_ok:
         quality_reasons.append(
             "pulse beats are not independently verified across facial regions")
+    # Pulse cross-check (iteration 12): reported on every scan; abstains
+    # the cards only in "gate" mode and only on a RESOLVED disagreement.
+    pulse_gate = pulse_check(ev)
+    if PULSE_CHECK_MODE == "gate" and pulse_gate["verdict"] == "disagree":
+        quality_reasons.append(pulse_gate["reason"])
     if quality_reasons:
         return {"available": False, "outcome": str(outcome),
                 "reasons": quality_reasons,
@@ -542,10 +600,12 @@ def resting_hemodynamics(det, *, outcome, participant=None, capture=None,
                     "timing_precision_ms": tp,
                     "timing_matched_fraction": tm,
                     "evidence_mode": evidence_mode,
+                    "pulse_check": pulse_gate,
                     "thresholds": {
                         "minimum_cross_roi_coherence": endpoint_coh_floor,
                         "maximum_timing_precision_ms": endpoint_tp_ceiling,
                         "minimum_timing_matched_fraction": endpoint_tm_floor,
+                        "maximum_pulse_disagreement": PULSE_AGREEMENT_TOL,
                     },
                     "pass": False,
                 }}
@@ -636,10 +696,12 @@ def resting_hemodynamics(det, *, outcome, participant=None, capture=None,
         "cross_roi_coherence": coh,
         "timing_precision_ms": tp,
         "timing_matched_fraction": tm,
+        "pulse_check": pulse_gate,
         "thresholds": {
             "minimum_cross_roi_coherence": endpoint_coh_floor,
             "maximum_timing_precision_ms": endpoint_tp_ceiling,
             "minimum_timing_matched_fraction": endpoint_tm_floor,
+            "maximum_pulse_disagreement": PULSE_AGREEMENT_TOL,
         },
         "meaning": (
             "meets the rhythm-grade cross-region evidence floor" if

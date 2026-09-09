@@ -139,8 +139,18 @@ def beat_evidence_from_series(series, runset, sqi_components: Optional[dict] = N
     coh = comps.get("cross_roi_coherence")
     if coh is None:
         coh = float(np.mean(np.clip((agree - 0.5) / 0.5, 0, 1))) if agree.size else 0.0
+    # iteration 12: the clean-interval pulse the rate head and the cards
+    # use, as evidence, so it can be checked against the waveform's
+    # dominant rhythm (inference/evidence.py::spectral_pulse)
+    runs = list(getattr(runset, "runs", []) or [])
+    ibi_clean = (np.concatenate([np.asarray(r, float).ravel() for r in runs])
+                 if runs else np.array([]))
+    ibi_clean = ibi_clean[np.isfinite(ibi_clean) & (ibi_clean > 0)]
     return {
         "cross_roi_coherence": float(coh) if _finite(coh) else 0.0,
+        "pulse_lattice_bpm": (float(np.median(60000.0 / ibi_clean))
+                              if ibi_clean.size >= 4 else None),
+        "pulse_lattice_n_intervals": int(ibi_clean.size),
         "frac_multi_roi": float(np.mean(agree >= 0.75)) if agree.size else 0.0,
         "n_beats": int(t.size),
         "n_intervals": int(getattr(runset, "n_intervals", 0)),

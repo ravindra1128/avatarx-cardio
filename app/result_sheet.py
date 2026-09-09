@@ -65,6 +65,7 @@ COLUMNS = [
     "Ref HR", "Ref HRV", "Ref SBP", "Ref DBP", "Ref Source", "Pulse - Ref HR",
     # Capture state reported by the client (step 1: exposure lock + pre-check).
     "AE Locked", "AWB Locked", "Client FPS", "Face Luma", "Capture Note",
+    "Pulse Spectral", "Pulse Check", "Spectral ROI Agree",
 ]
 
 _POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sheet")
@@ -109,6 +110,24 @@ def _card(items: dict, key: str) -> tuple:
     it = items.get(key) or {}
     return (_num(it.get("value"), 3), it.get("unit") or "", it.get("status") or "",
             it.get("reason") or "")
+
+
+def _pulse_check_cell(ev: dict) -> str:
+    """'agree 63 vs 60' / 'disagree 100 vs 55' / 'unresolved: ...' / ''."""
+    if not ev or "pulse_agreement" not in ev:
+        return ""
+    try:
+        from features.hemodynamics import pulse_check
+        pc = pulse_check(ev)
+    except Exception:                       # the sheet never breaks a result
+        return ""
+    v = pc.get("verdict") or ""
+    if v in ("agree", "disagree"):
+        return (f"{v} {float(pc['pulse_lattice_bpm']):.0f} vs "
+                f"{float(pc['pulse_spectral_bpm']):.0f}")
+    if v == "unresolved":
+        return f"unresolved: {pc.get('reason') or ''}"[:120]
+    return ""
 
 
 def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
@@ -179,6 +198,12 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
         "Client FPS": _num(cap.get("client_fps"), 1),
         "Face Luma": _num(cap.get("face_luma"), 0),
         "Capture Note": str(cap.get("note") or "")[:300],
+        # iteration 12: the beat count checked against the waveform's dominant
+        # rhythm; the verdict comes from the same function the cards use
+        "Pulse Spectral": _num(ev.get("pulse_spectral_bpm"), 1),
+        "Pulse Check": _pulse_check_cell(ev),
+        "Spectral ROI Agree": (ev.get("pulse_spectral_roi_agree")
+                               if ev.get("pulse_spectral_roi_agree") is not None else ""),
     }
 
 

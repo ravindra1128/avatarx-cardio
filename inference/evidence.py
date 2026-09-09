@@ -66,6 +66,111 @@ from inference.decision_logic import timing_precision_from_trains, \
 
 _EXTRACTORS = {"pos": pos_pulse, "chrom": chrom_pulse}
 
+# ---- Pulse cross-check (iteration 12, owner-approved 2026-09-09) -----------
+# The clean-interval pulse is a COUNT of detected beats. At ~0 dB per-ROI SNR
+# the detector can lock onto a consistent sub-multiple of the true period in
+# every region at once — cross-region agreement then looks excellent while
+# the rate is wrong (phone scan 2026-09-09: 100 bpm on the day's best
+# coherence, reference 55). The dominant rhythm of the SAME waveforms, read
+# from their spectrum, is an independent estimate; the endpoint cards require
+# the two to agree (features/hemodynamics.py, PULSE_AGREEMENT_TOL).
+SPECTRAL_BAND_HZ = (0.7, 3.0)         # 42-180 bpm
+SPECTRAL_SEGMENT_S = 20.0             # Welch segment -> 0.05 Hz (3 bpm) resolution
+SPECTRAL_MIN_SECONDS = 10.0           # shorter than this: no peak is trusted
+SUBHARMONIC_RATIO = 0.5               # a peak at f/2 holding >= this share of the
+                                      # top peak's power IS the pulse; the top peak
+                                      # was its second harmonic
+SUBHARMONIC_TOL_HZ = 0.08
+ROI_AGREE_TOL = 0.10                  # a ROI "agrees" within 10 % of the fused rate
+
+
+def _welch_psd(x, fps: float):
+    from scipy.signal import welch
+    x = np.asarray(x, float)
+    x = x[np.isfinite(x)]
+    if fps <= 0 or x.size < int(SPECTRAL_MIN_SECONDS * fps):
+        return None, None
+    nper = int(min(SPECTRAL_SEGMENT_S * fps, x.size))
+    f, p = welch(x - np.mean(x), fs=fps, nperseg=nper)
+    return f, p
+
+
+def _fundamental(f, p):
+    """Strongest in-band peak with a subharmonic check. Returns (hz, snr):
+    snr is the peak's power over the in-band median."""
+    lo, hi = SPECTRAL_BAND_HZ
+    m = (f >= lo) & (f <= hi)
+    if not np.any(m):
+        return None, None
+    fb, pb = f[m], p[m]
+    # A maximum ON a band edge is the band's edge, not a rhythm: residual
+    # drift piles up in the lowest bin (a "42 bpm" peak on many corpus
+    # regions). Judge strictly inside the band.
+    if fb.size > 2:
+        fb, pb = fb[1:-1], pb[1:-1]
+    k = int(np.argmax(pb))
+    f1, p1 = float(fb[k]), float(pb[k])
+    if not np.isfinite(p1) or p1 <= 0:
+        return None, None
+    fs = f1 / 2.0
+    if fs >= lo:
+        ms = np.abs(fb - fs) <= SUBHARMONIC_TOL_HZ
+        if np.any(ms):
+            j = int(np.argmax(np.where(ms, pb, -np.inf)))
+            if pb[j] >= SUBHARMONIC_RATIO * p1:
+                f1, p1 = float(fb[j]), float(pb[j])
+    return f1, float(p1 / (float(np.median(pb)) + 1e-12))
+
+
+def spectral_pulse(raw_waveforms: dict, fps: float) -> dict:
+    """Dominant pulse rate (bpm) of the raw per-ROI waveforms: per ROI, and
+    fused as the mean of the per-ROI spectra each normalised to unit in-band
+    power (one noisy region cannot dominate). Pure function; None when the
+    waveforms are too short."""
+    out = {"pulse_spectral_bpm": None, "pulse_spectral_snr": None,
+           "pulse_spectral_roi_bpm": {}, "pulse_spectral_roi_agree": 0}
+    psds, f_ref = [], None
+    lo, hi = SPECTRAL_BAND_HZ
+    for roi in ROI_NAMES:
+        x = (raw_waveforms or {}).get(roi)
+        f, p = _welch_psd(x, fps) if x is not None else (None, None)
+        if f is None:
+            out["pulse_spectral_roi_bpm"][roi] = None
+            continue
+        f0, _ = _fundamental(f, p)
+        out["pulse_spectral_roi_bpm"][roi] = (None if f0 is None
+                                              else round(f0 * 60.0, 1))
+        band = (f >= lo) & (f <= hi)
+        tot = float(np.sum(p[band]))
+        if tot > 0 and (f_ref is None or f.shape == f_ref.shape):
+            f_ref = f
+            psds.append(p / tot)
+    if not psds:
+        return out
+    f0, snr = _fundamental(f_ref, np.mean(psds, axis=0))
+    if f0 is None:
+        return out
+    bpm = f0 * 60.0
+    out["pulse_spectral_bpm"] = round(bpm, 1)
+    out["pulse_spectral_snr"] = round(snr, 2)
+    out["pulse_spectral_roi_agree"] = int(sum(
+        1 for v in out["pulse_spectral_roi_bpm"].values()
+        if v is not None and abs(v - bpm) <= ROI_AGREE_TOL * bpm))
+    return out
+
+
+def pulse_agreement(lattice_bpm, spectral_bpm):
+    """Relative disagreement |lattice - spectral| / spectral; None when
+    either estimate is missing."""
+    try:
+        a, b = float(lattice_bpm), float(spectral_bpm)
+    except (TypeError, ValueError):
+        return None
+    if not (np.isfinite(a) and np.isfinite(b)) or b <= 0:
+        return None
+    return round(abs(a - b) / b, 4)
+
+
 _DEFAULT_READINESS = {
     "mode": "advisory",           # v0.1.5: 'advisory' starts on blocking
                                   # checks only; 'blocking' = pre-v0.1.5

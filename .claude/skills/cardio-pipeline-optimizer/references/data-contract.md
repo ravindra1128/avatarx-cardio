@@ -334,3 +334,22 @@ Measured during the integration work, all on these same recordings:
   across all regions, i.e. cross-region agreement does not catch a rhythm counted at the
   wrong multiple. Both estimators fail alone at this SNR; their agreement is the
   reliability signal that is missing.
+- **Iteration 12 (2026-09-09, owner-approved): pulse cross-check.** `inference/evidence.py::
+  spectral_pulse` reads the dominant rhythm of the raw per-ROI POS waveforms (Welch, 20 s
+  segments, 0.75–2.95 Hz after excluding the band-edge bins, subharmonic check: a peak at
+  f/2 holding ≥ 50 % of the top peak's power is the pulse; fused = mean of unit-power
+  per-ROI spectra — geometric mean and median were compared offline and were worse on
+  3e0d/b45221). `beat_evidence_from_series` adds `pulse_lattice_bpm` (median of
+  60000/clean IBI, ≥ 4 intervals); the pipeline adds `pulse_agreement`;
+  `features/hemodynamics.py::pulse_check` gives the verdict agree / disagree / unresolved
+  (regions disagree, < 2 of 4 within 10 %) / not_evaluated (legacy evidence). **v1 (gate:
+  cards abstain on disagreement or no estimate) was rejected**: holdout cards 0.50 → 0.33
+  (b45221: per-ROI 48/69/51/51, fused 51 vs count 74), and with 2 card-bearing holdout
+  records consistency is unmeasurable, so the reliability clause cannot fire — an
+  abstention rule is structurally unscorable on this corpus (3 card-bearing holdout
+  records; `MIN_CARDS_FOR_CV`). **v2 (report mode)** is bit-identical to the baseline on
+  every metric; the gate's "no improvement" is by construction. Corpus verdicts (v1
+  code): agree on 9, disagree on 3 (b4fd 72 vs 57, 9b3023 81 vs 51, b45221 74 vs 51),
+  unresolved on 1 (7f56); ebe749 counts 138 bpm against a 42–72 spectrum. The sheet's
+  `Pulse Check` vs the reference pulse decides which side is right when they disagree;
+  `PULSE_CHECK_MODE = "gate"` is the owner's switch once that evidence exists.
