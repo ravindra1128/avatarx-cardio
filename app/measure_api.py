@@ -102,6 +102,63 @@ def _remember_result(session, doc: dict) -> None:
             _RESULTS.popitem(last=False)
 
 
+# ---- Chunked upload + detached processing (2026-09-09) ---------------------
+# One request carrying 23 MB and then holding the line through 40 s of analysis
+# is 80-105 s of connection on a phone, and it kept dying (ERR_HTTP2_PING_FAILED,
+# and a 502 at Railway's ~300 s request ceiling on a large clip). Neither
+# heartbeats nor a result cache can save an upload that dies mid-body, so the
+# work is split:
+#   POST /api/upload-part  one slice, retryable on its own, seconds long
+#   POST /api/start        assembles and returns 202 at once; the job detaches
+#   GET  /api/result       the finished document, or 202 while it runs
+# The single-shot /api/process-video path is untouched, so an older client
+# keeps working exactly as before.
+UPLOAD_DIR = WORK_DIR / "parts"
+MAX_UPLOAD_PARTS = 512
+_STARTED: dict = {}                  # upload_id -> True while a job is running
+_STARTED_LOCK = threading.Lock()
+
+
+def _part_dir(upload_id: str) -> pathlib.Path:
+    # A single path segment, so an id can never escape the parts directory.
+    safe = "".join(c for c in str(upload_id) if c.isalnum() or c in "-_")[:80]
+    if not safe:
+        raise ValueError("bad upload_id")
+    return UPLOAD_DIR / safe
+
+
+def _assemble_parts(upload_id: str, ext: str) -> str:
+    """Concatenate the received slices in index order. Raises if any is
+    missing: a gap means silent corruption, never a shorter video."""
+    d = _part_dir(upload_id)
+    parts = sorted(d.glob("part-*"))
+    if not parts:
+        raise ValueError("no parts received for that upload")
+    total = int((d / "total").read_text().strip())
+    if len(parts) != total:
+        have = {int(p.name.split("-")[1]) for p in parts}
+        missing = sorted(set(range(total)) - have)[:8]
+        raise ValueError(f"upload incomplete: {len(parts)}/{total} parts, "
+                         f"missing {missing}")
+    out = d / f"scan.{ext}"
+    with open(out, "wb") as fh:
+        for part in parts:
+            fh.write(part.read_bytes())
+            part.unlink()
+    return str(out)
+
+
+def _sweep_parts(max_age_s: float = 3600.0) -> None:
+    """Drop abandoned part directories: a phone that never came back."""
+    try:
+        now = time.time()
+        for d in UPLOAD_DIR.glob("*"):
+            if d.is_dir() and now - d.stat().st_mtime > max_age_s:
+                shutil.rmtree(d, ignore_errors=True)
+    except OSError:
+        pass
+
+
 def _recall_result(session):
     """The most recent completed result for `session`, or None. Expired
     entries are dropped on the way past."""
@@ -610,6 +667,12 @@ class MeasureHandler(BaseHTTPRequestHandler):
             sid = (q.get("upload_id") or q.get("session") or [""])[0]
             doc = _recall_result(sid)
             if doc is None:
+                with _STARTED_LOCK:
+                    running = sid in _STARTED
+                if running:
+                    # Distinct from "unknown": the client should keep waiting.
+                    self._json(202, {"status": "processing", "upload_id": sid})
+                    return
                 self._json(404, {"error": "no completed result for that "
                                           "session", "session": sid,
                                  "ttl_s": RESULT_TTL_S})
@@ -618,8 +681,29 @@ class MeasureHandler(BaseHTTPRequestHandler):
             return
         self._json(404, {"error": "not found"})
 
+    def _read_body(self, limit: int):
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            self._json(400, {"error": "bad Content-Length"})
+            return None
+        if length <= 0:
+            self._json(400, {"error": "empty body"})
+            return None
+        if length > limit:
+            self._json(413, {"error": f"body exceeds "
+                                      f"{limit // (1024 * 1024)} MB"})
+            return None
+        return self.rfile.read(length)
+
     def do_POST(self):
         u = urlparse(self.path)
+        if u.path == "/api/upload-part":
+            self._upload_part(parse_qs(u.query))
+            return
+        if u.path == "/api/start":
+            self._start_job(parse_qs(u.query))
+            return
         if u.path not in ("/api/process-video", "/api/measure"):
             self._json(404, {"error": "not found"})
             return
@@ -727,6 +811,133 @@ class MeasureHandler(BaseHTTPRequestHandler):
                   f"(inflight now {n}/{MAX_CONCURRENT})", flush=True)
             _INFLIGHT.release()
 
+    def _upload_part(self, q: dict):
+        """One slice of a clip. Small and independently retryable: a phone
+        that loses its link re-sends this part only, not 23 MB."""
+        one = lambda k: (q.get(k) or [None])[0]                  # noqa: E731
+        try:
+            upload_id = str(one("upload_id") or "")
+            index = int(one("index"))
+            total = int(one("total"))
+            d = _part_dir(upload_id)
+        except (TypeError, ValueError) as e:
+            self._json(400, {"error": f"bad part parameters: {e}"})
+            return
+        if not (0 <= index < total <= MAX_UPLOAD_PARTS):
+            self._json(400, {"error": "part index/total out of range"})
+            return
+        body = self._read_body(MAX_UPLOAD_BYTES)
+        if body is None:
+            return
+        try:
+            d.mkdir(parents=True, exist_ok=True)
+            (d / "total").write_text(str(total))
+            # Write beside, then rename: a part is either wholly there or not
+            # there at all, so a retry of a half-written part is safe.
+            tmp = d / f".part-{index:04d}.tmp"
+            tmp.write_bytes(body)
+            tmp.replace(d / f"part-{index:04d}")
+        except OSError as e:
+            self._json(500, {"error": f"could not store part: {e}"})
+            return
+        have = len(list(d.glob("part-*")))
+        print(f"[measure] part {index + 1}/{total} ({len(body)} B) for "
+              f"{upload_id!r}; {have}/{total} held", flush=True)
+        self._json(200, {"ok": True, "upload_id": upload_id, "index": index,
+                         "received": have, "total": total})
+
+    def _start_job(self, q: dict):
+        """Assemble the slices and detach the analysis. Returns immediately:
+        the client polls GET /api/result, so no connection is held through the
+        job and a dropped link costs nothing."""
+        _sweep_parts()
+        _, header = _parse_envelope(b"", "video/webm", q)
+        upload_id = str((q.get("upload_id") or [""])[0])
+        ext = str(header.get("ext") or (q.get("ext") or ["webm"])[0]).lstrip(".")
+        try:
+            path = _assemble_parts(upload_id, ext)
+        except (ValueError, OSError) as e:
+            self._json(400, {"error": str(e), "upload_id": upload_id})
+            return
+        size = os.path.getsize(path)
+        if not _INFLIGHT.acquire(blocking=False):
+            self._json(503, {"error": "measure workers busy — retry",
+                             "max_concurrent": MAX_CONCURRENT})
+            return
+        with _STARTED_LOCK:
+            _STARTED[upload_id] = True
+        header.setdefault("session", (q.get("session") or [upload_id])[0])
+        ua = self.headers.get("User-Agent", "")
+
+        def job():
+            n = _inflight(+1)
+            t0 = time.perf_counter()
+            print(f"[measure] detached job start for {upload_id!r} "
+                  f"({size} B, inflight {n}/{MAX_CONCURRENT})", flush=True)
+            try:
+                doc = self._run_assembled(path, header)
+            except Exception as e:                        # noqa: BLE001
+                traceback.print_exc()
+                doc = {"error": f"{type(e).__name__}: {e}"}
+            try:
+                doc["size_bytes"] = size
+                _remember_result(upload_id, doc)
+                result_sheet.schedule_append(doc, extra={
+                    "build": BUILD_SHA,
+                    "duration_ms": header.get("duration_ms"),
+                    "user_agent": ua})
+            finally:
+                with _STARTED_LOCK:
+                    _STARTED.pop(upload_id, None)
+                _inflight(-1)
+                _INFLIGHT.release()
+                print(f"[measure] detached job end for {upload_id!r} after "
+                      f"{time.perf_counter() - t0:.1f}s", flush=True)
+
+        _POOL.submit(job)
+        self._json(202, {"status": "processing", "upload_id": upload_id,
+                         "size_bytes": size,
+                         "poll": f"/api/result?upload_id={upload_id}"})
+
+    @staticmethod
+    def _build_manifest(header: dict) -> dict:
+        """The manifest EVERY upload path must send.
+
+        A browser scan IS a consumer capture: the camera will not lock AE/AWB
+        and real webm lands at 24-30 fps, not the research profile's 30+.
+        capture/ingest.py exists for exactly this and surfaces caveats instead
+        of silently accepting research-grade claims. Callers may still ask for
+        "research" explicitly.
+
+        Shared because it was not: the detached path built its own and omitted
+        the profile, so the pipeline defaulted to "research" and the same clip
+        that returned REPEAT_SCAN with cards came back NO_RESULT (2026-09-09).
+        """
+        manifest = {"capture_profile": "consumer"}
+        if header.get("illuminance_lux") is not None:
+            manifest["illuminance_lux"] = float(header["illuminance_lux"])
+        if header.get("capture_profile"):
+            manifest["capture_profile"] = str(header["capture_profile"])
+        if isinstance(header.get("manifest"), dict):
+            manifest.update(header["manifest"])
+        return manifest
+
+    @staticmethod
+    def _run_assembled(path: str, header: dict) -> dict:
+        """The same production path as `_run`, on a clip already on disk."""
+        doc = measure_video(
+            path, manifest=MeasureHandler._build_manifest(header),
+            client_timestamps_s=header.get("timestamps_s"),
+            duration_ms=header.get("duration_ms"),
+            config_overrides=header.get("config_overrides"),
+            window_s=header.get("window_s"), scale=header.get("scale"))
+        doc["session"] = header.get("session") or ""
+        if header.get("reference"):
+            doc["reference"] = header["reference"]
+        if header.get("client_capture"):
+            doc["client_capture"] = header["client_capture"]
+        return doc
+
     @staticmethod
     def _run(video_bytes: bytes, header: dict) -> dict:
         WORK_DIR.mkdir(parents=True, exist_ok=True)
@@ -745,22 +956,9 @@ class MeasureHandler(BaseHTTPRequestHandler):
             import shutil
             shutil.copyfile(path, str(d / f"scan.orig.{ext}"))
 
-        # A browser scan IS a consumer capture: the camera won't lock AE/AWB
-        # and real webm lands at 24-30 fps, not the research profile's 30+.
-        # capture/ingest.py exists for exactly this and surfaces caveats
-        # instead of silently accepting research-grade claims. Callers may
-        # still ask for "research" explicitly.
-        manifest = {"capture_profile": "consumer"}
-        if header.get("illuminance_lux") is not None:
-            manifest["illuminance_lux"] = float(header["illuminance_lux"])
-        if header.get("capture_profile"):
-            manifest["capture_profile"] = str(header["capture_profile"])
-        if isinstance(header.get("manifest"), dict):
-            manifest.update(header["manifest"])
-
         try:
             doc = measure_video(
-                path, manifest=manifest or None,
+                path, manifest=MeasureHandler._build_manifest(header),
                 client_timestamps_s=header.get("timestamps_s"),
                 duration_ms=header.get("duration_ms"),
                 config_overrides=header.get("config_overrides"),

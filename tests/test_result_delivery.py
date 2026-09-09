@@ -6,9 +6,11 @@ stretch and a completed analysis was discarded. Two defences, both pinned here:
 the response is streamed with heartbeats so the socket never goes quiet, and
 the finished result is held briefly so a client can come back for it.
 """
+import inspect
 import io
 import json
 import os
+import pathlib
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -172,3 +174,57 @@ def test_the_collection_key_is_per_attempt_not_per_session():
 
     _, header = measure_api._parse_envelope(b"", "video/webm", {"upload_id": ["  "]})
     assert "upload_id" not in header
+
+
+# --- chunked upload + detached processing (2026-09-09) -----------------------
+# One request carrying ~23 MB and then holding the line through ~40 s of
+# analysis is 80-105 s of connection on a phone, and it kept dying inside the
+# body, where neither a heartbeat nor the result cache can help.
+
+def test_parts_assemble_in_index_order(tmp_path, monkeypatch):
+    monkeypatch.setattr(measure_api, "UPLOAD_DIR", tmp_path)
+    d = measure_api._part_dir("up-1")
+    d.mkdir(parents=True)
+    (d / "total").write_text("3")
+    for i, chunk in enumerate((b"aaa", b"bbb", b"ccc")):
+        (d / f"part-{i:04d}").write_bytes(chunk)
+    path = measure_api._assemble_parts("up-1", "webm")
+    assert pathlib.Path(path).read_bytes() == b"aaabbbccc"
+    assert not list(d.glob("part-*"))          # slices freed after assembly
+
+
+def test_a_missing_slice_is_an_error_not_a_shorter_video(tmp_path, monkeypatch):
+    """Silently analysing 2 of 3 slices would be a truncated scan reported as
+    a real one."""
+    monkeypatch.setattr(measure_api, "UPLOAD_DIR", tmp_path)
+    d = measure_api._part_dir("up-2")
+    d.mkdir(parents=True)
+    (d / "total").write_text("3")
+    (d / "part-0000").write_bytes(b"aaa")
+    (d / "part-0002").write_bytes(b"ccc")
+    with pytest.raises(ValueError, match="incomplete"):
+        measure_api._assemble_parts("up-2", "webm")
+
+
+def test_an_upload_id_cannot_escape_the_parts_directory(tmp_path, monkeypatch):
+    monkeypatch.setattr(measure_api, "UPLOAD_DIR", tmp_path)
+    assert measure_api._part_dir("../../etc/passwd").parent == tmp_path
+    assert measure_api._part_dir("a/b").parent == tmp_path
+    with pytest.raises(ValueError):
+        measure_api._part_dir("../..")
+
+
+def test_both_upload_paths_send_the_same_manifest():
+    """The detached path once omitted capture_profile, so the pipeline
+    defaulted to "research" and the same clip that returned REPEAT_SCAN with
+    cards came back NO_RESULT. One builder, used by both."""
+    h = {"session": "s"}
+    assert measure_api.MeasureHandler._build_manifest(h)["capture_profile"] == "consumer"
+    h2 = {"capture_profile": "research"}
+    assert measure_api.MeasureHandler._build_manifest(h2)["capture_profile"] == "research"
+    h3 = {"manifest": {"exposure_locked": True}, "illuminance_lux": 120}
+    m = measure_api.MeasureHandler._build_manifest(h3)
+    assert m["exposure_locked"] is True and m["illuminance_lux"] == 120.0
+    assert m["capture_profile"] == "consumer"
+    src = inspect.getsource(measure_api.MeasureHandler._run)
+    assert "_build_manifest(header)" in src, "the single-shot path must use it too"
