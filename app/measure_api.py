@@ -350,6 +350,30 @@ def _parse_envelope(body: bytes, ctype: str, query: dict) -> tuple:
         ref["ref_source"] = str(_one("ref_source"))[:40]
     if ref:
         header["reference"] = ref
+    # Capture state from the client (step 1 of the repeatability plan). The lock
+    # flags go into the manifest the pipeline already understands, so the
+    # capture record and the vascular-tone "optics locked" caveat are truthful;
+    # fps and face brightness are echoed for the tracking sheet only.
+    cap = {}
+    for k in ("exposure_locked", "awb_locked"):
+        v = _one(k)
+        if v in ("0", "1", "true", "false"):
+            cap[k] = v in ("1", "true")
+    for k in ("client_fps", "face_luma"):
+        v = _one(k)
+        if v not in (None, ""):
+            try:
+                cap[k] = float(v)
+            except ValueError:
+                pass
+    if cap:
+        header["client_capture"] = cap
+        m = header.setdefault("manifest", {}) if isinstance(header.get("manifest"), (dict, type(None))) else {}
+        if isinstance(m, dict):
+            for k in ("exposure_locked", "awb_locked"):
+                if k in cap:
+                    m[k] = cap[k]
+            header["manifest"] = m
     if _one("window_s"):
         header["window_s"] = float(_one("window_s"))
     if _one("scale") is not None:
@@ -559,6 +583,8 @@ class MeasureHandler(BaseHTTPRequestHandler):
             doc["size_bytes"] = len(video_bytes)
             if header.get("reference"):
                 doc["reference"] = header["reference"]     # additive; audit only
+            if header.get("client_capture"):
+                doc["client_capture"] = header["client_capture"]   # additive
             if isinstance(doc.get("timing"), dict):
                 doc["timing"]["upload_received_s"] = header.get("_upload_received_s")
                 doc["timing"]["upload_bytes"] = header.get("_upload_bytes")

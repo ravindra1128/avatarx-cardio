@@ -85,6 +85,30 @@ separately; never blend them into one "accuracy" number.
 | 2026-09-08 | reliability over availability: the gate accepts a consistency gain (≥ +0.05, signal/determinism held) even if fewer cards compute | `gate.py` reliability clause; iterations 7–8 tried under it, both rejected on evidence |
 | 2026-09-08 | lever 1 approved: additive per-patch traces in `capture/ingest.py` + SNR-based combination in evidence | three variants gated, all rejected (values scatter); reverted; design kept in the skill's known results |
 
+## Repeatability plan (owner-agreed 2026-09-08, after the literature review)
+
+Target: each of the three cards within ±10–20 % on repeated scans of the same person
+under similar conditions. Order of work, with the evidence in the skill's known results:
+
+1. **Capture** (webapp): exposure/white-balance lock on the SDK track once auto-exposure
+   settles; a 3 s pre-check (delivered fps, face brightness) with on-screen warnings; lock
+   state, fps and brightness sent with the upload (`exposure_locked`, `awb_locked`,
+   `client_fps`, `face_luma`) → manifest + sheet. Then, as separate gated changes:
+   60 fps where the device allows (raises phone load and needs more bitrate) and a
+   60–90 s resting recording. **Slice 1 built 2026-09-08** (`src/lib/capture/cameraCapture.js`).
+2. **Fitness card:** heart-rate-only unless the HRV term clears 2× the scan's timing-noise
+   floor (`data/eval_cache/fitness_hr_only.patch`); relabel as a resting-rate proxy.
+3. **Vascular tone:** require ≥ 30 amplitude beats and a locked-exposure capture; report the
+   sampling bound; re-measure on longer scans.
+4. **Arterial stiffness:** gate on capture (≥ 50 fps + locked exposure — the SDPPG floor);
+   otherwise "needs a better capture". Single-beat morphology is not recoverable from
+   30 fps consumer video (Template Collapse, arXiv 2606.03802).
+5. **Signal chain:** selective best-patch extraction (few patches by SQI, never averaged —
+   codec artefacts are spatially coherent) re-gated on step-1 recordings; an interval
+   artefact filter in the rhythm cleaner is a separate owner-approved change (golden tests).
+6. **Measure it properly:** two scans 30 min apart per session; per-card agreement from
+   `scripts/sheet_stats.py`. The corpus has no such pairs.
+
 ## How to start a session on this repo
 
 1. The SessionStart hook prints the last iterations and the current baseline. Read it.

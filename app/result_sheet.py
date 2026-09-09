@@ -63,6 +63,8 @@ COLUMNS = [
     "Build", "Config Hash", "User Agent",
     # Reference vitals the client attached (ShenAI) and the agreement column.
     "Ref HR", "Ref HRV", "Ref SBP", "Ref DBP", "Ref Source", "Pulse - Ref HR",
+    # Capture state reported by the client (step 1: exposure lock + pre-check).
+    "AE Locked", "AWB Locked", "Client FPS", "Face Luma",
 ]
 
 _POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sheet")
@@ -126,6 +128,7 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
     fit = _card(items, "cardiorespiratory_fitness")
     ex = extra or {}
     ref = doc.get("reference") or {}
+    cap = doc.get("client_capture") or {}
     return {
         "Timestamp (UTC)": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
         "Session": doc.get("session") or "",
@@ -171,6 +174,10 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
         "Ref Source": ref.get("ref_source") or "",
         "Pulse - Ref HR": (_num(float(pulse) - float(ref["ref_hr"]), 1)
                            if pulse != "" and ref.get("ref_hr") is not None else ""),
+        "AE Locked": ("TRUE" if cap.get("exposure_locked") else "FALSE") if "exposure_locked" in cap else "",
+        "AWB Locked": ("TRUE" if cap.get("awb_locked") else "FALSE") if "awb_locked" in cap else "",
+        "Client FPS": _num(cap.get("client_fps"), 1),
+        "Face Luma": _num(cap.get("face_luma"), 0),
     }
 
 
