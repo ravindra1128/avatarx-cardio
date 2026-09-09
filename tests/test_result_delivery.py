@@ -228,3 +228,20 @@ def test_both_upload_paths_send_the_same_manifest():
     assert m["capture_profile"] == "consumer"
     src = inspect.getsource(measure_api.MeasureHandler._run)
     assert "_build_manifest(header)" in src, "the single-shot path must use it too"
+
+
+def test_slices_may_differ_in_size_and_the_last_total_wins(tmp_path, monkeypatch):
+    """The client sends a small timed probe first, then slices sized to the
+    link it measured, and only the LAST slice knows the true total. Assembly
+    must concatenate whatever sizes arrived, in index order, and trust the
+    last-written total."""
+    monkeypatch.setattr(measure_api, "UPLOAD_DIR", tmp_path)
+    d = measure_api._part_dir("up-3")
+    d.mkdir(parents=True)
+    (d / "total").write_text("9")                  # the probe's provisional guess
+    (d / "part-0000").write_bytes(b"a" * 4)         # probe
+    (d / "part-0001").write_bytes(b"b" * 16)        # bigger, after measuring
+    (d / "total").write_text("3")                  # the last slice's true total
+    (d / "part-0002").write_bytes(b"c" * 5)
+    path = measure_api._assemble_parts("up-3", "webm")
+    assert pathlib.Path(path).read_bytes() == b"a" * 4 + b"b" * 16 + b"c" * 5

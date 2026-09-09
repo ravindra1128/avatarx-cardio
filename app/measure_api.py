@@ -114,7 +114,9 @@ def _remember_result(session, doc: dict) -> None:
 # The single-shot /api/process-video path is untouched, so an older client
 # keeps working exactly as before.
 UPLOAD_DIR = WORK_DIR / "parts"
-MAX_UPLOAD_PARTS = 512
+# Slices are sized to the client's measured link, down to 256 KB on a slow
+# one, so a clip near MAX_UPLOAD_BYTES can arrive as ~1000 parts.
+MAX_UPLOAD_PARTS = 2048
 _STARTED: dict = {}                  # upload_id -> True while a job is running
 _STARTED_LOCK = threading.Lock()
 
