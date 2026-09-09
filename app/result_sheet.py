@@ -58,7 +58,7 @@ COLUMNS = [
     "Coverage", "Clean Intervals", "Usable Beats", "Analysed s",
     "Capture Segments", "Pulse bpm", "FPS", "Width", "Height", "Codec",
     "Clock Source", "Capture Profile", "No-Read Reasons",
-    "Upload MB", "Upload s", "Trim s", "Trim Probe", "Downscale s",
+    "Upload MB", "Upload s", "Trim s", "Trim Probe", "Window s", "Downscale s",
     "Analysis s", "Server Total s", "Client Duration ms", "Launch Overrides",
     "Build", "Config Hash", "User Agent",
     # Reference vitals the client attached (ShenAI) and the agreement column.
@@ -194,6 +194,10 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
         "Upload s": _num(tm.get("upload_received_s"), 2),
         "Trim s": _num(tm.get("trim_s"), 2),
         "Trim Probe": _g(doc, "trim", "duration_probe", default="") or "",
+        # Seconds of the clip actually analysed. The client asks for this, so
+        # it must be recorded: comparing a 70 s scan against the 40 s history
+        # is the whole point of asking.
+        "Window s": _num(_g(doc, "trim", "window_s"), 0),
         "Downscale s": _num(tm.get("downscale_s"), 2),
         "Analysis s": _num(tm.get("analysis_s"), 2),
         "Server Total s": _num(tm.get("server_total_s"), 2),
