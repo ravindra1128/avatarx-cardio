@@ -178,7 +178,17 @@ def stiffness_contour(contour: dict) -> dict:
                              round(float(rise) * 1000.0, 1)),
          "ms", "pulse foot to systolic peak on the ensemble waveform"),
     )
-    primary = next((x for x in candidates if x[1] is not None), None)
+    # Iteration 13 (owner-approved 2026-09-09): ONE metric per capture class.
+    # At research frame rates (>= MIN_SDPPG_FS_HZ) the card is the SDPPG
+    # aging index; at consumer rates it is the reflection index — or nothing.
+    # Falling through to the rise time (ms) when no notch was found put two
+    # different quantities on the same card within one device (phone scans
+    # 2026-09-09: 0.83 ratio, then 210 ms, then 0.57). The rise time stays in
+    # the details as a morphology marker; it is never the stiffness value.
+    primary = next((x for x in candidates
+                    if x[0] in ("second_derivative_aging_index",
+                                "reflection_index") and x[1] is not None),
+                   None)
     out["estimate"] = (None if primary is None else {
         "label": RESEARCH_ESTIMATE_LABEL,
         "name": primary[0], "value": primary[1], "unit": primary[2],
@@ -190,9 +200,10 @@ def stiffness_contour(contour: dict) -> dict:
         ("aging_index", "reflection_index", "rise_time_s",
          "norm_upstroke_slope", "pulse_width50_s"))
     if primary is None:
-        out["reason"] = ("no supported pulse-contour marker survived "
-                         "extraction; no arterial-stiffness proxy was "
-                         "computed")
+        out["reason"] = ("no dicrotic notch was found on the ensemble pulse, "
+                         "so the reflection index cannot be computed; the "
+                         "rise time is kept in the details as a morphology "
+                         "marker, not as a stiffness value")
     return out
 
 

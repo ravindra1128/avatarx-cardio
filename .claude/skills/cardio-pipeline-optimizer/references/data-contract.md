@@ -353,3 +353,13 @@ Measured during the integration work, all on these same recordings:
   unresolved on 1 (7f56); ebe749 counts 138 bpm against a 42–72 spectrum. The sheet's
   `Pulse Check` vs the reference pulse decides which side is right when they disagree;
   `PULSE_CHECK_MODE = "gate"` is the owner's switch once that evidence exists.
+- **Iteration 13 (2026-09-09, owner-approved): one metric per stiffness card.** The card's
+  value is the SDPPG aging index at research frame rates (≥ 50 fps, dimensionless) or the
+  reflection index (ratio) at consumer rates — or nothing; the rise time (ms) is never the
+  value (it stays in the details). A device always lands in one class, so its card never
+  changes quantity.
+  Holdout: demo_9340 loses its card (its value was the 287.5 ms fallback), cards
+  0.50 → 0.44, everything else unchanged → gate reject by construction. What the corpus
+  says about the metric itself: one person's reflection index across 10 recordings spans
+  0.21–1.20 (CV ≈ 0.57). One metric removes the unit switch; it does not make the number
+  repeatable at this capture quality — that needs ≥ 50 fps + locked exposure (plan step 4).
