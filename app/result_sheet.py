@@ -302,6 +302,14 @@ def _worksheet():
     ws = book.get_worksheet_by_id(int(SHEET_GID)) if SHEET_GID else book.sheet1
     header = ws.row_values(1)
     if not header:
+        # A tab created by hand is 26 columns wide (A-Z) and COLUMNS is 73, so
+        # widen before writing — the same "exceeds grid limits" rejection
+        # _extend_header grows the grid to avoid, which until now only the
+        # existing-header branch below was protected from. An empty tab is
+        # exactly what a fresh environment points at, so this branch is the one
+        # a new deployment hits first.
+        if ws.col_count < len(COLUMNS):
+            ws.add_cols(len(COLUMNS) - ws.col_count)
         ws.append_row(COLUMNS, value_input_option="RAW")
         header = list(COLUMNS)
     else:
