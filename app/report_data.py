@@ -26,9 +26,10 @@ _BIOMARKERS = (
 
 _BIOMARKER_METHODS = {
     "arterial_stiffness": (
-        "pulse-contour reflection index (dimensionless ratio); when no dicrotic "
-        "notch is found, a band from the pulse crest time instead, marked "
-        "provisional and never given as a number on the same scale"
+        "0-100 stiffness index: the pulse-contour reflection index x100, or, "
+        "when no dicrotic notch is found, the pulse crest time on the same "
+        "scale (shorter is stiffer), marked provisional. Uncalibrated; the "
+        "marker behind the number is reported beside it"
     ),
     "vascular_tone": (
         "0-100 index: coefficient of variation of per-beat facial pulse "

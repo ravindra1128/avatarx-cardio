@@ -372,7 +372,8 @@ def test_clean_signal_performance_and_all_biomarkers_are_preserved(
         capture={"exposure_locked": True, "awb_locked": True})
     payload = report_biomarkers(result, det, hemodynamics=hemo)
     assert payload["complete"] is True
-    assert all(x["status"] == "computed" and x["value"] is not None
+    assert all(x["status"] == "computed"
+               and (x["value"] is not None or x.get("band") is not None)
                for x in payload["items"])
     assert all(x["label"] == "Research Estimate / Prototype"
                for x in payload["items"])
@@ -399,6 +400,11 @@ def test_unverified_pulse_never_forces_biomarker_values(clean_pipeline):
     for x in payload["items"]:
         if x["status"] == "computed":
             assert x["tier"] == "provisional" and x["tier_reasons"]
-            assert 0.0 <= float(x["value"]) <= 100.0
+            # A card reports a 0-100 score or a band (owner, 2026-09-10);
+            # the stiffness card is always a band.
+            if x["value"] is not None:
+                assert 0.0 <= float(x["value"]) <= 100.0
+            else:
+                assert x["band"] in ("High", "Typical", "Low")
         else:
-            assert x["value"] is None and x["reason"]
+            assert x["value"] is None and x["band"] is None and x["reason"]

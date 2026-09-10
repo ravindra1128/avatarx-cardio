@@ -12,9 +12,10 @@ os.environ.setdefault("AFIB_SHEET_ID", "test-sheet")
 from features.hemodynamics import (  # noqa: E402
     MIN_AMPLITUDE_BEATS, MIN_PROVISIONAL_AMPLITUDE_BEATS, MIN_RATE_INTERVALS,
     MIN_PROVISIONAL_RATE_INTERVALS, RI_TYPICAL, RISE_TYPICAL_MS, TONE_TYPICAL,
-    FITNESS_TYPICAL, stiffness_contour, stiffness_band_from_rise_time,
-    vasomotor_indices, cardiorespiratory_indices, tone_score_from_cv,
-    resting_rate_index)
+    FITNESS_TYPICAL, STIFFNESS_TYPICAL, stiffness_contour,
+    stiffness_band_from_rise_time, stiffness_score_from_reflection_index,
+    stiffness_score_from_rise_time, vasomotor_indices,
+    cardiorespiratory_indices, tone_score_from_cv, resting_rate_index)
 
 
 class _Reg:
@@ -44,14 +45,42 @@ def test_fitness_anchors_put_typical_resting_rates_in_the_typical_band():
 
 
 # ------------------------------------------------------------ stiffness
-def test_stiffness_is_the_reflection_index_in_its_own_units():
-    """Owner, 2026-09-09: the ratio, as it read before the 0-100 rescale."""
+def test_stiffness_is_one_0_100_number_on_every_scan():
+    """Owner, 2026-09-10: a NUMBER, in one unit, whatever marker the scan
+    found. Each marker reaches the shared scale by its own monotone map, and
+    every map puts that marker's typical range on 40-80."""
     out = stiffness_contour({"reflection_index": 0.353, "rise_time_s": 0.2})
     assert out["available"] and out["tier"] == "measured"
-    assert out["estimate"]["value"] == 0.353 and out["estimate"]["unit"] == "ratio"
-    assert out["estimate"]["name"] == "reflection_index"
-    assert out["score_typical_range"] == list(RI_TYPICAL)
+    assert out["estimate"]["value"] == 35.3 and out["estimate"]["unit"] == "/100"
+    assert out["score_typical_range"] == list(STIFFNESS_TYPICAL)
+    # which marker produced it is never hidden
+    assert out["raw_value"] == 0.353 and out["raw_name"] == "reflection_index"
     assert out["tier_reasons"] == []
+
+
+def test_every_marker_lands_on_the_same_scale_with_its_typical_range_on_40_80():
+    lo, hi = STIFFNESS_TYPICAL
+    # reflection index: x100, so its 0.4-0.8 typical range is 40-80
+    assert stiffness_score_from_reflection_index(RI_TYPICAL[0]) == lo
+    assert stiffness_score_from_reflection_index(RI_TYPICAL[1]) == hi
+    # crest time: SHORTER is stiffer, so the range maps in reverse
+    assert stiffness_score_from_rise_time(RISE_TYPICAL_MS[1] / 1000) == lo
+    assert stiffness_score_from_rise_time(RISE_TYPICAL_MS[0] / 1000) == hi
+    assert stiffness_score_from_rise_time(0.220) > lo
+    # bounded, and None in means None out
+    assert stiffness_score_from_reflection_index(3.0) == 100.0
+    assert stiffness_score_from_rise_time(2.0) == 0.0
+    assert stiffness_score_from_reflection_index(None) is None
+    assert stiffness_score_from_rise_time(None) is None
+
+
+def test_a_crest_time_score_is_never_passed_off_as_a_reflection_index():
+    """The shared scale is a rescale, not a conversion between markers."""
+    out = stiffness_contour({"reflection_index": None, "rise_time_s": 0.2025})
+    assert out["estimate"]["value"] == 63.5
+    assert out["tier"] == "provisional"
+    assert out["raw_name"] == "pulse_rise_time" and out["raw_unit"] == "ms"
+    assert "different and weaker marker" in out["tier_reasons"][0]
 
 
 def test_the_crest_time_band_runs_the_way_the_physiology_does():
@@ -70,17 +99,18 @@ def test_stiffness_falls_back_to_a_band_never_a_second_number():
     out = stiffness_contour({"reflection_index": None, "rise_time_s": 0.220})
     assert out["available"] and out["tier"] == "provisional"
     assert out["band"] == "Typical"
-    assert out["estimate"]["value"] is None and out["estimate"]["unit"] is None
-    assert out["estimate"]["band"] == "Typical"
-    # the crest time itself is still reported, just never as the card's number
+    assert out["estimate"]["unit"] == "/100"
+    assert out["score_typical_range"] == list(STIFFNESS_TYPICAL)
+    # the crest time itself is still reported beside the score
     assert out["raw_value"] == 220.0 and out["raw_unit"] == "ms"
     assert "different and weaker marker" in out["tier_reasons"][0]
 
 
-def test_a_measured_stiffness_never_carries_a_band():
+def test_the_band_survives_beside_the_number_for_the_sheet():
     out = stiffness_contour({"reflection_index": 0.62, "rise_time_s": 0.22})
-    assert out["band"] is None and out["estimate"]["band"] is None
-    assert out["estimate"]["value"] == 0.62
+    assert out["estimate"]["value"] == 62.0
+    assert out["band"] == "Typical" and out["estimate"]["band"] == "Typical"
+    assert out["tier"] == "measured" and out["raw_name"] == "reflection_index"
 
 
 def test_stiffness_stays_blank_with_no_marker_at_all():
@@ -161,9 +191,9 @@ def test_a_research_frame_rate_card_uses_the_aging_index_not_the_reflection_inde
                              "sdppg_d_a": -0.3, "sdppg_e_a": 0.1,
                              "reflection_index": 0.62, "rise_time_s": 0.22})
     if out["raw_name"] == "second_derivative_aging_index":
-        assert out["tier"] == "measured" and out["estimate"]["unit"] == "index"
-        assert out["score_typical_range"] == list(AGING_TYPICAL)
-        assert out["band"] is None
+        assert out["tier"] == "measured"
+        assert out["score_typical_range"] == list(STIFFNESS_TYPICAL)
+        assert out["estimate"]["unit"] == "/100"
     else:                       # this fixture's keys are not the SDPPG shape
         assert out["estimate"]["name"] == "reflection_index"
 

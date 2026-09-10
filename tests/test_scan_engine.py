@@ -189,7 +189,10 @@ def test_research_tracks_ride_the_browser_payload(tmp_path, sinus_frames):
         "cardiorespiratory_fitness"]
     for item in b["items"]:
         assert item["status"] == "computed"
-        assert item["value"] is not None and item["method"]
+        # A card reports a number or a band (owner, 2026-09-10): the
+        # stiffness card is always a band.
+        assert (item["value"] is not None or item.get("band") is not None) \
+            and item["method"]
         assert item["label"] == "Research Estimate / Prototype"
         assert item["confidence"]["signal_quality_index"] is not None
         assert item["confidence"]["n_beats_used"] >= 8

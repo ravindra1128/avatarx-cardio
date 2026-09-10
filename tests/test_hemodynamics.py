@@ -33,6 +33,19 @@ def test_aging_index_is_the_takazawa_formula():
     assert aging_index(stiff) > aging_index(c)
 
 
+def _item_reports(item: dict) -> bool:
+    """A payload item reports a NUMBER or a BAND (owner, 2026-09-10)."""
+    return (item or {}).get("value") is not None or (item or {}).get("band") is not None
+
+
+def _reports(card: dict) -> bool:
+    """A card reports a result as a NUMBER or as a BAND (owner, 2026-09-10):
+    the stiffness card is always a band, because its markers live in different
+    units and no validated conversion exists between them."""
+    est = (card or {}).get("estimate") or {}
+    return est.get("value") is not None or est.get("band") is not None
+
+
 def test_aging_index_refuses_a_missing_or_infinite_component():
     base = {"sdppg_b_over_a": -0.8, "sdppg_c_over_a": -0.1,
             "sdppg_d_over_a": -0.3, "sdppg_e_over_a": 0.2}
@@ -215,13 +228,13 @@ def test_all_three_families_come_from_one_resting_scan(scans):
                                       "awb_locked": True})
     assert h["available"] is True and h["n_beats_used"] >= 8
     assert h["arterial_stiffness"]["available"] is True
-    assert h["arterial_stiffness"]["estimate"]["value"] is not None
+    assert _reports(h["arterial_stiffness"])
     assert h["arterial_stiffness"]["aging_index"] is not None
     assert h["vascular_tone"]["available"] is True
-    assert h["vascular_tone"]["estimate"]["value"] is not None
+    assert _reports(h["vascular_tone"])
     assert h["vascular_tone"]["amplitude_cv"] is not None
     assert h["cardiorespiratory_fitness"]["available"] is True
-    assert h["cardiorespiratory_fitness"]["estimate"]["value"] is not None
+    assert _reports(h["cardiorespiratory_fitness"])
     assert h["cardiorespiratory_fitness"]["resting_hr_bpm"] > 40
     for key in ("arterial_stiffness", "vascular_tone",
                 "cardiorespiratory_fitness"):
@@ -241,7 +254,7 @@ def test_the_second_derivative_is_refused_at_consumer_frame_rate(scans):
     assert h["sdppg_derivable"] is False
     assert h["arterial_stiffness"]["aging_index"] is None
     assert h["arterial_stiffness"]["available"] is True
-    assert h["arterial_stiffness"]["estimate"]["value"] is not None
+    assert _reports(h["arterial_stiffness"])
     res60, det60 = scans[60.0]
     h60 = resting_hemodynamics(det60, outcome=res60.outcome.value)
     assert h60["sdppg_derivable"] is True
@@ -256,7 +269,7 @@ def test_rejected_rhythm_scan_keeps_endpoint_usable_research_values(scans):
     assert all(h[k]["available"] for k in
                ("arterial_stiffness", "vascular_tone",
                 "cardiorespiratory_fitness"))
-    assert all(h[k]["estimate"]["value"] is not None for k in
+    assert all(_reports(h[k]) for k in
                ("arterial_stiffness", "vascular_tone",
                 "cardiorespiratory_fitness"))
     assert "overall rhythm scan was not accepted" in \
@@ -268,7 +281,7 @@ def test_rejected_rhythm_scan_keeps_endpoint_usable_research_values(scans):
         hemodynamics=h)
     assert payload["complete"] is True
     assert payload["scan_accepted"] is False
-    assert all(x["status"] == "computed" and x["value"] is not None and
+    assert all(x["status"] == "computed" and _item_reports(x) and
                x.get("warning") for x in payload["items"])
     # Hard-invalid input still fails visibly rather than manufacturing values.
     assert resting_hemodynamics({}, outcome="ACCEPT")["available"] is False
@@ -291,7 +304,7 @@ def test_limited_cross_region_evidence_keeps_real_multi_roi_values(scans):
     assert h["n_beats_used"] >= 8 and h["n_rois_used"] >= 2
     assert h["quality"]["endpoint_evidence"]["mode"] == \
         "limited_endpoint_morphology"
-    assert all(h[k]["available"] and h[k]["estimate"]["value"] is not None
+    assert all(h[k]["available"] and _reports(h[k])
                for k in ("arterial_stiffness", "vascular_tone",
                           "cardiorespiratory_fitness"))
 

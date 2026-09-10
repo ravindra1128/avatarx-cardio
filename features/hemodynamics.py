@@ -106,6 +106,7 @@ MIN_PROVISIONAL_RATE_INTERVALS = 5    # clean intervals for a provisional clean-
 # stay on 0-100, where a percentage and a bounded proxy already belong.
 RI_TYPICAL = (0.4, 0.8)               # reflection index, healthy adults
 AGING_TYPICAL = (-2.0, 1.0)           # SDPPG aging index (Takazawa), young -> old
+STIFFNESS_TYPICAL = (40.0, 80.0)      # the shared 0-100 scale's typical band
 # Pulse crest time, the no-notch fallback marker. Direction (checked against
 # the PPG literature 2026-09-09, and OPPOSITE to what this file assumed at
 # first): the pulse wave reaches the periphery sooner through stiffer
@@ -114,6 +115,52 @@ AGING_TYPICAL = (-2.0, 1.0)           # SDPPG aging index (Takazawa), young -> o
 # also shortens with a faster pulse - both reasons this marker is only ever
 # reported as a band, and only as provisional.
 RISE_TYPICAL_MS = (120.0, 320.0)
+
+
+# One 0-100 stiffness index (owner, 2026-09-10), so every scan shows a number
+# in the same unit. Each marker reaches it by its OWN monotone map, and every
+# map puts that marker's typical range on 40-80, so the scales line up:
+#
+#   reflection index   x100, so 0.35 reads 35 and 0.55 reads 55 (typical 40-80)
+#   pulse crest time   320 ms -> 40, 120 ms -> 80; SHORTER is stiffer, because
+#                      a stiffer artery carries the wave faster
+#   SDPPG aging index  its -2..+1 range across 10..90
+#
+# This is a rescale, NOT a conversion between markers: a crest-time score is
+# not a reflection index and never claims to be. Which marker produced the
+# number is in raw_name/raw_value, shown under the card and kept on the sheet,
+# and a crest-time score is always tier "provisional". Uncalibrated throughout.
+RISE_MS_TO_SCORE = ((320.0, 40.0), (120.0, 80.0))
+AGI_TO_SCORE = ((-2.0, 10.0), (1.0, 90.0))
+
+
+def _lerp_score(x, pair):
+    (x0, y0), (x1, y1) = pair
+    return None if x is None else round(_clip100(y0 + (float(x) - x0) * (y1 - y0) / (x1 - x0)), 1)
+
+
+def stiffness_score_from_reflection_index(ri):
+    """Reflection index x100: a stiffer artery returns a larger reflected wave."""
+    return None if ri is None else round(_clip100(100.0 * float(ri)), 1)
+
+
+def stiffness_score_from_rise_time(rise_s):
+    """Crest time on the same 0-100 scale. Shorter crest time, higher score."""
+    return None if rise_s is None else _lerp_score(float(rise_s) * 1000.0, RISE_MS_TO_SCORE)
+
+
+def stiffness_band_from_reflection_index(ri):
+    """"High" / "Typical" / "Low" from the reflection index, or None.
+
+    A stiffer artery returns a larger reflected wave, so a HIGHER index reads
+    as higher stiffness - the opposite direction to the crest time below."""
+    if ri is None:
+        return None
+    lo, hi = RI_TYPICAL
+    v = float(ri)
+    if v > hi:
+        return "High"
+    return "Low" if v < lo else "Typical"
 
 
 def stiffness_band_from_rise_time(rise_s):
@@ -259,13 +306,16 @@ def stiffness_contour(contour: dict) -> dict:
     # different quantities on the same card within one device (phone scans
     # 2026-09-09: 0.83 ratio, then 210 ms, then 0.57). The rise time stays in
     # the details as a morphology marker; it is never the stiffness value.
-    # Display tiers (owner decision 2026-09-09): the card's value is a 0-100
-    # score. MEASURED when the reflection index exists (a dicrotic notch was
-    # found); PROVISIONAL from the crest time when it does not - a weaker,
-    # different marker, mapped onto the same scale and labelled as such, so a
-    # scan is never blank for want of a notch that 30 fps often cannot
-    # resolve. The raw marker travels with the score. The SDPPG aging index,
-    # when a research frame rate makes it available, is reported beside them.
+    # ONE FORMAT ON EVERY SCAN (owner, 2026-09-10): a band - High, Typical or
+    # Low - and never a number. This card's markers live in different units (a
+    # dimensionless ratio, a dimensionless index, a time in milliseconds) and
+    # no validated conversion exists between them, so any shared number slot
+    # would either change units between scans or present one marker as
+    # another. A band is the one form all three can honestly take, and it is
+    # also the honest resolution of the marker's instability: this person's
+    # reflection index moved 0.28 -> 0.97 in four minutes at 30 fps. The
+    # measured marker travels beside the band in raw_value and reaches the
+    # tracking sheet unchanged, so nothing is lost for analysis.
     tier_reasons = []
     band = None
     if agi is not None:
@@ -273,7 +323,9 @@ def stiffness_contour(contour: dict) -> dict:
         # the second-derivative aging index is the better marker and is the
         # card's value; a device always sits in one class, so its card never
         # changes quantity between scans.
-        score, unit, typical = round(float(agi), 3), "index", AGING_TYPICAL
+        score, unit, typical = _lerp_score(agi, AGI_TO_SCORE), "/100", STIFFNESS_TYPICAL
+        band = ("High" if float(agi) > AGING_TYPICAL[1]
+                else "Low" if float(agi) < AGING_TYPICAL[0] else "Typical")
         tier = "measured"
         name = "second_derivative_aging_index"
         method = ("second-derivative aging index (b - c - d - e)/a on the "
@@ -282,7 +334,8 @@ def stiffness_contour(contour: dict) -> dict:
         out["raw_value"], out["raw_unit"], out["raw_name"] = (
             round(float(agi), 5), "index", "second_derivative_aging_index")
     elif ri is not None:
-        score, unit, typical = round(float(ri), 3), "ratio", RI_TYPICAL
+        score, unit, typical = stiffness_score_from_reflection_index(ri), "/100", STIFFNESS_TYPICAL
+        band = stiffness_band_from_reflection_index(ri)
         out["raw_value"], out["raw_unit"], out["raw_name"] = (
             round(float(ri), 5), "ratio", "reflection_index")
         tier = "measured"
@@ -291,11 +344,9 @@ def stiffness_contour(contour: dict) -> dict:
                   "height on the ensemble pulse; dimensionless and "
                   "uncalibrated, rises with arterial stiffness")
     elif rise is not None:
-        # A DIFFERENT quantity from the reflection index, so it is reported as
-        # a BAND rather than a number: two unrelated numbers must never share
-        # this card's value slot (owner, 2026-09-09). The crest time itself
-        # still travels in raw_value and reaches the tracking sheet.
-        score, unit, typical = None, None, None
+        # The weakest of the three markers, and in different units again, so it
+        # is provisional - but it takes the same band form as the others.
+        score, unit, typical = stiffness_score_from_rise_time(rise), "/100", STIFFNESS_TYPICAL
         band = stiffness_band_from_rise_time(rise)
         tier = "provisional"
         tier_reasons.append("no dicrotic notch was found, so this is a band "
