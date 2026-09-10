@@ -73,8 +73,26 @@ def downscale(video_path: str, scale: str) -> dict:
     # outside the frame or too close" then PASSED that geometry gate purely
     # because it had been compressed. Distorting the image until a gate
     # accepts it is not a fix; every downstream number would be computed
-    # from a misshapen face. Scale by the long edge and let the short edge
+    # from a misshapen face. Fit inside the box and let the other edge
     # follow (-2 = keep AR, round to even).
+    #
+    # FIT, not "set the width" (fixed 2026-09-10). The previous line was
+    # `scale={w}:-2`, which sets the WIDTH — the long edge only on a
+    # LANDSCAPE source. Every phone scan is 480x720 PORTRAIT, whose width is
+    # already 480, so the scale was a no-op: the clip was re-encoded to
+    # 480x720, spending 11-16 s per scan to average exactly zero pixels
+    # (measured on all 44 tracking-sheet scans; every one is 480x720).
+    # Averaging is the whole point of this step — it is what suppresses the
+    # compression artefacts that a 0.48 bpp VP8 phone clip is full of, and
+    # a controlled A/B on 2026-09-10 showed those artefacts cost cross-ROI
+    # correlation 0.555 -> 0.163, which is what shatters the beat series.
+    # A 480x720 source now fits to 240x360: 4x fewer pixels, each a mean of
+    # four, which is the lift this function was written to deliver.
+    # Landscape sources are UNCHANGED (1080x720 -> 480x320, 640x480 ->
+    # 480x360, both exactly as before) — only tall clips move.
+    fit = min(w / float(sw), h / float(sh))
+    tw = max(2, int(round(sw * fit / 2.0)) * 2)
+    info["target"] = f"{tw}x~{int(round(sh * fit))}"
     out = video_path + ".scaled.avi"
     # VP9, not VP8, and a high bitrate: the point is to average pixels, not
     # to add a second lossy generation. Measured on the same 1080x720 scan
@@ -97,7 +115,7 @@ def downscale(video_path: str, scale: str) -> dict:
     # fail at random. FFV1 is bit-identical run to run (verified by md5).
     # The file is larger, but it is a server-side temp file, never uploaded.
     cmd = [ff, "-y", "-v", "error", "-i", video_path,
-           "-vf", f"scale={w}:-2", "-sws_flags", "area",
+           "-vf", f"scale={tw}:-2", "-sws_flags", "area",
            "-c:v", "ffv1", "-pix_fmt", "bgr0", "-an", out]
     try:
         subprocess.run(cmd, check=True, timeout=300,
