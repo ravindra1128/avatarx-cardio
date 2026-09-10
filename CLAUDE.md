@@ -81,9 +81,32 @@ separately; never blend them into one "accuracy" number.
   recordings, one person; gitignored). Guard snapshot: `data/eval_cache/guard_snapshot.json`.
 - Tracking sheet: spreadsheet `1-CHxko3E4_xQBwxGbsUj-WjqY2_LFBVa3kKnkY3WaRo`, tab
   `cardio-data` (gid 140358874); every production scan appends a row.
-- Deploy: push `main` to remote `personal` (ravindra1128/avatarx-cardio) → Railway rebuilds
-  in ~1 min. Verify with `GET /healthz` → `build` (the response's `code_commit` is always
+- Deploy: push to remote `personal` (ravindra1128/avatarx-cardio) → Railway rebuilds in
+  ~1 min. Verify with `GET /healthz` → `build` (the response's `code_commit` is always
   `no-git` on Railway) and `config_hash`. Remote `origin` is the org repo; the owner pushes it.
+
+  **Two branches, two Railway environments (set up 2026-09-10).** Until then every
+  experiment went straight at the one service the owner's phone scans, which is how a
+  bitrate change that broke the SQI floor reached real scans before it could be caught.
+
+  | branch | Railway environment | who points at it |
+  |---|---|---|
+  | `main` | production | the webapp's **production**/beta `VITE_AFIB_URL` |
+  | `staging` | staging | the webapp's **staging** `VITE_AFIB_URL` |
+
+  Work goes to `staging`, is measured there, and only then merges to `main`. The webapp
+  already splits this way: `VITE_AFIB_URL` is a per-environment GitHub secret and
+  `.github/workflows/staging-deploy.yml` runs on the `staging` branch.
+
+  Two things the Railway environment MUST get right, neither of them code:
+  - its own `AFIB_SHEET_GID` pointing at a **different sheet tab**. Every comparison in
+    this repo works because production scans all land in one place; a staging service
+    writing into that tab silently corrupts the baseline it is being measured against.
+  - its own `GOOGLE_SHEETS_CREDENTIALS_JSON`. Variables are per-environment on Railway
+    and are NOT inherited from production.
+
+  Nothing in the code changes for this: the sheet id, tab and credentials are already
+  read from the environment (`app/result_sheet.py`).
 - Local test: webapp `.claude/launch.json` starts this service on 8790 and a webapp on
   5174 pointed at it. Phone scans are ~30–50 MB; the Railway edge relays uploads at
   ~0.5–1 MB/s, so most of a phone's wait is upload, not analysis.
