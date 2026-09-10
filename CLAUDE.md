@@ -92,24 +92,9 @@ separately; never blend them into one "accuracy" number.
   | branch | Railway environment | URL | who points at it |
   |---|---|---|---|
   | `main` | production | `avatarx-cardio-production.up.railway.app` | the webapp's beta/production `VITE_AFIB_URL` |
-  | `staging` | staging | `avatarx-cardio-staging.up.railway.app` | phones switched with `?afib=staging` |
+  | `staging` | staging | `avatarx-cardio-staging.up.railway.app` | the webapp's **staging** `VITE_AFIB_URL` |
 
   Both verified live 2026-09-10.
-
-  **Sending a real scan at staging.** The deployed `VITE_AFIB_URL` points every phone at
-  production, so the switch is per-device, set by opening the route once:
-
-  | link | effect on that phone |
-  |---|---|
-  | `/beta/cardio?afib=staging` | its scans go to the staging service |
-  | `/beta/cardio?afib=prod` | back to production |
-  | `/beta/cardio?afib=off` / `=on` | the AFib kill-switch |
-  | `/beta/cardio?afib=http://<laptop-ip>:8790` | a local service on the same network |
-
-  It writes `localStorage.afib_url`, then strips the parameter so a reload does not
-  re-apply it; the scan-flags console line names the host each scan actually reached.
-  Rules and tests: webapp `src/lib/scan/afibTarget.js`. Nothing else moves — every other
-  phone, and the deployed secret, keep pointing at production.
 
   Work goes to `staging`, is measured there, and only then merges to `main`. The webapp
   already splits this way: `VITE_AFIB_URL` is a per-environment GitHub secret and
