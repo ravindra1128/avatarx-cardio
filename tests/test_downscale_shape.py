@@ -86,3 +86,41 @@ def test_aspect_ratio_is_never_changed(tmp_path):
         downscale(src, scale="480x360")
         ow, oh = _dims(src + ".scaled.avi")
         assert (ow / oh) == pytest.approx(w / h, rel=0.02), f"{w}x{h} -> {ow}x{oh}"
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not on PATH")
+def test_a_resize_failure_still_transcodes_rather_than_giving_up(tmp_path, monkeypatch):
+    """The fallback that matters.
+
+    Three of six real staging scans (2026-09-10) hit ffmpeg exit 234 (EINVAL)
+    on the resize — their middle chunks are dropped by the client's rolling
+    window and the capture rate wanders, so the stream reconfigures mid-file.
+    Before this fallback those scans analysed the RAW upload and two returned
+    NO_RESULT. The old no-op resize had still transcoded VP8 -> FFV1, giving
+    the analysis one clean decode; that floor must survive a resize failure.
+    """
+    import subprocess as sp
+    from app import measure_prep
+
+    src = _make(str(tmp_path / "portrait.webm"), 480, 720)
+    real = sp.run
+    seen = []
+
+    def only_resize_fails(cmd, *a, **k):
+        vf = cmd[cmd.index("-vf") + 1] if "-vf" in cmd else ""
+        seen.append("resize" if "scale=" in vf else "transcode")
+        if "scale=" in vf:
+            raise sp.CalledProcessError(234, cmd, stderr=b"Invalid argument")
+        return real(cmd, *a, **k)
+
+    monkeypatch.setattr(measure_prep.subprocess, "run", only_resize_fails)
+    info = measure_prep.downscale(src, scale="480x360")
+
+    assert seen == ["resize", "transcode"], seen
+    assert info.get("applied") is True, info
+    assert info.get("attempt") == "transcode-only"
+    assert "resize failed" in (info.get("degraded") or "")
+    out = src + ".scaled.avi"
+    assert os.path.exists(out)
+    # Native size kept, but it IS an FFV1 transcode — the normalisation floor.
+    assert _dims(out) == (480, 720)

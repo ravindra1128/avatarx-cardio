@@ -219,7 +219,8 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
         # still returns, so the only trace is a suspiciously fast stage and a
         # resolution that did not change. One real scan (2026-09-10 12:26)
         # analysed at 480x720 with downscale_s 0.51 and nothing recorded why.
-        "Downscale Note": (dsc.get("reason") or dsc.get("scaled_to") or ""),
+        "Downscale Note": (dsc.get("reason") or dsc.get("degraded")
+                           or dsc.get("scaled_to") or ""),
         "Analysis s": _num(tm.get("analysis_s"), 2),
         "Server Total s": _num(tm.get("server_total_s"), 2),
         "Client Duration ms": ex.get("duration_ms") if ex.get("duration_ms") is not None else "",

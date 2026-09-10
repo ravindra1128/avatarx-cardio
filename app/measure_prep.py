@@ -114,12 +114,54 @@ def downscale(video_path: str, scale: str) -> dict:
     # as large as the distance to the gate, so the same scan could pass or
     # fail at random. FFV1 is bit-identical run to run (verified by md5).
     # The file is larger, but it is a server-side temp file, never uploaded.
-    cmd = [ff, "-y", "-v", "error", "-i", video_path,
-           "-vf", f"scale={tw}:-2", "-sws_flags", "area",
-           "-c:v", "ffv1", "-pix_fmt", "bgr0", "-an", out]
+    # Two attempts, and the SECOND one matters as much as the first.
+    #
+    # Measured on 6 real staging scans (2026-09-10 12:45-13:17): the resize
+    # failed on 3 of them with ffmpeg exit 234 (= -22 & 0xFF = EINVAL). These
+    # clips have their middle chunks dropped by the client's rolling window and
+    # a capture rate that wanders (15.4 / 25 / 30.3 fps across scans), so the
+    # stream can reconfigure mid-file; `scale` rejects that, while the old
+    # no-op `scale={w}:-2` on an already-480-wide clip did not have to resize
+    # and survived it.
+    #
+    # That no-op was never useless: it still transcoded VP8 -> FFV1, which
+    # normalises the container and hands the analysis one clean decode. Losing
+    # it is why the three failures above degraded instead of merely staying
+    # the same — two of them returned NO_RESULT. So a resize failure falls back
+    # to that plain transcode, NOT to the raw upload. Native is the last resort
+    # only if ffmpeg cannot read the file at all.
+    base = [ff, "-y", "-v", "error", "-i", video_path]
+    tail = ["-c:v", "ffv1", "-pix_fmt", "bgr0", "-an", out]
+    attempts = [
+        ("fit", base + ["-vf", f"scale={tw}:-2", "-sws_flags", "area"] + tail),
+        ("transcode-only", base + tail),
+    ]
+    err = None
+    for label, cmd in attempts:
+        try:
+            subprocess.run(cmd, check=True, timeout=300,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+            if os.path.getsize(out) > 0:
+                info["attempt"] = label
+                break
+        except Exception as e:                            # noqa: BLE001
+            # ffmpeg's own words, not just the exit code — the exit code alone
+            # cost a whole round of scans to interpret.
+            detail = getattr(e, "stderr", b"") or b""
+            if isinstance(detail, bytes):
+                detail = detail.decode("utf-8", "replace")
+            err = f"{label}: {e} :: {detail.strip()[-300:]}"
+            try:
+                if os.path.exists(out):
+                    os.remove(out)
+            except OSError:
+                pass
+            continue
     try:
-        subprocess.run(cmd, check=True, timeout=300,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        if err and not info.get("attempt"):
+            raise RuntimeError(err)
+        if info.get("attempt") == "transcode-only":
+            info["degraded"] = f"resize failed, transcoded at native size ({err})"
         if os.path.getsize(out) > 0:
             # The container changed (AVI/FFV1), so the file must change name
             # too - leaving AVI bytes in a .webm would make the decoder
@@ -133,7 +175,9 @@ def downscale(video_path: str, scale: str) -> dict:
                 pass
             info["applied"] = True
             info["path"] = out
-            info["scaled_to"] = f"{tw}x(auto, AR preserved)"
+            info["scaled_to"] = (f"{tw}x(auto, AR preserved)"
+                                 if info.get("attempt") == "fit"
+                                 else f"{sw}x{sh} (resize failed — transcode only)")
         else:
             info["reason"] = "ffmpeg produced an empty file — keeping original"
     except Exception as e:
