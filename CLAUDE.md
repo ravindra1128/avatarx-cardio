@@ -89,10 +89,12 @@ separately; never blend them into one "accuracy" number.
   experiment went straight at the one service the owner's phone scans, which is how a
   bitrate change that broke the SQI floor reached real scans before it could be caught.
 
-  | branch | Railway environment | who points at it |
-  |---|---|---|
-  | `main` | production | the webapp's **production**/beta `VITE_AFIB_URL` |
-  | `staging` | staging | the webapp's **staging** `VITE_AFIB_URL` |
+  | branch | Railway environment | URL | who points at it |
+  |---|---|---|---|
+  | `main` | production | `avatarx-cardio-production.up.railway.app` | the webapp's beta/production `VITE_AFIB_URL` |
+  | `staging` | staging | `avatarx-cardio-staging.up.railway.app` | the webapp's **staging** `VITE_AFIB_URL` |
+
+  Both verified live 2026-09-10.
 
   Work goes to `staging`, is measured there, and only then merges to `main`. The webapp
   already splits this way: `VITE_AFIB_URL` is a per-environment GitHub secret and
@@ -102,6 +104,9 @@ separately; never blend them into one "accuracy" number.
   - its own `AFIB_SHEET_GID` pointing at a **different sheet tab**. Every comparison in
     this repo works because production scans all land in one place; a staging service
     writing into that tab silently corrupts the baseline it is being measured against.
+    **OPEN as of 2026-09-10:** staging still reports `gid 140358874`, the production tab.
+    Check `GET /healthz` → `sheet.gid` on both before trusting any staging measurement;
+    if they match, staging is polluting the production data.
   - its own `GOOGLE_SHEETS_CREDENTIALS_JSON`. Variables are per-environment on Railway
     and are NOT inherited from production.
 
