@@ -92,9 +92,18 @@ separately; never blend them into one "accuracy" number.
   | branch | Railway environment | URL | who points at it |
   |---|---|---|---|
   | `main` | production | `avatarx-cardio-production.up.railway.app` | the webapp's beta/production `VITE_AFIB_URL` |
-  | `staging` | staging | `avatarx-cardio-staging.up.railway.app` | the webapp's **staging** `VITE_AFIB_URL` |
+  | `staging` | staging | `avatarx-cardio-staging.up.railway.app` | the webapp's `/beta/cardio-staging` route |
 
   Both verified live 2026-09-10.
+
+  **Where a candidate change gets tried.** The webapp has a second route,
+  `/beta/cardio-staging`, that is a full copy of `/beta/cardio` — its own scan page,
+  results page, AFib processor, camera-lock module and biomarker cards — wired to the
+  staging service and to its own `afib_result_staging` key. So a change can be scanned on
+  a real phone without altering `/beta/cardio` at all. Webapp-side detail and the file
+  pairs are in that repo's `CLAUDE.md`; a jest test there fails if the halves cross.
+
+  Service-side, the same discipline: push to `staging`, measure, then merge to `main`.
 
   Work goes to `staging`, is measured there, and only then merges to `main`. The webapp
   already splits this way: `VITE_AFIB_URL` is a per-environment GitHub secret and
