@@ -59,6 +59,7 @@ COLUMNS = [
     "Capture Segments", "Pulse bpm", "FPS", "Width", "Height", "Codec",
     "Clock Source", "Capture Profile", "No-Read Reasons",
     "Upload MB", "Upload s", "Trim s", "Trim Probe", "Window s", "Downscale s",
+    "Downscale Note",
     "Analysis s", "Server Total s", "Client Duration ms", "Launch Overrides",
     "Build", "Config Hash", "User Agent",
     # Reference vitals the client attached (ShenAI) and the agreement column.
@@ -163,6 +164,7 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
     ra = _g(doc, "debug", "rationale", default={}) or {}
     cm = doc.get("capture_meta") or {}
     tm = doc.get("timing") or {}
+    dsc = doc.get("downscale") or {}
     items = {i.get("key"): i for i in _g(doc, "biomarkers", "items", default=[]) or []
              if isinstance(i, dict)}
     pulse = ""
@@ -213,6 +215,11 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
         # is the whole point of asking.
         "Window s": _num(_g(doc, "trim", "window_s"), 0),
         "Downscale s": _num(tm.get("downscale_s"), 2),
+        # A downscale that FAILS falls back to the native file and the scan
+        # still returns, so the only trace is a suspiciously fast stage and a
+        # resolution that did not change. One real scan (2026-09-10 12:26)
+        # analysed at 480x720 with downscale_s 0.51 and nothing recorded why.
+        "Downscale Note": (dsc.get("reason") or dsc.get("scaled_to") or ""),
         "Analysis s": _num(tm.get("analysis_s"), 2),
         "Server Total s": _num(tm.get("server_total_s"), 2),
         "Client Duration ms": ex.get("duration_ms") if ex.get("duration_ms") is not None else "",

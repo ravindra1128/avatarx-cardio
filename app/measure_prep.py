@@ -133,7 +133,7 @@ def downscale(video_path: str, scale: str) -> dict:
                 pass
             info["applied"] = True
             info["path"] = out
-            info["scaled_to"] = f"{w}x(auto, AR preserved)"
+            info["scaled_to"] = f"{tw}x(auto, AR preserved)"
         else:
             info["reason"] = "ffmpeg produced an empty file — keeping original"
     except Exception as e:
