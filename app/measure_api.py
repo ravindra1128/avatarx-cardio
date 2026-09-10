@@ -43,6 +43,7 @@ import dataclasses
 import json
 import os
 import pathlib
+import hmac
 import shutil
 import tempfile
 import threading
@@ -114,6 +115,63 @@ def _remember_result(session, doc: dict) -> None:
 # The single-shot /api/process-video path is untouched, so an older client
 # keeps working exactly as before.
 UPLOAD_DIR = WORK_DIR / "parts"
+
+# Retained scan clips, so a change can be replayed against REAL phone captures
+# instead of costing a 3-minute mobile scan per candidate. The eval corpus has
+# no 480x720 portrait clip - the only shape production records - which is why
+# the optimizer gate could not judge the 2026-09-10 downscale change at all.
+#
+# BOTH env vars are required, and neither is set on production. This serves
+# recorded video of someone's face from a PUBLIC URL, so it stays off unless
+# deliberately switched on, and the token is not optional.
+CLIPS_DIR = WORK_DIR / "clips"
+CLIPS_TOKEN = os.environ.get("AFIB_CLIPS_TOKEN", "").strip()
+CLIPS_KEEP = int(os.environ.get("AFIB_CLIPS_KEEP", "12"))       # newest N
+CLIPS_MAX_BYTES = int(os.environ.get("AFIB_CLIPS_MAX_MB", "600")) * 1024 * 1024
+
+
+def _clips_enabled() -> bool:
+    return os.environ.get("AFIB_KEEP_UPLOADS") == "1" and bool(CLIPS_TOKEN)
+
+
+def _retain_clip(video_path: str, sid: str) -> None:
+    """Keep an untouched copy of the upload before prep rewrites it in place.
+
+    Called on BOTH upload paths. The chunked path is the one a phone actually
+    uses, and it never retained anything - so AFIB_KEEP_UPLOADS looked enabled
+    while quietly doing nothing for every real scan.
+    """
+    if not _clips_enabled():
+        return
+    try:
+        CLIPS_DIR.mkdir(parents=True, exist_ok=True)
+        src = pathlib.Path(video_path)
+        ext = src.suffix.lstrip(".") or "webm"
+        stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+        dst = CLIPS_DIR / f"{stamp}-{sid[:16]}.{ext}"
+        shutil.copyfile(src, dst)
+        side = src.parent / (src.name + ".timestamps.json")
+        if side.exists():
+            shutil.copyfile(side, str(dst) + ".timestamps.json")
+        # Railway's disk is ephemeral and small: keep the newest N, and stay
+        # under a byte cap. Oldest go first.
+        kept = sorted(CLIPS_DIR.glob("*"), key=lambda q: q.stat().st_mtime,
+                      reverse=True)
+        vids = [q for q in kept if not q.name.endswith(".timestamps.json")]
+        total = 0
+        for i, q in enumerate(vids):
+            total += q.stat().st_size
+            if i >= CLIPS_KEEP or total > CLIPS_MAX_BYTES:
+                for victim in (q, pathlib.Path(str(q) + ".timestamps.json")):
+                    try:
+                        victim.unlink()
+                    except OSError:
+                        pass
+        print(f"[clips] retained {dst.name} "
+              f"({src.stat().st_size / 1e6:.1f} MB)", flush=True)
+    except Exception as e:                                    # noqa: BLE001
+        # Never let retention affect a scan.
+        print(f"[clips] retain failed: {e}", flush=True)
 # Slices are sized to the client's measured link, down to 256 KB on a slow
 # one, so a clip near MAX_UPLOAD_BYTES can arrive as ~1000 parts.
 MAX_UPLOAD_PARTS = 2048
@@ -151,6 +209,9 @@ def _assemble_parts(upload_id: str, ext: str) -> str:
         for part in parts:
             fh.write(part.read_bytes())
             part.unlink()
+    # Retain BEFORE prep: trim and downscale rewrite this file in place, and
+    # the whole point is to replay the native capture later.
+    _retain_clip(str(out), d.name)
     return str(out), max(0.0, time.time() - first_at)
 
 
@@ -685,7 +746,68 @@ class MeasureHandler(BaseHTTPRequestHandler):
                 return
             self._json(200, doc)
             return
+        if urlparse(self.path).path in ("/api/clips", "/api/clip"):
+            self._serve_clip()
+            return
         self._json(404, {"error": "not found"})
+
+    def _serve_clip(self):
+        """List or download a retained scan clip.
+
+        Gated on AFIB_KEEP_UPLOADS=1 AND a matching AFIB_CLIPS_TOKEN, because
+        this serves video of someone's face from a public URL. Disabled looks
+        like 404, not 403: an endpoint that is off should not advertise that it
+        exists. Never enabled on production.
+        """
+        u = urlparse(self.path)
+        q = parse_qs(u.query)
+        if not _clips_enabled():
+            self._json(404, {"error": "not found"})
+            return
+        token = (q.get("token") or [""])[0]
+        if not hmac.compare_digest(token, CLIPS_TOKEN):
+            print("[clips] rejected: bad or missing token", flush=True)
+            self._json(404, {"error": "not found"})
+            return
+        try:
+            CLIPS_DIR.mkdir(parents=True, exist_ok=True)
+            vids = sorted((f for f in CLIPS_DIR.glob("*")
+                           if not f.name.endswith(".timestamps.json")),
+                          key=lambda f: f.stat().st_mtime, reverse=True)
+        except OSError as e:
+            self._json(500, {"error": f"clips unavailable: {e}"})
+            return
+
+        if u.path == "/api/clips":
+            self._json(200, {"clips": [
+                {"id": f.name,
+                 "bytes": f.stat().st_size,
+                 "mtime": time.strftime("%Y-%m-%dT%H:%M:%SZ",
+                                        time.gmtime(f.stat().st_mtime)),
+                 "sidecar": os.path.exists(str(f) + ".timestamps.json")}
+                for f in vids], "keep": CLIPS_KEEP})
+            return
+
+        cid = (q.get("id") or [""])[0]
+        # Basename only: a caller must not be able to walk out of CLIPS_DIR.
+        target = CLIPS_DIR / os.path.basename(cid)
+        if not cid or not target.exists() or not target.is_file():
+            self._json(404, {"error": "no such clip", "id": cid})
+            return
+        try:
+            data = target.read_bytes()
+        except OSError as e:
+            self._json(500, {"error": f"unreadable: {e}"})
+            return
+        print(f"[clips] serving {target.name} ({len(data) / 1e6:.1f} MB)",
+              flush=True)
+        self.send_response(200)
+        self.send_header("Content-Type", "application/octet-stream")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Content-Disposition",
+                         f'attachment; filename="{target.name}"')
+        self.end_headers()
+        self.wfile.write(data)
 
     def _read_body(self, limit: int):
         try:
@@ -970,8 +1092,8 @@ class MeasureHandler(BaseHTTPRequestHandler):
         # otherwise a live scan can never be re-run at native resolution or
         # with a different encoder setting afterwards.
         if os.environ.get("AFIB_KEEP_UPLOADS") == "1":
-            import shutil
             shutil.copyfile(path, str(d / f"scan.orig.{ext}"))
+        _retain_clip(path, sid)
 
         try:
             doc = measure_video(
