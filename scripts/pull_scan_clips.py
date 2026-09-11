@@ -66,7 +66,8 @@ def main(argv=None) -> int:
     print(f"{len(clips)} clip(s) on {a.base}:")
     for c in clips:
         print(f"   {c['id']:44} {c['bytes']/1e6:7.1f} MB  {c['mtime']}"
-              f"{'  +timestamps' if c.get('sidecar') else ''}")
+              f"{'  +timestamps' if c.get('sidecar') else ''}"
+              f"{'  +shenai' if c.get('shenai') else ''}")
     if not a.get:
         print("\nre-run with --get all (or --get <id>) to download")
         return 0
@@ -78,7 +79,11 @@ def main(argv=None) -> int:
         print(f"no clip with id {a.get!r}", file=sys.stderr)
         return 1
     for c in wanted:
-        for name in ([c["id"]] + ([c["id"] + ".timestamps.json"] if c.get("sidecar") else [])):
+        # ShenAI's own dense PPG + beat train, when the scan carried one: it is
+        # what scripts/compare_shenai_signal.py auto-discovers beside the clip.
+        for name in ([c["id"]]
+                     + ([c["id"] + ".timestamps.json"] if c.get("sidecar") else [])
+                     + ([c["id"] + ".shenai.json"] if c.get("shenai") else [])):
             dst = out / name
             if dst.exists():
                 print(f"   have {name}")
@@ -91,6 +96,7 @@ def main(argv=None) -> int:
           "--holdout-frac 0.4 --seed 13")
     print("   ...then replay/score as usual — the corpus now carries the real "
           "portrait capture shape.")
+    print("   python scripts/compare_shenai_signal.py   # for clips with +shenai")
     return 0
 
 

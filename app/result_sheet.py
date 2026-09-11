@@ -28,6 +28,7 @@ The service account's email must be shared on the sheet as an editor.
 from __future__ import annotations
 
 import json
+import math
 import os
 import threading
 import time
@@ -70,6 +71,13 @@ COLUMNS = [
     "Pulse Lattice", "Pulse Lattice N", "Pulse Check Mode",
     "Fit Basis", "Rate Method", "Rate Intervals",
     "AS Tier", "VT Tier", "Fit Tier", "AS Raw", "VT Raw", "Fit HR",
+    # ShenAI's own dense PPG waveform and beat train, posted as a sidecar by
+    # /beta/cardio-staging and retained beside the clip (2026-09-11). Audit
+    # only — nothing here is derived or compared, so the sheet never has to
+    # re-implement the offline harness. They exist so a run of
+    # scripts/compare_shenai_signal.py can be planned from the history: which
+    # scans carry a second opinion, and how much of one.
+    "ShenAI Sidecar", "ShenAI PPG N", "ShenAI PPG fs", "ShenAI Beats N",
 ]
 
 _POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sheet")
@@ -107,7 +115,37 @@ def _num(v, nd=4):
         f = float(v)
     except (TypeError, ValueError):
         return ""
-    return round(f, nd) if f == f else ""      # NaN -> ""
+    # isfinite, not `f == f`: that only caught NaN and let ±inf through into a
+    # cell. inf is as reachable as NaN was — the ShenAI sidecar columns below
+    # read an unauthenticated /api/scan-signals body, and json.loads accepts the
+    # non-standard literals Infinity/-Infinity/NaN, as does float("inf") on a
+    # posted string. gspread serialises inf to bare `Infinity`, which is invalid
+    # JSON to the Sheets API, so one such value fails all three retries and
+    # DROPS the whole row — the scan's only audit trail (2026-09-11).
+    return round(f, nd) if math.isfinite(f) else ""
+
+
+def _count(v):
+    """A count cell, written exactly as the sidecar reported it (0 and 1483 must
+    stay ints, not become 0.0/1483.0), but only when it is a finite number.
+    These two cells are the only numbers in the row that bypass `_num`, so they
+    would otherwise be the remaining path for an `Infinity` posted to
+    /api/scan-signals to reach the sheet and drop the row (2026-09-11)."""
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return v
+    return v if math.isfinite(f) else ""
+
+
+def _first(*vals):
+    """First value that is not None. The "Downscale Note" fallback chain uses
+    `or`, which is right for strings but wrong for counts: a sidecar that
+    honestly reports 0 PPG samples must not read as "field missing"."""
+    for v in vals:
+        if v is not None:
+            return v
+    return None
 
 
 def _tier(items: dict, key: str) -> str:
@@ -178,6 +216,22 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
     ex = extra or {}
     ref = doc.get("reference") or {}
     cap = doc.get("client_capture") or {}
+    # ShenAI's sidecar. Client-supplied audit data like `ref`/`cap` above, so it
+    # is read the same tolerant way — and it may reach here in either of two
+    # shapes: a small summary the HTTP layer builds, or the sidecar document
+    # itself (schema_version 1: {ppg: {n, fs_hz}, heartbeats: [...]}). Accept
+    # both, and accept a bare bool from a build that only records arrival.
+    shen = doc.get("shenai")
+    sa = shen if isinstance(shen, dict) else {}
+    ppg_n = _first(sa.get("ppg_n"), _g(sa, "ppg", "n"))
+    # fs is DERIVED, never measured: the SDK exposes no sample rate at all
+    # (avatarxvitals/index.d.ts:374-377 — getFullPpgSignal() returns a bare
+    # number[]). Which rule produced it lives in the retained JSON as
+    # ppg.fs_source; it is deliberately not mirrored here, because a rate in a
+    # sheet cell with no provenance beside it reads as a measured one.
+    ppg_fs = _first(sa.get("ppg_fs_hz"), sa.get("ppg_fs"), _g(sa, "ppg", "fs_hz"))
+    beats_n = _first(sa.get("beats_n"), _g(sa, "measurement", "beats_n"),
+                     len(sa["heartbeats"]) if isinstance(sa.get("heartbeats"), list) else None)
     return {
         "Timestamp (UTC)": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
         "Session": doc.get("session") or "",
@@ -266,6 +320,22 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
         "AS Raw": _raw(items, "arterial_stiffness", 4),
         "VT Raw": _raw(items, "vascular_tone", 2),
         "Fit HR": _raw(items, "cardiorespiratory_fitness", 1),
+        # Route 6 (2026-09-11): a second, independent optical opinion on the
+        # same beats. Ours is bottlenecked on cross-ROI fusion — four face
+        # regions disagree on the pulse by 15-23 bpm at the phone's compression
+        # level, cross-region waveform correlation is 0.16, coverage sits at
+        # 0.47 against the 0.50 floor and 1 scan in 49 reaches ACCEPT — so it is
+        # worth knowing, per scan and at a glance, whether a ShenAI waveform is
+        # retained to compare against. Blank means the build predates the
+        # sidecar or the scan never reported one; FALSE means it reported none.
+        "ShenAI Sidecar": (("TRUE" if (sa or shen is True) else "FALSE")
+                           if shen is not None else ""),
+        # Counts, not statistics: the harness computes every comparison offline
+        # from the retained JSON, and nothing derived is recomputed here where
+        # it could delay or break a scan.
+        "ShenAI PPG N": _count(ppg_n) if ppg_n is not None else "",
+        "ShenAI PPG fs": _num(ppg_fs, 2),
+        "ShenAI Beats N": _count(beats_n) if beats_n is not None else "",
     }
 
 
@@ -310,7 +380,7 @@ def _worksheet():
     ws = book.get_worksheet_by_id(int(SHEET_GID)) if SHEET_GID else book.sheet1
     header = ws.row_values(1)
     if not header:
-        # A tab created by hand is 26 columns wide (A-Z) and COLUMNS is 73, so
+        # A tab created by hand is 26 columns wide (A-Z) and COLUMNS is 78, so
         # widen before writing — the same "exceeds grid limits" rejection
         # _extend_header grows the grid to avoid, which until now only the
         # existing-header branch below was protected from. An empty tab is
