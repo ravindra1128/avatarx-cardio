@@ -155,8 +155,36 @@ MAX_SIDECAR_BYTES = (int(os.environ.get("AFIB_MAX_SIDECAR_MB", "4"))
                      * 1024 * 1024)
 
 
+_TRUTHY = {"1", "true", "yes", "on"}
+
+
+def _clips_token() -> str:
+    """The read-back token, read LIVE.
+
+    CLIPS_TOKEN above is frozen at import. On 2026-09-12 the owner added
+    AFIB_CLIPS_TOKEN and AFIB_KEEP_UPLOADS in Railway, ran eight scans, and
+    every ShenAI column came back blank: the process had been up 14 h, so the
+    token it held was the empty string it started with. A variable set in the
+    console must work on the next request, not after the next redeploy."""
+    return (os.environ.get("AFIB_CLIPS_TOKEN") or CLIPS_TOKEN or "").strip()
+
+
+def _clips_gate_reason():
+    """Why retention is OFF, or None when it is on. For the PRIVATE log only -
+    never the token itself, only whether one is present."""
+    keep = (os.environ.get("AFIB_KEEP_UPLOADS") or "").strip()
+    if keep.lower() not in _TRUTHY:
+        # The old check was `== "1"`: `true` and `True` failed silently. Any
+        # of these spellings is an unambiguous intent to switch retention ON;
+        # nobody types `true` meaning off, so accepting them cannot leak.
+        return f"AFIB_KEEP_UPLOADS is {keep!r} (need one of 1/true/yes/on)"
+    if not _clips_token():
+        return "AFIB_CLIPS_TOKEN is unset or empty"
+    return None
+
+
 def _clips_enabled() -> bool:
-    return os.environ.get("AFIB_KEEP_UPLOADS") == "1" and bool(CLIPS_TOKEN)
+    return _clips_gate_reason() is None
 
 
 def _retain_clip(video_path: str, sid: str):
@@ -397,6 +425,12 @@ def _recall_result(session):
         item = _RESULTS.get(str(session or ""))
     return None if item is None else item[1]
 _STARTED_AT = time.time()
+# Say which way the gate is set, ONCE, in the private service log. A gate that
+# failed silently cost eight real scans of nothing on 2026-09-12. The public
+# /healthz must never carry this: whether a URL holds face video is exactly
+# the oracle the token exists to deny.
+print("[clips] retention " + ("ON" if _clips_enabled()
+                              else f"OFF: {_clips_gate_reason()}"), flush=True)
 BUILD_SHA = (os.environ.get("RAILWAY_GIT_COMMIT_SHA")      # set by Railway
              or os.environ.get("AFIB_BUILD_SHA") or "unknown")[:12]
 
@@ -977,7 +1011,7 @@ class MeasureHandler(BaseHTTPRequestHandler):
         # anybody whether this public URL currently holds face video and PPG
         # waveforms - the exact opposite of the design stated above.
         if not hmac.compare_digest(token.encode("utf-8", "ignore"),
-                                   CLIPS_TOKEN.encode("utf-8", "ignore")):
+                                   _clips_token().encode("utf-8", "ignore")):
             print("[clips] rejected: bad or missing token", flush=True)
             self._json(404, {"error": "not found"})
             return
@@ -1252,7 +1286,7 @@ class MeasureHandler(BaseHTTPRequestHandler):
         # below). Retention off means accepted-and-dropped, not refused.
         if not _clips_enabled():
             print(f"[signals] dropped {len(body)} B for {upload_id!r}: "
-                  f"retention disabled", flush=True)
+                  f"retention OFF: {_clips_gate_reason()}", flush=True)
             self._json(200, {"ok": True, "upload_id": d.name,
                              "bytes": len(body), "stored": False})
             return

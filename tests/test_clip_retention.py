@@ -371,3 +371,44 @@ def test_a_deeply_nested_sidecar_body_does_not_escape_the_parser():
     src = inspect.getsource(api.MeasureHandler._upload_signals)
     assert "RecursionError" in src, (
         f"{type(raised).__name__} escapes _upload_signals' parse guard")
+
+
+# --------------------------------------------------------------------------
+# 2026-09-12: eight real scans with both variables set in Railway produced no
+# sidecar, because the gate read the token ONCE at import and demanded the
+# literal string "1". Three properties now pinned.
+
+def test_gate_accepts_the_obvious_truthy_spellings(monkeypatch):
+    monkeypatch.setattr(api, "CLIPS_TOKEN", "s3cret", raising=False)
+    for v in ("1", "true", "True", "TRUE", "yes", "on", " 1 "):
+        monkeypatch.setenv("AFIB_KEEP_UPLOADS", v)
+        assert api._clips_enabled() is True, f"{v!r} should switch retention on"
+    for v in ("0", "false", "no", "off", "", "  ", "enabled"):
+        monkeypatch.setenv("AFIB_KEEP_UPLOADS", v)
+        assert api._clips_enabled() is False, f"{v!r} must NOT switch retention on"
+
+
+def test_a_token_added_after_startup_is_honoured_without_a_restart(monkeypatch):
+    """The import-time constant is empty, as it is in a process that started
+    before the variable existed; the live environment carries the token."""
+    monkeypatch.setattr(api, "CLIPS_TOKEN", "", raising=False)
+    monkeypatch.setenv("AFIB_KEEP_UPLOADS", "1")
+    monkeypatch.delenv("AFIB_CLIPS_TOKEN", raising=False)
+    assert api._clips_enabled() is False
+    monkeypatch.setenv("AFIB_CLIPS_TOKEN", "added-in-railway-later")
+    assert api._clips_enabled() is True
+    assert api._clips_token() == "added-in-railway-later"
+
+
+def test_gate_reason_names_the_failing_half_but_never_the_token(monkeypatch):
+    monkeypatch.setattr(api, "CLIPS_TOKEN", "", raising=False)
+    monkeypatch.delenv("AFIB_CLIPS_TOKEN", raising=False)
+    monkeypatch.setenv("AFIB_KEEP_UPLOADS", "true")
+    assert "AFIB_CLIPS_TOKEN" in api._clips_gate_reason()
+    monkeypatch.setenv("AFIB_CLIPS_TOKEN", "hunter2-do-not-print")
+    monkeypatch.setenv("AFIB_KEEP_UPLOADS", "enabled")
+    r = api._clips_gate_reason()
+    assert "AFIB_KEEP_UPLOADS" in r and "enabled" in r
+    assert "hunter2" not in r
+    monkeypatch.setenv("AFIB_KEEP_UPLOADS", "yes")
+    assert api._clips_gate_reason() is None
