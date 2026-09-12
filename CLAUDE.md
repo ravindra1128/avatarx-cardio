@@ -113,14 +113,33 @@ separately; never blend them into one "accuracy" number.
   - its own `AFIB_SHEET_GID` pointing at a **different sheet tab**. Every comparison in
     this repo works because production scans all land in one place; a staging service
     writing into that tab silently corrupts the baseline it is being measured against.
-    **OPEN as of 2026-09-10:** staging still reports `gid 140358874`, the production tab.
-    Check `GET /healthz` → `sheet.gid` on both before trusting any staging measurement;
-    if they match, staging is polluting the production data.
+    Resolved 2026-09-10: staging writes `cardio-staging` (gid `342232654`), production
+    `cardio-data` (gid `140358874`). Check `GET /healthz` → `sheet.gid` on both before
+    trusting any staging measurement; if they ever match again, staging is polluting the
+    production data.
   - its own `GOOGLE_SHEETS_CREDENTIALS_JSON`. Variables are per-environment on Railway
     and are NOT inherited from production.
 
   Nothing in the code changes for this: the sheet id, tab and credentials are already
   read from the environment (`app/result_sheet.py`).
+
+  **Retaining scans and ShenAI sidecars on staging** needs two more variables there, and
+  the way they are read matters (learned the hard way on 2026-09-12 — eight real scans
+  with both set produced nothing):
+  - `AFIB_KEEP_UPLOADS` — any of `1`, `true`, `yes`, `on`, case-insensitive. Before
+    2026-09-12 only the literal `1` worked and `true` failed silently.
+  - `AFIB_CLIPS_TOKEN` — a long random string. Read on every request, so adding it in the
+    console works immediately; before 2026-09-12 it was read once at import and a token
+    added after startup was invisible until the next redeploy.
+  - The gate's state is printed ONCE at startup in the Railway service log
+    (`[clips] retention ON` / `OFF: <which variable>`) and again on every dropped
+    sidecar. It is deliberately NOT on `/healthz`: whether a public URL holds face video
+    is the oracle the token exists to deny.
+  - Self-check with the real token: `GET /api/clips?token=<value>` → `200` means fully
+    on, `404` means off (or wrong token — by design the two are indistinguishable).
+  - `AFIB_SCALE` sets the analysis box; `640x480` (a 480×720 phone clip → 320×480) beat
+    both the `480x360` default and production on every signal metric across 5 scans on
+    2026-09-12. Production still runs the default.
 - Local test: webapp `.claude/launch.json` starts this service on 8790 and a webapp on
   5174 pointed at it. Phone scans are ~30–50 MB; the Railway edge relays uploads at
   ~0.5–1 MB/s, so most of a phone's wait is upload, not analysis.
