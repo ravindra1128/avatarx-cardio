@@ -140,6 +140,18 @@ separately; never blend them into one "accuracy" number.
   - `AFIB_SCALE` sets the analysis box; `640x480` (a 480×720 phone clip → 320×480) beat
     both the `480x360` default and production on every signal metric across 5 scans on
     2026-09-12. Production still runs the default.
+  - The trim cuts on the packet clock (`app/measure_prep.py: choose_tail_cut`), not at
+    "duration minus window". The phone's rolling recorder uploads chunk 0 (header + the
+    first 3 s of frames), a hole, then the last 48 s; a copy seek into the hole resolves
+    to frame 0, so until 2026-09-14 every rolling-window scan was analysed WHOLE — head,
+    hole and all, with chunk 0's backwards clock step rewritten as 57 frames on one
+    timestamp (the `MAX_COLLAPSED_INTERVAL_FRACTION` 0.02→0.05 launch override exists
+    for that). Any session over ~115 s also failed the downscale: the phone's millisecond
+    clock makes ffmpeg guess 1000 fps, and the AVI muxer refuses a hole over 60000 ticks
+    = 60 s ("Too large number of skipped frames" — 4 of 11 staging scans, reproduced
+    exactly in `tests/test_trim_tail.py`). The sheet's `Trim Note` column says per scan
+    what was kept and dropped; `Downscale Note` keeps the first lines of ffmpeg's stderr,
+    which name the cause.
 - Local test: webapp `.claude/launch.json` starts this service on 8790 and a webapp on
   5174 pointed at it. Phone scans are ~30–50 MB; the Railway edge relays uploads at
   ~0.5–1 MB/s, so most of a phone's wait is upload, not analysis.

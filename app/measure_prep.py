@@ -117,19 +117,27 @@ def downscale(video_path: str, scale: str) -> dict:
     # Two attempts, and the SECOND one matters as much as the first.
     #
     # Measured on 6 real staging scans (2026-09-10 12:45-13:17): the resize
-    # failed on 3 of them with ffmpeg exit 234 (= -22 & 0xFF = EINVAL). These
-    # clips have their middle chunks dropped by the client's rolling window and
-    # a capture rate that wanders (15.4 / 25 / 30.3 fps across scans), so the
-    # stream can reconfigure mid-file; `scale` rejects that, while the old
-    # no-op `scale={w}:-2` on an already-480-wide clip did not have to resize
-    # and survived it.
+    # failed on 3 of them with ffmpeg exit 234 (= -22 & 0xFF = EINVAL), and
+    # again on 1 of 5 on 2026-09-14. Root cause, reproduced exactly on a real
+    # camera clip (tests/test_trim_tail.py pins it): the phone's packet clock
+    # is irregular milliseconds, so ffmpeg guesses r_frame_rate = 1000/1 and
+    # gives the AVI stream a 1 ms timebase; the AVI muxer fills a hole in the
+    # clock with "skip frames" and refuses a hole longer than 60000 ticks —
+    # 60 s at 1 ms — with "Too large number of skipped frames". The client's
+    # rolling recorder leaves exactly such a hole (chunk 0, then nothing until
+    # the last 48 s), so any session longer than ~115 s failed here, and the
+    # old trim never removed the hole (see choose_tail_cut). trim_tail now
+    # cuts the hole out before this runs; the fallback chain stays because a
+    # clip that reaches this step with a hole is still better transcoded than
+    # analysed raw.
     #
-    # That no-op was never useless: it still transcoded VP8 -> FFV1, which
-    # normalises the container and hands the analysis one clean decode. Losing
-    # it is why the three failures above degraded instead of merely staying
-    # the same — two of them returned NO_RESULT. So a resize failure falls back
-    # to that plain transcode, NOT to the raw upload. Native is the last resort
-    # only if ffmpeg cannot read the file at all.
+    # The old no-op `scale={w}:-2` on an already-480-wide clip was never
+    # useless: it still transcoded VP8 -> FFV1, which normalises the container
+    # and hands the analysis one clean decode. Losing it is why the failures
+    # above degraded instead of merely staying the same — two of them returned
+    # NO_RESULT. So a resize failure falls back to that plain transcode, NOT
+    # to the raw upload. Native is the last resort only if ffmpeg cannot read
+    # the file at all.
     base = [ff, "-y", "-v", "error", "-i", video_path]
     tail = ["-c:v", "ffv1", "-pix_fmt", "bgr0", "-an", out]
     attempts = [
@@ -150,7 +158,10 @@ def downscale(video_path: str, scale: str) -> dict:
             detail = getattr(e, "stderr", b"") or b""
             if isinstance(detail, bytes):
                 detail = detail.decode("utf-8", "replace")
-            err = f"{label}: {e} :: {detail.strip()[-300:]}"
+            d = detail.strip()
+            if len(d) > 440:
+                d = d[:240] + " … " + d[-160:]   # first line names the cause
+            err = f"{label}: {e} :: {d}"
             try:
                 if os.path.exists(out):
                     os.remove(out)
@@ -185,40 +196,145 @@ def downscale(video_path: str, scale: str) -> dict:
     return info
 
 
-def _packet_duration_s(ffmpeg_path: str, video_path: str) -> float:
-    """Second-to-last video packet pts in seconds via ffprobe (what the
-    OpenCV decode loop reported — see trim_tail); 0.0 if unavailable."""
+def _ffprobe_path(ffmpeg_path: str) -> str | None:
+    """ffprobe next to ffmpeg, else on PATH, else None."""
     ffprobe = os.path.join(os.path.dirname(ffmpeg_path), "ffprobe")
-    if not os.path.exists(ffprobe):
-        ffprobe = shutil.which("ffprobe")
-    if not ffprobe:
-        return 0.0
+    if os.path.exists(ffprobe):
+        return ffprobe
+    return shutil.which("ffprobe")
+
+
+def _packet_timeline(ffprobe: str, video_path: str) -> list:
+    """[(pts_s, is_keyframe), ...] of the first video stream, in FILE order.
+
+    File order, not sorted: a step backwards in the clock is a finding (see
+    choose_tail_cut) and sorting would hide it. I/O only, no decode — the
+    per-packet pts are exactly what OpenCV's CAP_PROP_POS_MSEC reports.
+    [] if ffprobe cannot read the file."""
     try:
         out = subprocess.run(
             [ffprobe, "-v", "error", "-select_streams", "v:0",
-             "-show_entries", "packet=pts_time", "-of", "csv=p=0", video_path],
+             "-show_entries", "packet=pts_time,flags", "-of", "csv=p=0",
+             video_path],
             capture_output=True, text=True, timeout=60).stdout
     except Exception:
-        return 0.0
-    pts = []
+        return []
+    timeline = []
     for line in out.splitlines():
-        tok = line.split(",", 1)[0].strip()
-        try:
-            pts.append(float(tok))
-        except ValueError:
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) < 2:
             continue
+        try:
+            pts = float(parts[0])
+        except ValueError:
+            continue                              # "N/A": no clock on it
+        timeline.append((pts, "K" in parts[1]))
+    return timeline
+
+
+def _packet_duration_s(ffmpeg_path: str, video_path: str) -> float:
+    """Second-to-last video packet pts in seconds via ffprobe (what the
+    OpenCV decode loop reported — see trim_tail); 0.0 if unavailable."""
+    ffprobe = _ffprobe_path(ffmpeg_path)
+    if not ffprobe:
+        return 0.0
+    pts = sorted(t for t, _ in _packet_timeline(ffprobe, video_path))
     if len(pts) < 2:
         return 0.0
-    pts.sort()
     return pts[-2]
 
 
 # ------------------------------------------------------------------ trim
 DEFAULT_WINDOW_S = float(os.environ.get("AFIB_WINDOW_S", "40"))
 
+# A step in the packet clock larger than this is a dropped recorder chunk,
+# never capture jitter: the phone's frame interval wanders 30-70 ms, a chunk
+# is 3 s. A step BACKWARDS is a discontinuity at any size.
+GAP_S = 1.0
+
+
+def choose_tail_cut(timeline: list, window_s: float,
+                    gap_s: float = GAP_S) -> dict:
+    """Pure. Where to cut so that what remains is ONE continuous run of
+    frames, about `window_s` long, starting on a keyframe.
+
+    `timeline` is [(pts_s, is_keyframe), ...] in file order.
+
+    WHY the timeline and not the duration. The client's rolling recorder
+    keeps chunk 0 (it carries the container header — and the first 3 s of
+    frames), drops the middle, keeps the tail. So a 118 s session uploads as
+    frames 0–3 s, a 67 s hole, then the last 48 s; and inside chunk 0 the
+    clock steps BACK once (measured on a real scan: -1.87 s at packet 90).
+    Cutting at "duration minus window" put the seek target inside the hole,
+    and a keyframe seek into a hole lands on the previous keyframe — frame
+    0. So the "trim" returned the whole clip (measured: 2312 of 2312 packets
+    for a -ss into the hole), and its only effect was to rewrite the
+    backwards step as 57 frames on one identical timestamp — the collapsed
+    intervals capture/ingest.py then had to be told to tolerate
+    (MAX_COLLAPSED_INTERVAL_FRACTION 0.02 -> 0.05 on the staging service).
+    The transcode that follows saw all of it too.
+
+    Returns cut_s (keyframe pts to start from; None when there is nothing to
+    do, or no keyframe to start a stream copy on), tail_start_s,
+    discontinuities, head_dropped_s, gap_s, kept_s, expected_packets, and
+    reason when cut_s is None."""
+    n = len(timeline)
+    if n < 2:
+        return {"cut_s": None, "reason": "fewer than two video packets"}
+    pts = [t for t, _ in timeline]
+    tail_i, disc, biggest_gap = 0, 0, 0.0
+    for i in range(1, n):
+        d = pts[i] - pts[i - 1]
+        if d > gap_s or d <= 0:
+            disc += 1
+            tail_i = i
+            biggest_gap = max(biggest_gap, d)
+    tail_start, last = pts[tail_i], pts[-1]
+    out = {
+        "tail_start_s": round(tail_start, 3),
+        "discontinuities": disc,
+        "head_dropped_s": (round(pts[tail_i - 1] - pts[0], 3)
+                           if tail_i else 0.0),
+        "gap_s": round(biggest_gap, 3),
+    }
+    if disc == 0 and last - pts[0] <= window_s + 1.0:
+        out.update(cut_s=None, reason=(f"clip is {last - pts[0]:.1f}s — "
+                                       "already within the window"))
+        return out
+    target = max(tail_start, last - window_s)
+    keys = [i for i in range(tail_i, n) if timeline[i][1]]
+    if not keys:
+        out.update(cut_s=None, reason=("no keyframe after the last "
+                                       "discontinuity — a stream copy "
+                                       "cannot start there"))
+        return out
+    before = [i for i in keys if pts[i] <= target]
+    cut_i = before[-1] if before else keys[0]
+    out.update(cut_s=pts[cut_i], cut_index=cut_i,
+               kept_s=round(last - pts[cut_i], 3),
+               expected_packets=n - cut_i, reason=None)
+    return out
+
+
+def _verify_cut(ffprobe: str, path: str, expected: int) -> str | None:
+    """None when `path` is one continuous run of about `expected` packets;
+    otherwise what is wrong with it."""
+    tl = _packet_timeline(ffprobe, path)
+    if not tl:
+        return "no readable video packets"
+    if abs(len(tl) - expected) > 2:
+        return (f"got {len(tl)} packets, expected {expected} "
+                "(the seek landed elsewhere)")
+    pts = [t for t, _ in tl]
+    bad = sum(1 for a, b in zip(pts, pts[1:]) if b - a > GAP_S or b - a <= 0)
+    if bad:
+        return f"{bad} discontinuit{'y' if bad == 1 else 'ies'} remain"
+    return None
+
 
 def trim_tail(video_path: str, window_s: float) -> dict:
-    """Keep only the last `window_s` seconds, in place. Returns provenance.
+    """Keep only the settled tail of the recording, in place. Returns
+    provenance; never fails the request over trimming.
 
     WHY: a browser scan records the whole session — positioning, alignment,
     then the measurement — and lands at 100-150 s. This pipeline's own scan
@@ -236,10 +352,13 @@ def trim_tail(video_path: str, window_s: float) -> dict:
     wasted upload and decode.
 
     The tail is the right window: the recording ends when the measurement
-    completes, so the last seconds are settled, in-frame footage.
+    completes, so the last seconds are settled, in-frame footage. WHERE the
+    tail starts is read off the packet clock (choose_tail_cut), because the
+    client's rolling recorder leaves a hole in the middle of the clip and a
+    cut placed by duration alone lands in it.
 
-    No-ops (reporting why) when ffmpeg is absent or the clip is already
-    short enough — never fails the request over trimming."""
+    No-ops (reporting why) when ffmpeg is absent or the clip is already one
+    short continuous run."""
     import shutil
     import subprocess
 
@@ -255,21 +374,19 @@ def trim_tail(video_path: str, window_s: float) -> dict:
     # Duration from the container's PACKET timestamps, not from decoding.
     # The old probe decoded every frame with OpenCV just to read the last
     # frame's clock — measured 13.75 s on a 1080x720 phone recording (57%
-    # of the whole request) and 3.0 s on a 30 s demo clip that then wasn't
-    # even trimmed. MediaRecorder webm carries no duration in its header,
-    # which is why decoding looked necessary; but the per-packet pts are
-    # exactly what OpenCV's CAP_PROP_POS_MSEC reports, so scanning packets
-    # (I/O only, no decode) gives the same number. One subtlety, kept on
-    # purpose: POS_MSEC read before each cap.read() is the clock of the frame
-    # ALREADY decoded, so the loop's answer was the SECOND-to-last frame's
-    # time, one frame short of the true duration. The cut point below is
-    # relative to that value, and every result to date was computed from
-    # it — so this returns the same second-to-last timestamp, not the last.
-    # Verified equal to the loop within 1 ms on every clip of the eval corpus
-    # (webm/vp8, webm/vp9, avi/ffv1); the decode loop remains the fallback.
-    dur = _packet_duration_s(ff, video_path)
-    info["duration_probe"] = "packets"
-    if dur <= 0:
+    # of the whole request). MediaRecorder webm carries no duration in its
+    # header, which is why decoding looked necessary; the per-packet pts
+    # are the same clock. One subtlety, kept on purpose: POS_MSEC read
+    # before each cap.read() is the clock of the frame ALREADY decoded, so
+    # the loop's answer was the SECOND-to-last frame's time; every result
+    # to date was computed from it, so source_duration_s stays that value.
+    ffprobe = _ffprobe_path(ff)
+    timeline = _packet_timeline(ffprobe, video_path) if ffprobe else []
+    if timeline:
+        info["duration_probe"] = "packets"
+        pts_sorted = sorted(t for t, _ in timeline)
+        dur = pts_sorted[-2] if len(pts_sorted) >= 2 else 0.0
+    else:
         import cv2
         cap = cv2.VideoCapture(video_path)
         dur = 0.0
@@ -284,29 +401,86 @@ def trim_tail(video_path: str, window_s: float) -> dict:
         cap.release()
         info["duration_probe"] = "decode"
     info["source_duration_s"] = round(dur, 2)
-    if dur <= window_s + 1.0:
-        info["reason"] = f"clip is {dur:.1f}s — already within the window"
-        return info
 
-    start = max(0.0, dur - window_s)
+    cut = None
+    if timeline:
+        cut = choose_tail_cut(timeline, window_s)
+        for k in ("tail_start_s", "discontinuities", "head_dropped_s", "gap_s"):
+            if k in cut:
+                info[k] = cut[k]
+        if cut.get("cut_s") is None:
+            info["reason"] = cut.get("reason")
+            info["note"] = cut.get("reason")
+            return info
+        start, expected = cut["cut_s"], cut["expected_packets"]
+    else:
+        # No packet clock to read (no ffprobe): the pre-2026-09-14 cut, by
+        # duration alone, unverified.
+        if dur <= window_s + 1.0:
+            info["reason"] = f"clip is {dur:.1f}s — already within the window"
+            return info
+        start, expected = max(0.0, dur - window_s), None
+
     out = video_path + ".trim" + pathlib.Path(video_path).suffix
-    cmd = [ff, "-y", "-v", "error", "-ss", f"{start:.3f}", "-i", video_path,
-           "-c", "copy", "-an", out]
-    try:
-        subprocess.run(cmd, check=True, timeout=120,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-        if os.path.getsize(out) > 0:
-            os.replace(out, video_path)
-            # The old sidecar describes the untrimmed clip.
-            side = video_path + ".timestamps.json"
-            if os.path.exists(side):
-                os.remove(side)
-            info["applied"] = True
-            info["trimmed_from_s"] = round(start, 2)
+    # Two ways to cut a stream copy. Seeking (-ss before -i) is the fast
+    # one: ffmpeg walks the packets to the keyframe at `start` and copies
+    # from there — exact when `start` IS a keyframe's timestamp, and what it
+    # does with a target inside a hole is documented on choose_tail_cut, so
+    # the result is CHECKED against the packet count the cut should have,
+    # never trusted. Output-side -ss (after -i) reads everything and drops
+    # packets before `start`: slower, no seek involved.
+    attempts = [
+        ("keyframe-seek", [ff, "-y", "-v", "error", "-ss", f"{start:.3f}",
+                           "-i", video_path, "-c", "copy", "-an", out]),
+        ("output-side", [ff, "-y", "-v", "error", "-i", video_path,
+                         "-ss", f"{start:.3f}", "-c", "copy", "-an", out]),
+    ]
+    problems = []
+    for label, cmd in attempts:
+        try:
+            subprocess.run(cmd, check=True, timeout=120,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        except Exception as e:                            # noqa: BLE001
+            detail = getattr(e, "stderr", b"") or b""
+            if isinstance(detail, bytes):
+                detail = detail.decode("utf-8", "replace")
+            problems.append(f"{label}: {e} :: {detail.strip()[:200]}")
+            continue
+        if not os.path.exists(out) or os.path.getsize(out) <= 0:
+            problems.append(f"{label}: empty file")
+            continue
+        if expected is not None:
+            wrong = _verify_cut(ffprobe, out, expected)
+            if wrong:
+                problems.append(f"{label}: {wrong}")
+                continue
+        os.replace(out, video_path)
+        # The old sidecar describes the untrimmed clip.
+        side = video_path + ".timestamps.json"
+        if os.path.exists(side):
+            os.remove(side)
+        info["applied"] = True
+        info["trimmed_from_s"] = round(start, 2)
+        info["cut_method"] = label
+        if cut is not None:
+            info["kept_s"] = cut["kept_s"]
+            note = f"kept the last {cut['kept_s']:.1f}s from keyframe {start:.2f}s"
+            if info.get("discontinuities"):
+                n_d = info["discontinuities"]
+                note += (f"; dropped {info['head_dropped_s']:.1f}s head + "
+                         f"{info['gap_s']:.1f}s hole ({n_d} discontinuit"
+                         f"{'y' if n_d == 1 else 'ies'})")
+            info["note"] = f"{note}; {label}"
         else:
-            info["reason"] = "ffmpeg produced an empty file — keeping original"
-    except Exception as e:
-        info["reason"] = f"ffmpeg trim failed ({e}) — analysing the whole clip"
+            info["note"] = (f"kept from {start:.2f}s (duration only, no packet "
+                            f"timeline); {label}")
+        return info
+    try:
+        if os.path.exists(out):
+            os.remove(out)
+    except OSError:
+        pass
+    info["reason"] = ("trim could not isolate the tail (" + "; ".join(problems)
+                      + ") — analysing the whole clip")
+    info["note"] = info["reason"]
     return info
-
-

@@ -603,8 +603,8 @@ def measure_video(video_path: str, *, manifest=None,
     trim = trim_tail(video_path,
                      DEFAULT_WINDOW_S if window_s is None else float(window_s))
     timing["trim_s"] = round(time.perf_counter() - t0, 2)
-    print(f"[measure] trim: {timing['trim_s']}s applied={trim.get('applied')}",
-          flush=True)
+    print(f"[measure] trim: {timing['trim_s']}s applied={trim.get('applied')} "
+          f"{trim.get('note') or trim.get('reason') or ''}", flush=True)
 
     t0 = time.perf_counter()
     scaled = downscale(video_path, DEFAULT_SCALE if scale is None else scale)

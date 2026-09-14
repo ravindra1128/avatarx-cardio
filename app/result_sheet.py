@@ -78,6 +78,11 @@ COLUMNS = [
     # scripts/compare_shenai_signal.py can be planned from the history: which
     # scans carry a second opinion, and how much of one.
     "ShenAI Sidecar", "ShenAI PPG N", "ShenAI PPG fs", "ShenAI Beats N",
+    # 2026-09-14: what the trim actually did — the keyframe it kept from, how
+    # much head and hole it dropped, or why it did nothing. Until now a cut
+    # placed by duration alone landed in the rolling recorder's hole and
+    # silently kept the whole clip; this column is how that is seen per scan.
+    "Trim Note",
 ]
 
 _POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sheet")
@@ -336,6 +341,8 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
         "ShenAI PPG N": _count(ppg_n) if ppg_n is not None else "",
         "ShenAI PPG fs": _num(ppg_fs, 2),
         "ShenAI Beats N": _count(beats_n) if beats_n is not None else "",
+        "Trim Note": str(_g(doc, "trim", "note") or
+                         _g(doc, "trim", "reason") or "")[:300],
     }
 
 

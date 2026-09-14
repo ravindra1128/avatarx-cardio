@@ -39,9 +39,11 @@ intervals surviving clean_runs, and RMSSD/SDNN to catch over-smoothing.
 
 Kept in the tree because the extraction, arm plumbing and TOO-GOOD detectors
 are reusable. The alignment block and the pre-registered rule are not.
-"""
 
-"""ShenAI's dense PPG + beat train vs our four-ROI POS lattice, offline.
+------------------------------------------------------------------------
+
+
+ShenAI's dense PPG + beat train vs our four-ROI POS lattice, offline.
 
 WHY THIS EXISTS. The measured bottleneck is cross-ROI beat FUSION, not the
 detector. At the phone's compression level the four face regions disagree on
