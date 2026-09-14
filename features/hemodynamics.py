@@ -41,6 +41,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from features.rate_guard import guard_resting_pulse
+
 # Vasomotion / low-frequency band of the amplitude envelope (Hz): the
 # classic Mayer-wave band, the same 0.04-0.15 Hz the HRV literature
 # calls LF, applied to AMPLITUDE rather than to intervals.
@@ -580,7 +582,9 @@ def resting_rate_index(hr_bpm):
 
 def cardiorespiratory_indices(regularity, hr_bpm, participant=None, *,
                               rate_method=None, rate_intervals=None,
-                              spectral_hr_bpm=None, pulse_verdict=None) -> dict:
+                              spectral_hr_bpm=None, pulse_verdict=None,
+                              harmonic_fraction=None, spectral_snr=None,
+                              ref_bpm=None) -> dict:
     """Resting cardiorespiratory values, and an explicit account of why
     an oxygen-uptake number is not among them.
 
@@ -620,7 +624,22 @@ def cardiorespiratory_indices(regularity, hr_bpm, participant=None, *,
     hr = hr_bpm
     n_int = None if rate_intervals is None else int(rate_intervals)
     clean = (rate_method == "clean_interval_median" and hr is not None)
-    if clean and (n_int is None or n_int >= MIN_RATE_INTERVALS) and pulse_verdict != "disagree":
+    # Doubling guard (2026-09-14): the interval median above inflates toward 2x
+    # when the detector splits beats. The spectral rate is subharmonic-
+    # protected, so when the interval rate shows a doubling signature against a
+    # trustworthy spectral anchor, take the spectral rate. This is a strict
+    # superset of the pulse_verdict=="disagree" fallback below — it also catches
+    # PARTIAL split-inflation (ratio ~1.5 with many half-length intervals), the
+    # 101-vs-65 case the disagree rule caught only because the disagreement was
+    # large. No-op on clean scans; the clinical rhythm head is untouched.
+    rate_guard = guard_resting_pulse(
+        hr, spectral_hr_bpm, harmonic_fraction=harmonic_fraction,
+        spectral_snr=spectral_snr, ref_bpm=ref_bpm)
+    if rate_guard.get("guarded"):
+        hr, rate_source = rate_guard["reported_bpm"], "spectral_doubling_guard"
+        tier = "provisional"
+        tier_reasons.append(rate_guard["reason"])
+    elif clean and (n_int is None or n_int >= MIN_RATE_INTERVALS) and pulse_verdict != "disagree":
         tier = "measured"
     else:
         tier = "provisional"
@@ -688,6 +707,7 @@ def cardiorespiratory_indices(regularity, hr_bpm, participant=None, *,
         "raw_value": (None if hr is None else round(float(hr), 1)),
         "raw_unit": "bpm",
         "raw_name": "resting_heart_rate",
+        "rate_guard": rate_guard,
         "resting_rate_source": rate_source,
         "estimate": (None if proxy is None else {
             "label": RESEARCH_ESTIMATE_LABEL,
@@ -981,6 +1001,8 @@ def resting_hemodynamics(det, *, outcome, participant=None, capture=None,
         reg, hr, participant, rate_method=rate_method,
         rate_intervals=rate_intervals,
         spectral_hr_bpm=ev.get("pulse_spectral_bpm"),
+        harmonic_fraction=ev.get("harmonic_fraction"),
+        spectral_snr=ev.get("pulse_spectral_snr"),
         pulse_verdict=pulse_gate.get("verdict"))
     # The scan-level tier reasons apply to every card: a card is "measured"
     # only when both the scan and its own floors held.

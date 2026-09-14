@@ -83,6 +83,11 @@ COLUMNS = [
     # placed by duration alone landed in the rolling recorder's hole and
     # silently kept the whole clip; this column is how that is seen per scan.
     "Trim Note",
+    # 2026-09-14: when the resting-rate doubling guard fired — the beat-
+    # interval median looked doubled/halved against the subharmonic-protected
+    # spectral rhythm, so the fitness rate was taken from the rhythm instead.
+    # Blank on a clean scan (the guard is a no-op) and on builds before it.
+    "Rate Guard",
 ]
 
 _POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sheet")
@@ -199,6 +204,17 @@ def _pulse_check_cell(ev: dict) -> str:
     if v == "unresolved":
         return f"unresolved: {pc.get('reason') or ''}"[:120]
     return ""
+
+
+def _rate_guard_cell(g) -> str:
+    """'split_inflation: 101->69' when the doubling guard fired, else ''."""
+    if not isinstance(g, dict) or not g.get("guarded"):
+        return ""
+    raw, rep = g.get("raw_lattice_bpm"), g.get("reported_bpm")
+    try:
+        return f"{g.get('signature')}: {float(raw):.0f}->{float(rep):.0f}"
+    except (TypeError, ValueError):
+        return str(g.get("signature") or "guarded")
 
 
 def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
@@ -343,6 +359,7 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
         "ShenAI Beats N": _count(beats_n) if beats_n is not None else "",
         "Trim Note": str(_g(doc, "trim", "note") or
                          _g(doc, "trim", "reason") or "")[:300],
+        "Rate Guard": _rate_guard_cell(fit_d.get("rate_guard")),
     }
 
 
