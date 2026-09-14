@@ -59,3 +59,65 @@ def test_sentences_are_sanctioned_and_never_diagnose():
         low = s.lower()
         assert not any(b in low for b in banned), (k, s)
         assert "clinician" in low                 # escalation path
+
+
+# --- cross-check-verified reported rate (2026-09-14, owner-directed) ---------
+def _ev(lattice_bpm, spectral_bpm, roi_agree):
+    """A production-shaped evidence dict for the pulse cross-check."""
+    pa = abs(lattice_bpm - spectral_bpm) / spectral_bpm
+    return {"evidence": {
+        "pulse_lattice_bpm": lattice_bpm, "pulse_spectral_bpm": spectral_bpm,
+        "pulse_agreement": round(pa, 4), "pulse_spectral_roi_agree": roi_agree}}
+
+
+def test_agree_reports_mean_of_count_and_spectral():
+    h = get_head("rate_flags")
+    r = h.run(_lat([np.full(20, 833.0)]), _ev(72, 70, 4))   # ~72 bpm, agree
+    assert r.value["rate_confidence"] == "verified"
+    assert r.value["rate_source"] == "count_spectral_mean"
+    assert abs(r.value["median_bpm"] - 71.0) < 0.6          # mean(72, 70)
+    assert r.value["flag"] is None
+
+
+def test_disagree_with_regional_backing_reports_spectral_provisional():
+    h = get_head("rate_flags")
+    r = h.run(_lat([np.full(20, 600.0)]), _ev(100, 68, 3))  # count 100, spec 68
+    assert r.value["median_bpm"] == 68.0                    # the waveform rate
+    assert r.value["rate_source"] == "waveform_rhythm"
+    assert r.value["rate_confidence"] == "provisional"
+    assert r.value["flag"] is None                          # no flag off one number
+
+
+def test_doubled_count_does_not_raise_a_false_tachy_flag():
+    """The regression this change exists for: a doubled beat count (100 bpm)
+    that the waveform (55 bpm, 4/4 regions) contradicts must NOT report 100 or
+    flag TACHY."""
+    h = get_head("rate_flags")
+    r = h.run(_lat([np.full(20, 600.0)]), _ev(100, 55, 4))
+    assert r.value["flag"] is None
+    assert r.value["median_bpm"] == 55.0
+
+
+def test_disagree_without_regional_backing_is_uncertain():
+    h = get_head("rate_flags")
+    r = h.run(_lat([np.full(20, 600.0)]), _ev(100, 55, 2))  # only 2/4 regions
+    assert r.value["median_bpm"] is None
+    assert r.value["flag"] is None
+    assert r.value["rate_confidence"] == "uncertain"
+
+
+def test_unresolved_crosscheck_is_uncertain():
+    h = get_head("rate_flags")
+    r = h.run(_lat([np.full(20, 600.0)]), _ev(100, 55, 1))  # 1/4 -> unresolved
+    assert r.value["median_bpm"] is None
+    assert r.value["rate_confidence"] == "uncertain"
+
+
+def test_no_evidence_preserves_legacy_lattice_behaviour():
+    """Fixture/CLI callers pass no evidence: the head must behave as before —
+    clean-interval median with brady/tachy flags allowed."""
+    h = get_head("rate_flags")
+    r = h.run(_lat([np.full(20, 520.0)]), {})               # ~115 bpm, no ev
+    assert r.value["flag"] == "TACHY"
+    assert r.value["rate_confidence"] == "unverified"
+    assert abs(r.value["median_bpm"] - 115.4) < 0.6
