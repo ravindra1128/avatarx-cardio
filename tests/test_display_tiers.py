@@ -16,6 +16,7 @@ from features.hemodynamics import (  # noqa: E402
     stiffness_band_from_rise_time, stiffness_score_from_reflection_index,
     stiffness_score_from_rise_time, vasomotor_indices,
     cardiorespiratory_indices, tone_score_from_cv, resting_rate_index)
+from features.rate_guard import MIN_ROI_AGREE_FOR_RATE  # noqa: E402
 
 
 class _Reg:
@@ -147,14 +148,32 @@ def test_fitness_measured_needs_the_clean_rate_floor_and_an_agreeing_pulse():
 
 
 def test_fitness_takes_the_waveform_rate_when_the_beat_count_disagrees():
+    # The spectrum may override the count only when >= MIN_ROI_AGREE_FOR_RATE
+    # regions back it (2026-09-15) — the same guard the reported-pulse head uses.
     out = cardiorespiratory_indices(_Reg(), 84.0, None, rate_method="clean_interval_median",
                                     rate_intervals=20, pulse_verdict="disagree",
-                                    spectral_hr_bpm=60.0)
+                                    spectral_hr_bpm=60.0,
+                                    spectral_roi_agree=MIN_ROI_AGREE_FOR_RATE)
     assert out["tier"] == "provisional"
     assert out["resting_rate_source"] == "waveform_rhythm"
     assert out["resting_hr_bpm"] == 60.0
     assert out["estimate"]["value"] == round(100 * resting_rate_index(60.0), 1)
     assert "disagreed" in out["tier_reasons"][0]
+
+
+def test_fitness_keeps_the_count_when_disagreement_is_not_region_backed():
+    # 2026-09-15 regression: a 2-of-4 spectral (54 bpm) must NOT override a
+    # good count (68.6) — that inflated a real fitness card to 78.3 while the
+    # reported-pulse head correctly abstained on the same scan.
+    out = cardiorespiratory_indices(_Reg(), 68.6, None, rate_method="clean_interval_median",
+                                    rate_intervals=13, pulse_verdict="disagree",
+                                    spectral_hr_bpm=54.0, harmonic_fraction=0.0,
+                                    spectral_snr=3.0,
+                                    spectral_roi_agree=MIN_ROI_AGREE_FOR_RATE - 1)
+    assert out["tier"] == "provisional"
+    assert out["resting_rate_source"] == "clean_interval_median"
+    assert out["resting_hr_bpm"] == 68.6                    # count kept, not 54
+    assert any("unverified" in r for r in out["tier_reasons"])
 
 
 def test_fitness_is_provisional_from_a_thin_clean_rate():
@@ -168,7 +187,8 @@ def test_fitness_is_provisional_from_a_thin_clean_rate():
 
 def test_fitness_falls_to_the_waveform_when_the_clean_rate_is_too_thin():
     out = cardiorespiratory_indices(_Reg(), 70.0, None, rate_method="clean_interval_median",
-                                    rate_intervals=3, spectral_hr_bpm=74.0)
+                                    rate_intervals=3, spectral_hr_bpm=74.0,
+                                    spectral_roi_agree=MIN_ROI_AGREE_FOR_RATE)
     assert out["tier"] == "provisional" and out["resting_rate_source"] == "waveform_rhythm"
     assert out["resting_hr_bpm"] == 74.0
 
@@ -177,8 +197,14 @@ def test_fitness_is_blank_only_with_no_rate_at_all():
     out = cardiorespiratory_indices(_Reg(), None, None)
     assert out["available"] is False and out["tier"] is None
     assert out["reason_code"] == "no_resting_rate"
-    out = cardiorespiratory_indices(_Reg(), None, None, spectral_hr_bpm=66.0)
+    # A region-backed waveform rate stands in when there is no clean rate...
+    out = cardiorespiratory_indices(_Reg(), None, None, spectral_hr_bpm=66.0,
+                                    spectral_roi_agree=MIN_ROI_AGREE_FOR_RATE)
     assert out["available"] and out["tier"] == "provisional"
+    # ...but an unbacked (2-of-4) waveform rate is not trusted (2026-09-15).
+    out = cardiorespiratory_indices(_Reg(), None, None, spectral_hr_bpm=66.0,
+                                    spectral_roi_agree=MIN_ROI_AGREE_FOR_RATE - 1)
+    assert out["available"] is False and out["reason_code"] == "no_resting_rate"
 
 
 def test_a_research_frame_rate_card_uses_the_aging_index_not_the_reflection_index():
