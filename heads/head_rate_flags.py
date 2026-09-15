@@ -44,6 +44,7 @@ from __future__ import annotations
 import numpy as np
 
 from datasets.schema import MeasurementClass, RATE_FLAG_SENTENCES
+from features.rate_guard import MIN_ROI_AGREE_FOR_RATE
 from features.regularity import regularity_from_runs
 from heads.base import EndpointHead, HeadResult, register_head
 
@@ -52,11 +53,9 @@ TACHY_BPM = 100.0
 MIN_INTERVALS = 15            # same floor as the any-class decision gate
 MIN_SUSTAINED_FRACTION = 0.75  # flag only if >= 75% of clean intervals agree
 # Regions that must back the spectral rhythm before it may REPLACE the beat
-# count on a disagreement. Stricter than the verdict's own 2-of-4 resolution
-# floor (features.hemodynamics.PULSE_MIN_ROI_AGREE): on the tracking sheet the
-# spectral rate is within 5 bpm of the reference on ~0.80 of scans with >= 3
-# regions agreeing, and no better than a coin-flip with <= 2.
-MIN_ROI_AGREE_FOR_RATE = 3
+# count on a disagreement — shared with the fitness rate path
+# (features/rate_guard.py::MIN_ROI_AGREE_FOR_RATE), so the reported pulse and
+# the fitness rate can never disagree on how much to trust the spectrum.
 
 
 def _finite(x) -> bool:

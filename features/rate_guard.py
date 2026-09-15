@@ -37,6 +37,14 @@ HARMONIC_FRACTION_HI = 0.30
 INFLATED_RATIO_LO = 1.0 + HARMONIC_RATIO_TOL
 # The spectral anchor must clear this in-band SNR to stand in as the truth.
 SPECTRAL_SNR_FLOOR = 1.5
+# Facial regions that must independently back the spectral rhythm before the
+# reported rate (rate head) or the fitness rate may switch to it on a
+# count/spectrum disagreement. The single source of truth for both consumers
+# (heads/head_rate_flags.py and features/hemodynamics.py). On the tracking
+# sheet the spectral rate is within 5 bpm of the reference on ~0.80 of scans
+# with >= 3 regions agreeing, and no better than a coin flip with <= 2 (which
+# is how a 2-of-4 spectral of 54 bpm inflated a fitness card on 2026-09-15).
+MIN_ROI_AGREE_FOR_RATE = 3
 
 
 def _finite(*xs) -> bool:
