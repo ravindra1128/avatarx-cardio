@@ -105,30 +105,16 @@ class RateFlagsHead(EndpointHead):
 
         reasons: list[str] = []
         # ---- reliability-first rate selection --------------------------------
-        if verdict in (None, "not_evaluated"):
-            reported, source, confidence, flags_ok = (
-                lat_med, "clean_interval_median", "unverified", True)
-        elif verdict == "agree":
-            pair = [v for v in (lat_med, spec) if v is not None]
-            reported = float(np.mean(pair)) if pair else None
-            source = ("count_spectral_mean" if len(pair) == 2
-                      else "clean_interval_median" if lat_med is not None
-                      else "waveform_rhythm" if spec is not None else None)
-            confidence = "verified"
-            flags_ok = lat_med is not None      # need the interval distribution
-        elif verdict == "disagree" and spec_backed:
-            reported, source, confidence, flags_ok = (
-                spec, "waveform_rhythm", "provisional", False)
-            reasons.append(
-                "the beat count disagreed with the waveform's dominant rhythm; "
-                f"reporting the waveform rate ({spec:.0f} bpm), which "
-                f"{roia} of 4 facial regions agree on")
-        else:
-            reported, source, confidence, flags_ok = (
-                None, None, "uncertain", False)
-            reasons.append(
-                "the resting rate could not be verified across facial regions, "
-                "so no rate is reported")
+        # One resolver for the whole scan (features/rate_guard.py, audit #7):
+        # the fitness card and the decision's ACCEPT pulse use the same call.
+        from features.rate_guard import resolve_resting_rate
+        rr = resolve_resting_rate(lat_med, n_int, ev, min_intervals=MIN_INTERVALS)
+        reported, source, confidence = rr["bpm"], rr["source"], rr["confidence"]
+        reasons.extend(rr["reasons"])
+        # rate flags need the interval distribution and a rate that is not a
+        # substitute for the count
+        flags_ok = (confidence in ("verified", "unverified") and lat_med is not None)
+        spec_backed = rr["spectral_backed"]
 
         if reported is not None and n_int < MIN_INTERVALS \
                 and confidence != "provisional":

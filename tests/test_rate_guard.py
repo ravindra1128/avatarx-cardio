@@ -93,12 +93,26 @@ def test_the_fitness_card_takes_the_rhythm_rate_on_a_split_scan():
     # the card's resting rate must become 69, not 101, and drop to provisional.
     out = cardiorespiratory_indices(
         _Reg(), 101.0, None, rate_method="clean_interval_median",
-        rate_intervals=20, spectral_hr_bpm=69.0,
+        rate_intervals=20, spectral_hr_bpm=69.0, spectral_roi_agree=3,
         harmonic_fraction=0.35, spectral_snr=3.0, pulse_verdict="agree")
     assert out["resting_hr_bpm"] == 69.0
     assert out["tier"] == "provisional"
-    assert out["rate_guard"]["guarded"] is True
+    assert out["rate_guard"]["guarded"] is True and out["rate_guard"]["applied"] is True
     assert any("rhythm rate" in r for r in out["tier_reasons"])
+
+
+def test_split_inflation_without_region_backing_keeps_the_count_provisional():
+    # Audit #7 (CALC-4): a split-inflation signature (ratio ~1.5) may override
+    # the count only when >= 3 regions back the waveform rhythm; with 2 the
+    # count stays, tiered provisional with the reason.
+    out = cardiorespiratory_indices(
+        _Reg(), 101.0, None, rate_method="clean_interval_median",
+        rate_intervals=20, spectral_hr_bpm=69.0, spectral_roi_agree=2,
+        harmonic_fraction=0.35, spectral_snr=3.0, pulse_verdict="agree")
+    assert out["resting_hr_bpm"] == 101.0          # the count stays visible...
+    assert out["tier"] == "provisional"            # ...but is never 'measured'
+    assert out["rate_guard"]["guarded"] is True and out["rate_guard"]["applied"] is False
+    assert any("too few facial regions" in r for r in out["tier_reasons"])
 
 
 def test_a_clean_fitness_scan_is_unchanged_and_stays_measured():
@@ -118,3 +132,14 @@ def test_the_guard_is_inert_when_the_caller_passes_no_evidence():
         rate_intervals=20)
     assert out["tier"] == "measured"
     assert out["rate_guard"]["guarded"] is False
+
+
+def test_a_clean_double_needs_no_region_backing():
+    # count/2 == spectral is two independent estimators agreeing on the halved
+    # rate; that is evidence in itself (holdout clips 9b3023/ebe749).
+    out = cardiorespiratory_indices(
+        _Reg(), 130.0, None, rate_method="clean_interval_median",
+        rate_intervals=20, spectral_hr_bpm=65.0, spectral_roi_agree=2,
+        harmonic_fraction=0.3, spectral_snr=3.0, pulse_verdict="disagree")
+    assert out["resting_hr_bpm"] == 65.0
+    assert out["tier"] == "provisional" and out["rate_guard"]["applied"] is True

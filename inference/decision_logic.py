@@ -419,11 +419,38 @@ def decide_with_rationale(features: RhythmFeatures, sqi: float,
                            confidence=confidence, sqi=sqi)
 
     other = mad >= r["other_median_abs_ms"] and pnn50 >= r["other_pnn50"]
+    # Audit 2026-09-17 #7 (CALC-2): the ACCEPT pulse and the HIGH_RATE call were
+    # decided on the raw interval median alone. A uniformly doubled count reads
+    # ~2x the true rate with harmonic_fraction ~0, and the pulse cross-check the
+    # pipeline already computes was never consulted here. The one resolver
+    # (features/rate_guard.resolve_resting_rate) is now the pulse the result
+    # carries, and a fast rate whose count is unverified fails closed.
+    reported_bpm = float(bpm) if _finite(bpm) else None
+    rate_res = None
+    if have_ev:
+        from features.rate_guard import resolve_resting_rate
+        rate_res = resolve_resting_rate(reported_bpm, n_int, ev,
+                                        min_intervals=int(ec["min_intervals_any"]))
+        why["rule"]["resting_rate"] = {k: rate_res.get(k) for k in
+                                       ("bpm", "source", "confidence", "verdict",
+                                        "spectral_backed")}
+        if rate_res.get("bpm") is not None:
+            reported_bpm = float(rate_res["bpm"])
     if afib:
         cls = "AFIB_SUGGESTIVE"
     elif other:
         cls = "OTHER_IRREGULAR"
     elif _finite(bpm) and bpm >= r["high_rate_bpm"]:
+        unverified = (rate_res is not None and
+                      rate_res.get("confidence") in ("uncertain", "provisional"))
+        if unverified:
+            why["rule"]["fired"] = "ABSTAIN (fast count unverified)"
+            return _finish(why, _abstain(recording_id, ScanOutcome.REPEAT_SCAN, sqi,
+                                         ["fast pulse seen, but the beat count is not "
+                                          "verified against the waveform rhythm "
+                                          "(doubling signature or disagreement): "
+                                          "rate unverified"]),
+                           confidence=confidence, sqi=sqi)
         cls = "HIGH_RATE"
     else:
         cls = "SINUS"
@@ -433,7 +460,7 @@ def decide_with_rationale(features: RhythmFeatures, sqi: float,
         recording_id=recording_id, outcome=ScanOutcome.ACCEPT,
         afib_probability=afib_prob,
         predicted_class=cls, signal_quality_index=float(sqi),
-        mean_pulse_rate_bpm=float(bpm) if _finite(bpm) else None,
+        mean_pulse_rate_bpm=reported_bpm,
         no_read_reasons=[], model_version=model_version)
     return _finish(why, res, confidence=confidence, sqi=sqi)
 

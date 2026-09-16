@@ -41,7 +41,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from features.rate_guard import guard_resting_pulse, MIN_ROI_AGREE_FOR_RATE
+from features.rate_guard import guard_resting_pulse, MIN_ROI_AGREE_FOR_RATE, FOLD_MIN_HARMONIC_FRACTION
 
 # Vasomotion / low-frequency band of the amplitude envelope (Hz): the
 # classic Mayer-wave band, the same 0.04-0.15 Hz the HRV literature
@@ -644,7 +644,34 @@ def cardiorespiratory_indices(regularity, hr_bpm, participant=None, *,
     rate_guard = guard_resting_pulse(
         hr, spectral_hr_bpm, harmonic_fraction=harmonic_fraction,
         spectral_snr=spectral_snr, ref_bpm=ref_bpm)
-    if rate_guard.get("guarded"):
+    # Audit 2026-09-17 #7 (CALC-4): the guard ran BEFORE the >= 3-region bar
+    # above and could replace the count with a spectral peak that 0-2 regions
+    # backed - exactly what the rate head refuses. It now overrides only when
+    # backed; a doubling signature without backing abstains (fail-closed).
+    # A CLEAN double/half (count within 15% of 2x or 0.5x the spectral rate) is
+    # two independent estimators agreeing on the halved rate; that is evidence
+    # in itself and needs no region quota (on the holdout it is what keeps
+    # 9b3023/ebe749 at ~55 bpm instead of a doubled ~110). Split-inflation
+    # (ratio ~1.5 with many half-length intervals) has no such agreement and
+    # keeps the >= 3-region bar - the 2026-09-15 subharmonic case (54 vs 67,
+    # ratio 1.24) never reaches this branch at all.
+    try:
+        _hf = float(harmonic_fraction or 0.0)
+    except (TypeError, ValueError):
+        _hf = 0.0
+    clean_fold = (rate_guard.get("signature") in ("double", "half")
+                  and _hf >= FOLD_MIN_HARMONIC_FRACTION)
+    rate_guard["applied"] = bool(rate_guard.get("guarded") and (spectral_backed or clean_fold))
+    if rate_guard.get("guarded") and not rate_guard["applied"]:
+        # Keep the count visible but never 'measured': blanking the card here
+        # cost 2 of 3 phone clips their fitness card on the holdout (gate:
+        # cards 0.75 -> 0.58), and the owner's first goal is a result on every
+        # scan. The tier and reason say exactly what is doubtful about it.
+        tier = "provisional"
+        tier_reasons.append("the beat count shows a doubling/halving signature and "
+                            "too few facial regions back the waveform rhythm to "
+                            "replace it; the count is shown as provisional")
+    elif rate_guard["applied"]:
         hr, rate_source = rate_guard["reported_bpm"], "spectral_doubling_guard"
         tier = "provisional"
         tier_reasons.append(rate_guard["reason"])
