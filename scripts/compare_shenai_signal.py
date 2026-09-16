@@ -1007,7 +1007,15 @@ def measure(clip: pathlib.Path, sidecar: pathlib.Path, cfg, cal, opt) -> dict:
                 if window_s > 0:
                     rec[prov + "trim"] = trim_tail(work, float(window_s))
                 if scale != "off":
-                    rec[prov + "downscale"] = downscale(work, scale)
+                    ds = downscale(work, scale)
+                    rec[prov + "downscale"] = ds
+                    # The container changes on downscale (FFV1 in AVI beside
+                    # the source), exactly as app/measure_api.py:630 follows
+                    # it. Until 2026-09-16 this kept analysing the ORIGINAL
+                    # webm, which OpenCV cannot open here, so arms A and A'
+                    # printed "unreadable video" on every phone clip.
+                    if ds.get("applied") and ds.get("path"):
+                        work = ds["path"]
             return _ours(work, cfg, cal, opt.runs_kw, opt.profile,
                          ref_hr=ref_hr, cap_shen=cap_shen, arm_a=arm_a,
                          arm_ap=arm_ap, a_note=note)
