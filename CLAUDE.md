@@ -189,6 +189,29 @@ Changes on `staging` since (each its own gated iteration; "owner to confirm"
 Not done: #5 recorder 48 -> 72 s (upload-cost A/B on the phone), #8 graded abstention,
 #10 MKV passthrough clock, #11 refractory floor, #12 tracker fallback, #13 stars hint.
 
+Added 2026-09-16 (afternoon), from the first three retained staging clips with ShenAI sidecars:
+- Iteration 27 (trim, `app/measure_prep.py`) — a forward gap under `SPAN_GAP_S` (5 s)
+  inside the tail is a lost recorder chunk, not the tail start; spanned, and the
+  verifier accepts it. Corpus is pre-trimmed so the gate is blind; live evidence is the
+  08:53 scan (14.6 s kept of 44.9 s, 12 intervals, every other gate passing). Owner to
+  confirm.
+- Iterations 28/28b (`capture_segments` gap_factor 1.5 -> 2.5 / 2.0) — REJECTED, reverted.
+  The rule splits at the phone's normal frame wander (p99 50 ms vs a 49.5 ms threshold)
+  and discards every fragment under 3 s: 17.5 s of the 08:53 window. Both variants took
+  that scan from three failing gates to one (coverage 0.52 vs any-call 0.60) but the
+  holdout's CARD values swung with four extra intervals (tone 54 -> 100, fitness 82 -> 20),
+  consistency 0.652 -> 0.31 / 0.43. The blocker is card instability, not the segment rule:
+  make the cards robust to the interval set first, then retry 28.
+- ShenAI comparison (`scripts/compare_shenai_signal.py`, harness fixed to follow the
+  downscaled path): on the same two scans ShenAI's own beat train gave 49 and 51 clean
+  intervals at coverage 0.98/0.94 (RMSSD 28/32 ms, SDNN 31/57 ms, not TOO-GOOD) against
+  our 4 and 13 at 0.06/0.19. The waveform arm is VOID (no SDK sample rate) and our detector
+  on its waveform over-counts 15-22 %, so the usable ShenAI signal is the TRAIN. Two clips;
+  the pre-registered rule needs ten -> NOT SETTLED. The sidecar now carries the SDK's own
+  lnRMSSD and bad-signal seconds (webapp `0a17167`); on the 08:53 scan RMSSD from its
+  train equalled its own figure (14.8 ms) exactly. Retained clips are wiped by every
+  redeploy: pull before pushing.
+
 ## Owner decisions on record
 
 | date | decision | evidence |
