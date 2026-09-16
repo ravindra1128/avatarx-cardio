@@ -88,6 +88,12 @@ COLUMNS = [
     # spectral rhythm, so the fitness rate was taken from the rhythm instead.
     # Blank on a clean scan (the guard is a no-op) and on builds before it.
     "Rate Guard",
+    # 2026-09-16: the AFib rhythm result as the participant sees it. Outcome and
+    # Stars were always here; these add the class the decision head assigned
+    # (SINUS | AFIB_SUGGESTIVE | OTHER_IRREGULAR | HIGH_RATE, blank on abstain)
+    # and the exact sanctioned sentence the results page renders, so a phone
+    # test can be read back row by row without opening the response JSON.
+    "Rhythm Class", "Rhythm Text",
 ]
 
 _POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sheet")
@@ -360,6 +366,8 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
         "Trim Note": str(_g(doc, "trim", "note") or
                          _g(doc, "trim", "reason") or "")[:300],
         "Rate Guard": _rate_guard_cell(fit_d.get("rate_guard")),
+        "Rhythm Class": str(doc.get("predicted_class") or ""),
+        "Rhythm Text": str(doc.get("user_facing_text") or "")[:500],
     }
 
 
