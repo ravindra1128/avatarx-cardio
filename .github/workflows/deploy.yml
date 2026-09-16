@@ -65,7 +65,9 @@ jobs:
           pip install -r requirements-measure.txt pytest
 
       - name: pytest
-        run: python -m pytest tests/ -q -p no:cacheprovider $(cat .github/ci-test-args)
+        # grep, not cat: $(cat ...) word-splits the comment lines straight
+        # into pytest's argv, where they land as bogus path arguments.
+        run: python -m pytest tests/ -q -p no:cacheprovider $(grep -vE '^[[:space:]]*(#|$)' .github/ci-test-args)
 
   deploy:
     needs: test

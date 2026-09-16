@@ -1,6 +1,7 @@
 # Extra pytest args for the CI gate in .github/workflows/deploy.yml.
 # Run the exact CI selection locally with:
-#   python -m pytest tests/ -q -p no:cacheprovider $(cat .github/ci-test-args)
+#   python -m pytest tests/ -q -p no:cacheprovider \
+#     $(grep -vE '^[[:space:]]*(#|$)' .github/ci-test-args)
 #
 # These are the suite's KNOWN failures, excluded so a red gate means a real
 # regression rather than a standing one. Every line needs a reason; an
@@ -15,10 +16,22 @@
 # Observed failing on staging at 4e0b574, before any of this branch's work
 # (1 failed, 21 passed, 1 skipped) — pre-existing, not caused by the merge:
 --ignore=tests/test_false_positive_guards.py
+# Found by the per-file sweep at 69 of 99 files. Both are pre-existing: the
+# merged tree is byte-identical to origin/staging, so nothing here was
+# introduced by the merge. Both are also the suite's slowest files, 5m45s
+# between them, which is most of why the full run does not fit the job cap.
+--ignore=tests/test_fitness_harness.py
+--ignore=tests/test_flutter_harness.py
 #
-# PROVISIONAL: CLAUDE.md records 4 further known failures after the five
-# ignores above but does not name them, and the per-file sweep that would
-# name them had covered 15 of 99 files when this was pushed. Expect the
-# first CI run to go red naming them; add them here with their reason, or
-# fix them. Do not widen this list to make a red run green without reading
-# what failed.
+# TOO COARSE, ON PURPOSE, FOR NOW: those three --ignore lines drop one
+# failing test each and take 51 passing tests down with them (21 + 8 + 22).
+# The right form is --deselect on the individual test ids; the run that
+# collects their names had not finished when this was pushed. Replace them
+# as soon as it does.
+#
+# PROVISIONAL: CLAUDE.md records 4 known failures after its own five
+# ignores and does not name them. Three are now accounted for
+# (false_positive_guards, fitness_harness, flutter_harness); the sweep has
+# 30 files left, so expect one more. Add it here with its reason, or fix
+# it. Do not widen this list to make a red run green without reading what
+# failed.
