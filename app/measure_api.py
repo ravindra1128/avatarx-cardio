@@ -357,6 +357,21 @@ _STARTED: dict = {}                  # upload_id -> True while a job is running
 _STARTED_LOCK = threading.Lock()
 
 
+def _discard_part_dir(upload_id: str) -> None:
+    """Remove a finished job's working directory (assembled clip, FFV1
+    intermediate, timestamp/ShenAI sidecars). Kept only when AFIB_KEEP_UPLOADS
+    asks for on-disk debugging; the retained clip lives in CLIPS_DIR."""
+    keep = (os.environ.get("AFIB_KEEP_UPLOADS") or "").strip().lower()
+    if keep in _TRUTHY:
+        return
+    try:
+        d = _part_dir(upload_id)
+    except Exception:                                     # noqa: BLE001
+        return
+    if d.is_dir():
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def _part_dir(upload_id: str) -> pathlib.Path:
     # A single path segment, so an id can never escape the parts directory.
     safe = "".join(c for c in str(upload_id) if c.isalnum() or c in "-_")[:80]
@@ -1345,16 +1360,21 @@ class MeasureHandler(BaseHTTPRequestHandler):
         _, header = _parse_envelope(b"", "video/webm", q)
         upload_id = str((q.get("upload_id") or [""])[0])
         ext = str(header.get("ext") or (q.get("ext") or ["webm"])[0]).lstrip(".")
-        try:
-            path, upload_s = _assemble_parts(upload_id, ext)
-        except (ValueError, OSError) as e:
-            self._json(400, {"error": str(e), "upload_id": upload_id})
-            return
-        size = os.path.getsize(path)
+        # Take the worker slot BEFORE assembling: _assemble_parts deletes the
+        # slices, so a 503 issued after it left the client's retry with "no
+        # parts" -> 400 and the scan was lost (audit 2026-09-17, #6a). Now a
+        # busy service answers 503 with the slices intact, and the retry works.
         if not _INFLIGHT.acquire(blocking=False):
             self._json(503, {"error": "measure workers busy — retry",
                              "max_concurrent": MAX_CONCURRENT})
             return
+        try:
+            path, upload_s = _assemble_parts(upload_id, ext)
+        except (ValueError, OSError) as e:
+            _INFLIGHT.release()
+            self._json(400, {"error": str(e), "upload_id": upload_id})
+            return
+        size = os.path.getsize(path)
         with _STARTED_LOCK:
             _STARTED[upload_id] = True
         header.setdefault("session", (q.get("session") or [upload_id])[0])
@@ -1388,6 +1408,13 @@ class MeasureHandler(BaseHTTPRequestHandler):
                     _STARTED.pop(upload_id, None)
                 _inflight(-1)
                 _INFLIGHT.release()
+                # Audit 2026-09-17 #6b: this path left scan.<ext>, the ~220 MB
+                # FFV1 intermediate and the sidecars in the part dir until the
+                # hourly sweep, on the small disk CLIPS_DIR shares. The retained
+                # copy (when retention is on) was taken at /api/start and
+                # _pair_shenai has already read shenai.json inside
+                # _run_assembled, so nothing here is still needed.
+                _discard_part_dir(upload_id)
                 print(f"[measure] detached job end for {upload_id!r} after "
                       f"{time.perf_counter() - t0:.1f}s", flush=True)
 

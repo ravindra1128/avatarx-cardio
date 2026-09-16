@@ -4,8 +4,9 @@ Stars that were always there."""
 from app.result_sheet import COLUMNS, row_from_doc
 
 
-def test_rhythm_columns_exist_after_rate_guard():
-    assert COLUMNS[-2:] == ["Rhythm Class", "Rhythm Text"]
+def test_rhythm_columns_follow_rate_guard():
+    i = COLUMNS.index("Rate Guard")
+    assert COLUMNS[i + 1:i + 3] == ["Rhythm Class", "Rhythm Text"]
 
 
 def test_row_carries_class_and_verbatim_text():
@@ -24,3 +25,16 @@ def test_abstained_scan_has_blank_class_but_keeps_its_sentence():
                         "user_facing_text": "We could see your pulse, but not clearly enough."})
     assert row["Rhythm Class"] == ""
     assert row["Rhythm Text"].startswith("We could see your pulse")
+
+
+def test_classifier_inputs_reach_the_sheet():
+    row = row_from_doc({"outcome": "REPEAT_SCAN",
+                        "debug": {"rationale": {"features": {
+                            "median_abs_succ_diff": 67.4, "pnn50": 0.6087, "n_intervals": 23}}}})
+    assert row["MAD ms"] == 67.4 and row["pNN50"] == 0.609 and row["Rate N"] == 23
+    assert COLUMNS[-3:] == ["MAD ms", "pNN50", "Rate N"]
+
+
+def test_classifier_inputs_blank_when_no_rationale():
+    row = row_from_doc({"outcome": "NO_RESULT"})
+    assert row["MAD ms"] == "" and row["pNN50"] == "" and row["Rate N"] == ""

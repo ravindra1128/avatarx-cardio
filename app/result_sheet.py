@@ -94,6 +94,13 @@ COLUMNS = [
     # and the exact sanctioned sentence the results page renders, so a phone
     # test can be read back row by row without opening the response JSON.
     "Rhythm Class", "Rhythm Text",
+    # 2026-09-17 (audit #1): the classifier's own inputs. The irregularity rule
+    # is median|dRR| >= 60 ms AND pNN50 >= 0.40 on within-run successive
+    # differences, compared to the scan's measured beat-timing precision
+    # (Timing ms). Reading these three beside Timing ms per scan is what
+    # decides whether a regular heart is being read as irregular because of
+    # timing noise (audit finding #2) and by how much.
+    "MAD ms", "pNN50", "Rate N",
 ]
 
 _POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sheet")
@@ -368,6 +375,10 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
         "Rate Guard": _rate_guard_cell(fit_d.get("rate_guard")),
         "Rhythm Class": str(doc.get("predicted_class") or ""),
         "Rhythm Text": str(doc.get("user_facing_text") or "")[:500],
+        "MAD ms": _num(_g(ra, "features", "median_abs_succ_diff"), 1),
+        "pNN50": _num(_g(ra, "features", "pnn50"), 3),
+        "Rate N": (_g(ra, "features", "n_intervals")
+                   if _g(ra, "features", "n_intervals") is not None else ""),
     }
 
 
