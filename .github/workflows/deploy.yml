@@ -121,7 +121,8 @@ jobs:
           h = json.load(open("health.json"))
           sheet = h.get("sheet") or {}
           gid = str(sheet.get("gid") or "")
-          print("config_hash:", h.get("config_hash"))
+          print("build:", h.get("build"), "uptime_s:", h.get("uptime_s"))
+          print("launch_overrides:", h.get("launch_overrides"))
           print("sheet:", sheet)
           if not sheet.get("configured"):
               sys.exit("FAIL: the sheet is not configured — GOOGLE_SHEETS_CREDENTIALS_JSON "
