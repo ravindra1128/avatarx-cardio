@@ -30,6 +30,7 @@ class Beat:
     prominence: float
     source_rois: list[str] = field(default_factory=list)
     interpolated: bool = False       # inserted to bridge a suspected missed beat
+    segment: int = -1                # capture segment index (audit #4c); -1 = unknown
 
 
 @dataclass
@@ -186,8 +187,44 @@ def detect_beats_single_roi(signal: np.ndarray, fps: float, roi: str = "roi",
     return beats
 
 
+def _cluster_segment(members: list) -> int:
+    """The capture segment a fused beat belongs to: the members' common
+    segment, or -1 when they disagree or were never tagged."""
+    segs = {int(getattr(b, 'segment', -1)) for b in members}
+    return segs.pop() if len(segs) == 1 else -1
+
+
+def _one_per_roi(cluster: list) -> list:
+    """Keep the most prominent detection per ROI in a fused cluster."""
+    best: dict = {}
+    for e in cluster:
+        _, r, b = e
+        if r not in best or b.prominence > best[r][2].prominence:
+            best[r] = e
+    return sorted(best.values(), key=lambda e: e[0])
+
+
+# Audit 2026-09-17 #3. 60 ms sat INSIDE the phone's per-ROI beat-timing jitter
+# (cross-ROI timing precision 20-59 ms, median 39): a true beat seen by two
+# ROIs with 40-55 ms scatter failed to cluster 29-44% of the time and was
+# thrown away as an artifact, and a four-ROI straddle opened two clusters that
+# pass 2 refused to merge because they shared a ROI - emitting two fused beats
+# 60-120 ms apart that clean_runs then broke the run on (250 ms floor).
+#
+# Why 90 and not wider: the window is also the artifact veto's coincidence
+# window. Measured on the noise fixtures in tests/test_signal_quality.py
+# (white noise / no pulse, SQI floor 0.30): 60 ms -> 0.217, 75 -> 0.245,
+# 90 -> 0.273/0.264, 100 -> 0.281/0.297, 110 -> 0.310, 120 -> 0.353. At 110+
+# pure noise clears the SQI floor - unacceptable. 90 ms keeps noise under the
+# floor with margin, halves the two-ROI drop rate at the phone's 41 ms per-ROI
+# scatter (P(|dt|>90) ~ 0.12 vs 0.30 at 60), stays well under half the 250 ms
+# physiologic RR floor (two genuine beats can never merge), and is ~2.7 frames
+# at 30 fps. test_noise_stays_below_the_sqi_floor_with_margin pins the margin.
+FUSE_TOLERANCE_MS = 90.0
+
+
 def fuse_multi_roi(per_roi: dict[str, list[Beat]], fps: float, duration_s: float,
-                   tolerance_ms: float = 60.0,
+                   tolerance_ms: float = FUSE_TOLERANCE_MS,
                    min_rois: int = 2) -> BeatSeries:
     """Consensus fusion across facial ROIs.
 
@@ -236,11 +273,18 @@ def fuse_multi_roi(per_roi: dict[str, list[Beat]], fps: float, duration_s: float
             c_cur = float(np.mean([x[0] for x in cl]))
             prev_rois = {r for _, r, _ in merged[-1]}
             cur_rois = {r for _, r, _ in cl}
-            # Merge only when the two clusters are close AND describe different
-            # ROIs -- two detections from the SAME ROI that close together are
-            # a double-detection, not one beat seen twice.
-            if abs(c_cur - c_prev) <= tol and not (prev_rois & cur_rois):
-                merged[-1].extend(cl)
+            if abs(c_cur - c_prev) <= tol:
+                if not (prev_rois & cur_rois):
+                    merged[-1].extend(cl)
+                    continue
+                # Two clusters within tolerance that SHARE a ROI: the shared
+                # ROI fired twice inside one tolerance window, which is under
+                # the 250 ms physiologic floor - a double-detection of one
+                # beat, not two beats. Before 2026-09-17 the merge was refused
+                # here, so BOTH clusters survived with >= 2 ROIs and a spurious
+                # 60-120 ms interval was emitted. Merge, keeping one detection
+                # per ROI (the more prominent), so one beat stays one beat.
+                merged[-1] = _one_per_roi(merged[-1] + cl)
                 continue
         merged.append(cl)
     clusters = merged
@@ -276,7 +320,8 @@ def fuse_multi_roi(per_roi: dict[str, list[Beat]], fps: float, duration_s: float
             signal_quality=float(np.mean([b.signal_quality for _, _, b in cl])),
             amplitude=float(np.mean([b.amplitude for _, _, b in cl])),
             prominence=float(np.mean([b.prominence for _, _, b in cl])),
-            source_rois=sorted(seen)))
+            source_rois=sorted(seen),
+            segment=_cluster_segment([b for _, _, b in cl])))
 
     fused.sort(key=lambda b: b.t_s)
     return BeatSeries(fused, fps, duration_s)

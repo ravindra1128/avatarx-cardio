@@ -41,8 +41,10 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import math
 import os
 import pathlib
+import hmac
 import shutil
 import tempfile
 import threading
@@ -114,11 +116,261 @@ def _remember_result(session, doc: dict) -> None:
 # The single-shot /api/process-video path is untouched, so an older client
 # keeps working exactly as before.
 UPLOAD_DIR = WORK_DIR / "parts"
+
+# Retained scan clips, so a change can be replayed against REAL phone captures
+# instead of costing a 3-minute mobile scan per candidate. The eval corpus has
+# no 480x720 portrait clip - the only shape production records - which is why
+# the optimizer gate could not judge the 2026-09-10 downscale change at all.
+#
+# BOTH env vars are required, and neither is set on production. This serves
+# recorded video of someone's face from a PUBLIC URL, so it stays off unless
+# deliberately switched on, and the token is not optional.
+CLIPS_DIR = WORK_DIR / "clips"
+CLIPS_TOKEN = os.environ.get("AFIB_CLIPS_TOKEN", "").strip()
+CLIPS_KEEP = int(os.environ.get("AFIB_CLIPS_KEEP", "12"))       # newest N
+CLIPS_MAX_BYTES = int(os.environ.get("AFIB_CLIPS_MAX_MB", "600")) * 1024 * 1024
+
+# A sidecar travels with its clip: same basename plus a suffix. Listed once
+# because three places defined "a clip" as "not .timestamps.json" - the
+# retention filter, the prune victim tuple and the /api/clips listing - and a
+# second suffix silently breaks all three: a 30 KB JSON would count as a clip,
+# take a slot in the newest-CLIPS_KEEP window and evict a real recording, and
+# pruning that recording would orphan its JSON forever on an ephemeral disk.
+CLIP_SIDECAR_SUFFIXES = (".timestamps.json", ".shenai.json")
+
+# ShenAI's own dense PPG waveform and beat train, posted to /api/scan-signals
+# as JSON and parked under this FIXED name inside the upload's part directory:
+# it must never match _assemble_parts' `part-*` glob, and it must not depend on
+# whatever `ext` the client declares later.
+SHENAI_PART_NAME = "shenai.json"
+# The retained basename is not recoverable from upload_id (sid is truncated to
+# 16 chars below), and the sidecar normally arrives AFTER retention has run, so
+# _assemble_parts leaves the pairing here for the job to pick up.
+RETAINED_POINTER_NAME = "retained"
+# That route only ever carries JSON. Measured payload is ~20-50 KB (48 s of
+# ShenAI PPG plus ~60 beats), so 4 MB is ~100x headroom - while keeping
+# MAX_UPLOAD_BYTES' 256 MB away from a route that writes onto the same small
+# ephemeral disk the retained clips live on.
+MAX_SIDECAR_BYTES = (int(os.environ.get("AFIB_MAX_SIDECAR_MB", "4"))
+                     * 1024 * 1024)
+
+
+_TRUTHY = {"1", "true", "yes", "on"}
+
+
+def _clips_token() -> str:
+    """The read-back token, read LIVE.
+
+    CLIPS_TOKEN above is frozen at import. On 2026-09-12 the owner added
+    AFIB_CLIPS_TOKEN and AFIB_KEEP_UPLOADS in Railway, ran eight scans, and
+    every ShenAI column came back blank: the process had been up 14 h, so the
+    token it held was the empty string it started with. A variable set in the
+    console must work on the next request, not after the next redeploy."""
+    return (os.environ.get("AFIB_CLIPS_TOKEN") or CLIPS_TOKEN or "").strip()
+
+
+def _clips_gate_reason():
+    """Why retention is OFF, or None when it is on. For the PRIVATE log only -
+    never the token itself, only whether one is present."""
+    keep = (os.environ.get("AFIB_KEEP_UPLOADS") or "").strip()
+    if keep.lower() not in _TRUTHY:
+        # The old check was `== "1"`: `true` and `True` failed silently. Any
+        # of these spellings is an unambiguous intent to switch retention ON;
+        # nobody types `true` meaning off, so accepting them cannot leak.
+        return f"AFIB_KEEP_UPLOADS is {keep!r} (need one of 1/true/yes/on)"
+    if not _clips_token():
+        return "AFIB_CLIPS_TOKEN is unset or empty"
+    return None
+
+
+def _clips_enabled() -> bool:
+    return _clips_gate_reason() is None
+
+
+def _retain_clip(video_path: str, sid: str):
+    """Keep an untouched copy of the upload before prep rewrites it in place.
+
+    Called on BOTH upload paths. The chunked path is the one a phone actually
+    uses, and it never retained anything - so AFIB_KEEP_UPLOADS looked enabled
+    while quietly doing nothing for every real scan.
+
+    Returns the retained path (or None). The caller needs it because the
+    ShenAI sidecar is posted AFTER /api/start is accepted - so that it can
+    never contribute to an upload failure - and retention runs at the TOP of
+    /api/start. Without the returned name the late sidecar could not be paired
+    with the clip it belongs to.
+    """
+    if not _clips_enabled():
+        return None
+    try:
+        CLIPS_DIR.mkdir(parents=True, exist_ok=True)
+        src = pathlib.Path(video_path)
+        ext = src.suffix.lstrip(".") or "webm"
+        stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+        dst = CLIPS_DIR / f"{stamp}-{sid[:16]}.{ext}"
+        shutil.copyfile(src, dst)
+        side = src.parent / (src.name + ".timestamps.json")
+        if side.exists():
+            shutil.copyfile(side, str(dst) + ".timestamps.json")
+        # ShenAI's signals, when the phone happened to post them before
+        # /api/start. Named after the CLIP, not the upload_id, because that is
+        # the only name that exists here - and the full upload_id is carried
+        # INSIDE the JSON, so the pairing stays verifiable offline even though
+        # sid is truncated to 16 chars above.
+        shen = src.parent / SHENAI_PART_NAME
+        if shen.exists():
+            shutil.copyfile(shen, str(dst) + ".shenai.json")
+        # Railway's disk is ephemeral and small: keep the newest N, and stay
+        # under a byte cap. Oldest go first.
+        kept = sorted(CLIPS_DIR.glob("*"), key=lambda q: q.stat().st_mtime,
+                      reverse=True)
+        vids = [q for q in kept if not q.name.endswith(CLIP_SIDECAR_SUFFIXES)]
+        total = 0
+        for i, q in enumerate(vids):
+            total += q.stat().st_size
+            if i >= CLIPS_KEEP or total > CLIPS_MAX_BYTES:
+                for victim in [q] + [pathlib.Path(str(q) + s)
+                                     for s in CLIP_SIDECAR_SUFFIXES]:
+                    try:
+                        victim.unlink()
+                    except OSError:
+                        pass
+        print(f"[clips] retained {dst.name} "
+              f"({src.stat().st_size / 1e6:.1f} MB)", flush=True)
+        return dst
+    except Exception as e:                                    # noqa: BLE001
+        # Never let retention affect a scan.
+        print(f"[clips] retain failed: {e}", flush=True)
+        return None
+
+
+def _shenai_summary(raw: dict) -> dict:
+    """Counts only, never the waveform: a sheet cell must not carry
+    physiological data, and the sheet must not re-derive anything the offline
+    harness owns (scripts/compare_shenai_signal.py). The document itself is
+    stored VERBATIM - this is the bounded view of it that rides the result doc.
+
+    Every field is coerced and truncated the same way _parse_envelope treats
+    ref_source/capture_note: the body is an anonymous 4 MB POST, so a string
+    copied straight through could carry megabytes into a doc and a sheet cell.
+    """
+    def _i(v):
+        try:
+            return int(v)
+        # OverflowError, not ValueError, is what int(float('inf')) raises, and
+        # a JSON body may legally say 1e999. Before 2026-09-11 that escaped
+        # do_POST after the sidecar had already been written: the phone got
+        # RemoteDisconnected instead of its documented 200.
+        except (TypeError, ValueError, OverflowError):
+            return None
+
+    def _f(v):
+        try:
+            f = float(v)
+        except (TypeError, ValueError, OverflowError):
+            return None
+        # NaN AND +/-inf are both rejected: neither is a count, and either one
+        # reaching json.dumps emits a bare non-JSON token (see _json_bytes).
+        return f if math.isfinite(f) else None
+
+    def _s(v, n):
+        return str(v)[:n] if isinstance(v, (str, int, float)) else None
+
+    ppg = raw.get("ppg") if isinstance(raw.get("ppg"), dict) else {}
+    beats = raw.get("heartbeats")
+    hist = raw.get("hr_history_10s")
+    return {
+        "present": True,
+        "schema_version": _i(raw.get("schema_version")),
+        "upload_id": _s(raw.get("upload_id"), 80),
+        "ppg_n": _i(ppg.get("n")),
+        "ppg_fs_hz": _f(ppg.get("fs_hz")),
+        # "sdk" | "derived_from_beats" | "derived_from_duration" | "unknown".
+        # Kept because a DERIVED rate must never be mistaken for a measured
+        # one: the SDK exposes no sample rate at all (index.d.ts:374-377).
+        "ppg_fs_source": _s(ppg.get("fs_source"), 40),
+        "ppg_truncated": bool(ppg.get("truncated")),
+        "beats_n": len(beats) if isinstance(beats, list) else 0,
+        "hr_history_n": len(hist) if isinstance(hist, list) else 0,
+    }
+
+
+def _pair_shenai(part_dir, doc: dict, retained=None) -> None:
+    """Pair a late-arriving ShenAI sidecar with its retained clip, and record
+    its counts on the result doc.
+
+    WHY this is not just two lines inside _retain_clip: the client posts the
+    signals only AFTER /api/start has been accepted (a sidecar that competed
+    with the upload could cost a scan whose bytes are already on the server),
+    while retention runs at the top of /api/start. So on a normal scan
+    _retain_clip has already run and seen nothing, and this second pass - at
+    the end of the 20-45 s job, by which time the POST has landed - is where
+    the pairing actually happens.
+
+    Best effort throughout: a scan must return its cards whether or not any of
+    this works.
+
+    GATED, like every other member of this family (2026-09-11). _retain_clip,
+    _upload_signals and _serve_clip all check _clips_enabled() before they
+    touch disk; this function did not, and it is the LAST writer in the chain.
+    An adversarial review proved the gap: with retention OFF, a stale part-dir
+    sidecar plus a clip left over from a gate-ON period made this copy a full
+    waveform into CLIPS_DIR and set doc["shenai"], which the sheet then
+    rendered as ShenAI Sidecar=TRUE. That made the invariant the retention
+    tests assert in prose - "_clips_enabled() is the single thing standing
+    between a public URL and persisted physiological data" - false in fact.
+    """
+    if not _clips_enabled():
+        return
+    try:
+        src = pathlib.Path(part_dir) / SHENAI_PART_NAME
+        if not src.exists():
+            return
+    except (OSError, TypeError, ValueError):
+        return
+    try:
+        if retained is None:
+            # _assemble_parts left the retained basename here: it is the only
+            # place the clip's real name survives (sid is truncated to 16
+            # chars, so the retained name can be pure session prefix).
+            ptr = pathlib.Path(part_dir) / RETAINED_POINTER_NAME
+            if ptr.exists():
+                name = os.path.basename(ptr.read_text().strip())
+                retained = CLIPS_DIR / name if name else None
+        if retained is not None:
+            paired = pathlib.Path(str(retained) + ".shenai.json")
+            if pathlib.Path(retained).exists() and not paired.exists():
+                shutil.copyfile(src, paired)
+                print(f"[clips] paired {paired.name}", flush=True)
+    except Exception as e:                                    # noqa: BLE001
+        print(f"[clips] shenai pairing failed: {e}", flush=True)
+    try:
+        raw = json.loads(src.read_text())
+        if isinstance(raw, dict):
+            doc["shenai"] = _shenai_summary(raw)               # additive; audit only
+    except Exception as e:                                    # noqa: BLE001
+        print(f"[measure] shenai summary failed: {e}", flush=True)
 # Slices are sized to the client's measured link, down to 256 KB on a slow
 # one, so a clip near MAX_UPLOAD_BYTES can arrive as ~1000 parts.
 MAX_UPLOAD_PARTS = 2048
 _STARTED: dict = {}                  # upload_id -> True while a job is running
 _STARTED_LOCK = threading.Lock()
+
+
+def _discard_part_dir(upload_id: str) -> None:
+    _drop_signals(upload_id)
+    """Remove a finished job's working directory (assembled clip, FFV1
+    intermediate, timestamp/ShenAI sidecars). Kept only when AFIB_KEEP_UPLOADS
+    asks for on-disk debugging; the retained clip lives in CLIPS_DIR."""
+    keep = (os.environ.get("AFIB_KEEP_UPLOADS") or "").strip().lower()
+    if keep in _TRUTHY:
+        return
+    try:
+        d = _part_dir(upload_id)
+    except Exception:                                     # noqa: BLE001
+        return
+    if d.is_dir():
+        shutil.rmtree(d, ignore_errors=True)
 
 
 def _part_dir(upload_id: str) -> pathlib.Path:
@@ -151,6 +403,19 @@ def _assemble_parts(upload_id: str, ext: str) -> str:
         for part in parts:
             fh.write(part.read_bytes())
             part.unlink()
+    # Retain BEFORE prep: trim and downscale rewrite this file in place, and
+    # the whole point is to replay the native capture later.
+    retained = _retain_clip(str(out), d.name)
+    if retained is not None:
+        # Leave the retained basename in the part dir. The ShenAI sidecar
+        # arrives after this point (the client posts it once /api/start is
+        # accepted), and _run_assembled has `path` - hence this dir - but no
+        # other way to learn the name the clip was retained under. Not
+        # "part-*", so a re-assembly can never mistake it for a slice.
+        try:
+            (d / RETAINED_POINTER_NAME).write_text(retained.name)
+        except OSError:
+            pass
     return str(out), max(0.0, time.time() - first_at)
 
 
@@ -176,6 +441,12 @@ def _recall_result(session):
         item = _RESULTS.get(str(session or ""))
     return None if item is None else item[1]
 _STARTED_AT = time.time()
+# Say which way the gate is set, ONCE, in the private service log. A gate that
+# failed silently cost eight real scans of nothing on 2026-09-12. The public
+# /healthz must never carry this: whether a URL holds face video is exactly
+# the oracle the token exists to deny.
+print("[clips] retention " + ("ON" if _clips_enabled()
+                              else f"OFF: {_clips_gate_reason()}"), flush=True)
 BUILD_SHA = (os.environ.get("RAILWAY_GIT_COMMIT_SHA")      # set by Railway
              or os.environ.get("AFIB_BUILD_SHA") or "unknown")[:12]
 
@@ -329,6 +600,22 @@ def measure_video(video_path: str, *, manifest=None,
                   client_timestamps_s=None, duration_ms=None,
                   config_overrides=None, window_s=None, scale=None) -> dict:
     """Run THE production path and return a JSON-ready ScanResult."""
+    doc, _ = measure_video_details(
+        video_path, manifest=manifest, client_timestamps_s=client_timestamps_s,
+        duration_ms=duration_ms, config_overrides=config_overrides,
+        window_s=window_s, scale=scale)
+    return doc
+
+
+def measure_video_details(video_path: str, *, manifest=None,
+                          client_timestamps_s=None, duration_ms=None,
+                          config_overrides=None, window_s=None,
+                          scale=None) -> tuple:
+    """measure_video, plus the pipeline's own details dict (`det`: config,
+    evidence, sqi, runset, min_conf ...) for a caller that runs a second
+    interval source through the same decision (inference/shenai_route.py)
+    after the sidecar it needs has landed. The doc is what measure_video
+    returns, unchanged."""
     video_path = _protect_input(video_path)
     # TRIM BEFORE DOWNSCALE. Both orders give the same analysis window, but
     # trim_tail is an ffmpeg stream COPY (no re-encode, ~instant) while
@@ -348,8 +635,8 @@ def measure_video(video_path: str, *, manifest=None,
     trim = trim_tail(video_path,
                      DEFAULT_WINDOW_S if window_s is None else float(window_s))
     timing["trim_s"] = round(time.perf_counter() - t0, 2)
-    print(f"[measure] trim: {timing['trim_s']}s applied={trim.get('applied')}",
-          flush=True)
+    print(f"[measure] trim: {timing['trim_s']}s applied={trim.get('applied')} "
+          f"{trim.get('note') or trim.get('reason') or ''}", flush=True)
 
     t0 = time.perf_counter()
     scaled = downscale(video_path, DEFAULT_SCALE if scale is None else scale)
@@ -435,7 +722,76 @@ def measure_video(video_path: str, *, manifest=None,
     doc["launch_overrides"] = LAUNCH_OVERRIDES or None
     doc["debug"] = {"rationale": det.get("rationale"),
                     "evidence": det.get("evidence")}
-    return doc
+    return doc, det
+
+
+# ---------------------------------------------------- ShenAI route (2026-09-16)
+# The sidecar the phone posts to /api/scan-signals is HELD IN MEMORY for the
+# job that is running for that upload, so the rhythm decision can use the
+# train (inference/shenai_route.py) whether or not retention is on. Nothing
+# here touches disk: the retention gate (_clips_enabled) stays the single
+# thing between a public URL and persisted physiological data. Bounded to a
+# handful of in-flight uploads; an entry lives until its job's part dir is
+# discarded.
+_SIGNALS: dict = {}
+_SIGNALS_LOCK = threading.Lock()
+SIGNALS_HOLD_MAX = 8
+SHENAI_ROUTE_ON = os.environ.get("AFIB_SHENAI_ROUTE", "1").strip().lower() in (
+    "1", "true", "yes", "on")
+SHENAI_WAIT_S = float(os.environ.get("AFIB_SHENAI_WAIT_S", "8"))
+
+
+def _hold_signals(upload_id: str, payload: dict) -> None:
+    with _SIGNALS_LOCK:
+        _SIGNALS[upload_id] = payload
+        while len(_SIGNALS) > SIGNALS_HOLD_MAX:
+            _SIGNALS.pop(next(iter(_SIGNALS)))
+
+
+def _peek_signals(upload_id: str):
+    with _SIGNALS_LOCK:
+        return _SIGNALS.get(upload_id)
+
+
+def _drop_signals(upload_id: str) -> None:
+    with _SIGNALS_LOCK:
+        _SIGNALS.pop(upload_id, None)
+
+
+def _apply_shenai_route(doc: dict, det: dict, upload_id: str, part_dir=None) -> None:
+    """Wait (bounded) for the sidecar, run the route, record the outcome on
+    the doc. Best effort: a scan must return whether or not any of this works."""
+    from inference import shenai_route
+
+    def _get():
+        raw = _peek_signals(upload_id)
+        if raw is None and part_dir is not None:
+            # Retention on and the memory hold missed (a restart between the
+            # POST and the job): the file is on disk, gated as ever.
+            try:
+                src = pathlib.Path(part_dir) / SHENAI_PART_NAME
+                if _clips_enabled() and src.exists():
+                    raw = json.loads(src.read_text())
+            except Exception:                                  # noqa: BLE001
+                raw = None
+        return raw if isinstance(raw, dict) else None
+
+    try:
+        if not SHENAI_ROUTE_ON:
+            rec = {"route": shenai_route.ROUTE_NAME, "attempted": False, "used": False,
+                   "reason": "route disabled (AFIB_SHENAI_ROUTE)"}
+        else:
+            raw, waited = shenai_route.wait_for(_get, SHENAI_WAIT_S)
+            rec = shenai_route.evaluate(doc, det, raw, waited_s=waited)
+        doc.setdefault("rhythm_source", "video")
+        doc.setdefault("debug", {})["shenai_route"] = rec
+        print(f"[measure] shenai route: used={rec.get('used')} "
+              f"{rec.get('reason')} -> outcome={doc.get('outcome')} "
+              f"class={doc.get('predicted_class')}", flush=True)
+    except Exception as e:                                     # noqa: BLE001
+        doc.setdefault("rhythm_source", "video")
+        doc.setdefault("debug", {})["shenai_route"] = {
+            "used": False, "reason": f"route failed safely: {type(e).__name__}: {e}"}
 
 
 # ------------------------------------------------------------ transport
@@ -544,6 +900,49 @@ def _parse_envelope(body: bytes, ctype: str, query: dict) -> tuple:
     return body, header
 
 
+def _finite(o):
+    """Replace non-finite floats with None, recursively. Only ever reached
+    from _json_bytes's fallback path, so the walk costs nothing on a normal
+    scan."""
+    if isinstance(o, float):
+        return o if math.isfinite(o) else None
+    if isinstance(o, dict):
+        return {k: _finite(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [_finite(v) for v in o]
+    return o
+
+
+def _json_bytes(doc: dict) -> bytes:
+    """Serialise a doc for the wire without ever emitting a bare Infinity.
+
+    json.dumps defaults to allow_nan=True, which writes the BARE tokens
+    Infinity/-Infinity/NaN. Those are not JSON. Traced end to end on
+    2026-09-11 from a sidecar body carrying fs_hz=inf: the phone's
+    `await res.json()` throws, its bare catch swallows the error, and all 30
+    result polls re-fetch the same poisoned doc - the scan is lost after
+    minutes of polling; on the single-shot path JSON.parse(text) throws at
+    once and the card reads "non-JSON response (200)".
+
+    _shenai_summary's _f now rejects non-finite values at the source. This is
+    the boundary belt-and-braces, so no future additive doc key can reach a
+    browser the same way. A scan must still get a response if it fires, hence
+    the scrub-and-retry rather than letting the handler raise.
+    """
+    try:
+        return json.dumps(doc, default=str, allow_nan=False).encode()
+    except (ValueError, TypeError, RecursionError) as e:
+        print(f"[measure] doc held a non-JSON value ({e}); scrubbing",
+              flush=True)
+        try:
+            return json.dumps(_finite(doc), default=str,
+                              allow_nan=False).encode()
+        except Exception as e2:                               # noqa: BLE001
+            print(f"[measure] result doc not serialisable: {e2}", flush=True)
+            return json.dumps({"error": "result could not be serialised"}
+                              ).encode()
+
+
 class MeasureHandler(BaseHTTPRequestHandler):
     server_version = "AvatarXMeasure/1.0"
     protocol_version = "HTTP/1.1"
@@ -558,7 +957,7 @@ class MeasureHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Max-Age", "86400")
 
     def _json(self, code: int, doc: dict):
-        body = json.dumps(doc, default=str).encode()
+        body = _json_bytes(doc)
         try:
             self.send_response(code)
             self.send_header("Content-Type", "application/json")
@@ -637,7 +1036,7 @@ class MeasureHandler(BaseHTTPRequestHandler):
         if gone:
             self.close_connection = True
             return doc, False
-        body = json.dumps(doc, default=str).encode()
+        body = _json_bytes(doc)
         ok = _write(f"{len(body):X}\r\n".encode() + body + b"\r\n")
         ok = _write(b"0\r\n\r\n") and ok
         if not ok:
@@ -685,7 +1084,81 @@ class MeasureHandler(BaseHTTPRequestHandler):
                 return
             self._json(200, doc)
             return
+        if urlparse(self.path).path in ("/api/clips", "/api/clip"):
+            self._serve_clip()
+            return
         self._json(404, {"error": "not found"})
+
+    def _serve_clip(self):
+        """List or download a retained scan clip.
+
+        Gated on AFIB_KEEP_UPLOADS=1 AND a matching AFIB_CLIPS_TOKEN, because
+        this serves video of someone's face from a public URL. Disabled looks
+        like 404, not 403: an endpoint that is off should not advertise that it
+        exists. Never enabled on production.
+        """
+        u = urlparse(self.path)
+        q = parse_qs(u.query)
+        if not _clips_enabled():
+            self._json(404, {"error": "not found"})
+            return
+        token = (q.get("token") or [""])[0]
+        # Compare BYTES. compare_digest refuses two str arguments unless both
+        # are pure ASCII ("comparing strings with non-ASCII characters is not
+        # supported") and the query string is attacker-chosen, so
+        # ?token=%C3%A9 raised TypeError here, killed the request thread and
+        # returned zero bytes. Measured 2026-09-11: clips off -> HTTP 404,
+        # clips on -> connection closed. One anonymous probe therefore told
+        # anybody whether this public URL currently holds face video and PPG
+        # waveforms - the exact opposite of the design stated above.
+        if not hmac.compare_digest(token.encode("utf-8", "ignore"),
+                                   _clips_token().encode("utf-8", "ignore")):
+            print("[clips] rejected: bad or missing token", flush=True)
+            self._json(404, {"error": "not found"})
+            return
+        try:
+            CLIPS_DIR.mkdir(parents=True, exist_ok=True)
+            vids = sorted((f for f in CLIPS_DIR.glob("*")
+                           if not f.name.endswith(CLIP_SIDECAR_SUFFIXES)),
+                          key=lambda f: f.stat().st_mtime, reverse=True)
+        except OSError as e:
+            self._json(500, {"error": f"clips unavailable: {e}"})
+            return
+
+        if u.path == "/api/clips":
+            self._json(200, {"clips": [
+                {"id": f.name,
+                 "bytes": f.stat().st_size,
+                 "mtime": time.strftime("%Y-%m-%dT%H:%M:%SZ",
+                                        time.gmtime(f.stat().st_mtime)),
+                 "sidecar": os.path.exists(str(f) + ".timestamps.json"),
+                 # Sidecars get no rows of their own (filtered out above);
+                 # this is how scripts/pull_scan_clips.py knows to ask for
+                 # "<id>.shenai.json" through the same gated /api/clip.
+                 "shenai": os.path.exists(str(f) + ".shenai.json")}
+                for f in vids], "keep": CLIPS_KEEP})
+            return
+
+        cid = (q.get("id") or [""])[0]
+        # Basename only: a caller must not be able to walk out of CLIPS_DIR.
+        target = CLIPS_DIR / os.path.basename(cid)
+        if not cid or not target.exists() or not target.is_file():
+            self._json(404, {"error": "no such clip", "id": cid})
+            return
+        try:
+            data = target.read_bytes()
+        except OSError as e:
+            self._json(500, {"error": f"unreadable: {e}"})
+            return
+        print(f"[clips] serving {target.name} ({len(data) / 1e6:.1f} MB)",
+              flush=True)
+        self.send_response(200)
+        self.send_header("Content-Type", "application/octet-stream")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Content-Disposition",
+                         f'attachment; filename="{target.name}"')
+        self.end_headers()
+        self.wfile.write(data)
 
     def _read_body(self, limit: int):
         try:
@@ -709,6 +1182,9 @@ class MeasureHandler(BaseHTTPRequestHandler):
             return
         if u.path == "/api/start":
             self._start_job(parse_qs(u.query))
+            return
+        if u.path == "/api/scan-signals":
+            self._upload_signals(parse_qs(u.query))
             return
         if u.path not in ("/api/process-video", "/api/measure"):
             self._json(404, {"error": "not found"})
@@ -852,6 +1328,126 @@ class MeasureHandler(BaseHTTPRequestHandler):
         self._json(200, {"ok": True, "upload_id": upload_id, "index": index,
                          "received": have, "total": total})
 
+    def _upload_signals(self, q: dict):
+        """ShenAI's own dense PPG waveform and beat train for one scan.
+
+        WHY store a second opinion at all (measured 2026-09-10): our four face
+        ROIs disagree on the pulse by 15-23 bpm at the phone's compression
+        level and cross-region waveform correlation is 0.16, which shatters the
+        interval series, holds coverage at 0.47 against the 0.50 floor and
+        leaves ACCEPT on 1 scan in 49. ShenAI builds a 3D face model and
+        extracts ONE dense signal, so its waveform and beat train are an
+        independent view of the SAME beats, captured by the same camera under
+        the same illuminant. Retained for OFFLINE comparison only: nothing
+        written here is ever read by the pipeline, and this route can neither
+        start, delay nor fail a scan.
+
+        THE WRITE IS UNAUTHENTICATED, deliberately. It arrives from an
+        anonymous phone mid-scan exactly like /api/upload-part, and
+        /beta/cardio-staging has no login - so demanding AFIB_CLIPS_TOKEN here
+        would mean shipping that token inside a public JS bundle, weakening the
+        READ gate it exists to protect. The write is made harmless instead: no
+        semaphore (MAX_CONCURRENT is 2 and a JSON POST must never be able to
+        503 a real scan), no decoding, a 4 MB cap, and nothing is persisted
+        unless _clips_enabled(). Production sets neither switch, so there the
+        waveform is accepted, counted and dropped without ever touching disk.
+        Read-back needs no new endpoint and no new gate: the retained copy
+        lives in CLIPS_DIR and is served by the existing GET /api/clip behind
+        _clips_enabled() + hmac.compare_digest + basename-only ids.
+        """
+        # Every OTHER writer's flow ends at /api/start, which sweeps. This
+        # route is a dead end that reaches disk, so it sweeps for itself.
+        _sweep_parts()
+        one = lambda k: (q.get(k) or [None])[0]                  # noqa: E731
+        try:
+            upload_id = str(one("upload_id") or "")
+            d = _part_dir(upload_id)          # the ONLY sanitizer on this path
+        except (TypeError, ValueError) as e:
+            self._json(400, {"error": f"bad signal parameters: {e}"})
+            # protocol_version is HTTP/1.1 and nothing has drained the request
+            # body, so the unread bytes would desync this keep-alive socket for
+            # the next request - same reason as the single-shot path above.
+            self.close_connection = True
+            return
+        body = self._read_body(MAX_SIDECAR_BYTES)
+        if body is None:
+            self.close_connection = True      # _read_body answered 400/413
+            return
+        try:
+            payload = json.loads(body.decode("utf-8"))
+            if not isinstance(payload, dict):
+                raise ValueError("body is not a JSON object")
+        except (UnicodeDecodeError, ValueError, RecursionError) as e:
+            self._json(400, {"error": f"bad signal parameters: {e}"})
+            self.close_connection = True
+            return
+        # ShenAI route (2026-09-16): hold the document IN MEMORY for the job
+        # running on this upload - no directory is created, nothing is
+        # written, and the hold dies with the job's part dir. Only an upload
+        # that is actually in progress is held; a flood of anonymous POSTs is
+        # bounded by SIGNALS_HOLD_MAX entries of at most MAX_SIDECAR_BYTES.
+        held = False
+        if d.is_dir():
+            _hold_signals(d.name, payload)
+            held = True
+        # NEVER 404 of our own accord. The client treats 404 from an upload
+        # route as "this service predates the route" and stops; 404 here stays
+        # reserved for a service that genuinely has no such path (the catch-all
+        # below). Retention off means accepted-and-dropped, not refused.
+        if not _clips_enabled():
+            print(f"[signals] dropped {len(body)} B for {upload_id!r}: "
+                  f"retention OFF: {_clips_gate_reason()}"
+                  f"{' (held for the route)' if held else ''}", flush=True)
+            self._json(200, {"ok": True, "upload_id": d.name,
+                             "bytes": len(body), "stored": False, "held": held})
+            return
+        # This route never CREATES a part dir, only writes into one an upload
+        # already opened. It is unauthenticated: measured 2026-09-11 against a
+        # live server with clips on, 40 anonymous POSTs of 4,194,136 B each all
+        # answered {"stored":true} and left 167.8 MB across 40 directories that
+        # nothing reclaimed. UPLOAD_DIR and CLIPS_DIR share one small ephemeral
+        # Railway disk, and filling it fails real scans at _upload_part's write
+        # (OSError -> 500). A sidecar for an upload that never sent a byte
+        # could not be paired anyway - _pair_shenai needs the retained pointer
+        # that only _assemble_parts writes - so nothing is lost by refusing it.
+        # Still a 200: the client must see success and never retry.
+        if not d.is_dir():
+            print(f"[signals] dropped {len(body)} B for {upload_id!r}: "
+                  f"no upload in progress", flush=True)
+            self._json(200, {"ok": True, "upload_id": d.name,
+                             "bytes": len(body), "stored": False})
+            return
+        try:
+            # Write beside, then rename, like _upload_part: the file is either
+            # wholly there or not there at all, so a retry is safe and
+            # _retain_clip can never copy half a document.
+            tmp = d / f".{SHENAI_PART_NAME}.tmp"
+            tmp.write_bytes(body)
+            tmp.replace(d / SHENAI_PART_NAME)
+        except OSError as e:
+            self._json(500, {"error": f"could not store signals: {e}"})
+            self.close_connection = True
+            return
+        # The document is already on disk and _pair_shenai summarises it again
+        # at pairing time, so a summary that raises must cost nothing here. It
+        # is only a log line, and the handler owes this client one of its
+        # documented 200/400/413/500 answers.
+        try:
+            s = _shenai_summary(payload)
+        except Exception as e:                                # noqa: BLE001
+            print(f"[signals] stored {len(body)} B for {upload_id!r}: "
+                  f"summary unavailable ({type(e).__name__}: {e})", flush=True)
+        else:
+            # The observed getFullPpgSignal() length is unrecorded anywhere in
+            # either repo as of 2026-09-11, and both the client's 200_000-sample
+            # cap and AFIB_MAX_SIDECAR_MB were sized from a plausible range, not
+            # a measurement. This log line is how that gets settled.
+            print(f"[signals] stored {len(body)} B for {upload_id!r}: "
+                  f"ppg_n={s['ppg_n']} fs={s['ppg_fs_hz']}"
+                  f"({s['ppg_fs_source']}) beats={s['beats_n']}", flush=True)
+        self._json(200, {"ok": True, "upload_id": d.name,
+                         "bytes": len(body), "stored": True})
+
     def _start_job(self, q: dict):
         """Assemble the slices and detach the analysis. Returns immediately:
         the client polls GET /api/result, so no connection is held through the
@@ -860,16 +1456,21 @@ class MeasureHandler(BaseHTTPRequestHandler):
         _, header = _parse_envelope(b"", "video/webm", q)
         upload_id = str((q.get("upload_id") or [""])[0])
         ext = str(header.get("ext") or (q.get("ext") or ["webm"])[0]).lstrip(".")
-        try:
-            path, upload_s = _assemble_parts(upload_id, ext)
-        except (ValueError, OSError) as e:
-            self._json(400, {"error": str(e), "upload_id": upload_id})
-            return
-        size = os.path.getsize(path)
+        # Take the worker slot BEFORE assembling: _assemble_parts deletes the
+        # slices, so a 503 issued after it left the client's retry with "no
+        # parts" -> 400 and the scan was lost (audit 2026-09-17, #6a). Now a
+        # busy service answers 503 with the slices intact, and the retry works.
         if not _INFLIGHT.acquire(blocking=False):
             self._json(503, {"error": "measure workers busy — retry",
                              "max_concurrent": MAX_CONCURRENT})
             return
+        try:
+            path, upload_s = _assemble_parts(upload_id, ext)
+        except (ValueError, OSError) as e:
+            _INFLIGHT.release()
+            self._json(400, {"error": str(e), "upload_id": upload_id})
+            return
+        size = os.path.getsize(path)
         with _STARTED_LOCK:
             _STARTED[upload_id] = True
         header.setdefault("session", (q.get("session") or [upload_id])[0])
@@ -903,6 +1504,13 @@ class MeasureHandler(BaseHTTPRequestHandler):
                     _STARTED.pop(upload_id, None)
                 _inflight(-1)
                 _INFLIGHT.release()
+                # Audit 2026-09-17 #6b: this path left scan.<ext>, the ~220 MB
+                # FFV1 intermediate and the sidecars in the part dir until the
+                # hourly sweep, on the small disk CLIPS_DIR shares. The retained
+                # copy (when retention is on) was taken at /api/start and
+                # _pair_shenai has already read shenai.json inside
+                # _run_assembled, so nothing here is still needed.
+                _discard_part_dir(upload_id)
                 print(f"[measure] detached job end for {upload_id!r} after "
                       f"{time.perf_counter() - t0:.1f}s", flush=True)
 
@@ -942,17 +1550,28 @@ class MeasureHandler(BaseHTTPRequestHandler):
     @staticmethod
     def _run_assembled(path: str, header: dict) -> dict:
         """The same production path as `_run`, on a clip already on disk."""
-        doc = measure_video(
+        doc, det = measure_video_details(
             path, manifest=MeasureHandler._build_manifest(header),
             client_timestamps_s=header.get("timestamps_s"),
             duration_ms=header.get("duration_ms"),
             config_overrides=header.get("config_overrides"),
             window_s=header.get("window_s"), scale=header.get("scale"))
         doc["session"] = header.get("session") or ""
+        # ShenAI route (2026-09-16): the sidecar posted after /api/start was
+        # accepted is held in memory under the part dir's name; the route runs
+        # the SAME decision on the train when the video path abstained on
+        # interval gates alone. Recorded on the doc used or not.
+        _apply_shenai_route(doc, det, os.path.basename(os.path.dirname(path)),
+                            part_dir=os.path.dirname(path))
         if header.get("reference"):
             doc["reference"] = header["reference"]
         if header.get("client_capture"):
             doc["client_capture"] = header["client_capture"]
+        # `path` still points inside the part dir, where /api/scan-signals
+        # parks the ShenAI JSON. It is posted after /api/start was accepted, so
+        # it has had the whole 20-45 s of this job to land - and _retain_clip,
+        # which ran before the job was even queued, will have missed it.
+        _pair_shenai(os.path.dirname(path), doc)
         return doc
 
     @staticmethod
@@ -970,8 +1589,8 @@ class MeasureHandler(BaseHTTPRequestHandler):
         # otherwise a live scan can never be re-run at native resolution or
         # with a different encoder setting afterwards.
         if os.environ.get("AFIB_KEEP_UPLOADS") == "1":
-            import shutil
             shutil.copyfile(path, str(d / f"scan.orig.{ext}"))
+        retained = _retain_clip(path, sid)
 
         try:
             doc = measure_video(
@@ -987,6 +1606,17 @@ class MeasureHandler(BaseHTTPRequestHandler):
                 doc["reference"] = header["reference"]     # additive; audit only
             if header.get("client_capture"):
                 doc["client_capture"] = header["client_capture"]   # additive
+            # Keyed on upload_id, NOT session: /api/scan-signals parks the file
+            # under the sanitized upload_id, while this path retains under the
+            # session (sid, line above). Expect it to find nothing in practice
+            # - the single-shot client posts the sidecar only after THIS
+            # request has already returned - but a retry or a client that got
+            # in early should not silently lose its second opinion.
+            if header.get("upload_id"):
+                try:
+                    _pair_shenai(_part_dir(header["upload_id"]), doc, retained)
+                except ValueError:
+                    pass
             if isinstance(doc.get("timing"), dict):
                 doc["timing"]["upload_received_s"] = header.get("_upload_received_s")
                 doc["timing"]["upload_bytes"] = header.get("_upload_bytes")

@@ -248,7 +248,7 @@ def extract_and_detect(traces: dict, ts: np.ndarray, fps: float, cfg: dict,
     # treated discarded short fragments as a flat physiological signal and
     # introduced artificial edges at capture gaps.
     raw_parts = {r: [] for r in ROI_NAMES}
-    for a, b in segments:
+    for seg_i, (a, b) in enumerate(segments):
         filt = {}
         for roi in ROI_NAMES:
             tr = np.asarray(traces[roi])[a:b]
@@ -259,6 +259,7 @@ def extract_and_detect(traces: dict, ts: np.ndarray, fps: float, cfg: dict,
             for beat in detect_beats_single_roi(filt[roi], fps, roi):
                 idx = beat.t_s * fps
                 beat.t_s = float(np.interp(idx, np.arange(b - a), ts[a:b]))
+                beat.segment = seg_i            # audit #4c: runs never span a gap
                 per_roi_beats[roi].append(beat)
     raw = {r: (np.concatenate(raw_parts[r]) if raw_parts[r]
                else np.array([], dtype=float)) for r in ROI_NAMES}

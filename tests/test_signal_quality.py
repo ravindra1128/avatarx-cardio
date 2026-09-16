@@ -162,3 +162,17 @@ def test_spec_b6_values_survive_the_yaml_loader():
     assert cfg["runs"]["ibi_physiologic_ms"] == [250, 2200]
     assert cfg["gates"]["g1"]["confidence_ece"] == 0.10
     assert cfg["serial"]["rule"] == [2, 3]
+
+
+def test_noise_stays_below_the_sqi_floor_with_margin():
+    """The fusion tolerance is also the artifact veto's coincidence window:
+    widening it lifts the SQI of pure noise (measured 2026-09-17: 0.217 at
+    60 ms, 0.273 at 90, 0.297 at 100, 0.353 at 120 against a 0.30 floor).
+    Pin a margin so a future widening cannot let noise through the gate."""
+    from beats.detector import FUSE_TOLERANCE_MS
+    assert FUSE_TOLERANCE_MS <= 90.0
+    for seed, scale in ((3, 1.0), (4, 0.02)):
+        rng = np.random.default_rng(seed)
+        w = {roi: rng.normal(0, scale, 1200) for roi in
+             ("forehead", "cheek_l", "cheek_r", "nose")}
+        assert _sqi_for(w).sqi < 0.28

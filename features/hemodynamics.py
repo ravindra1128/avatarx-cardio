@@ -41,7 +41,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from features.rate_guard import guard_resting_pulse, MIN_ROI_AGREE_FOR_RATE
+from features.rate_guard import guard_resting_pulse, MIN_ROI_AGREE_FOR_RATE, FOLD_MIN_HARMONIC_FRACTION
 
 # Vasomotion / low-frequency band of the amplitude envelope (Hz): the
 # classic Mayer-wave band, the same 0.04-0.15 Hz the HRV literature
@@ -502,6 +502,11 @@ def vasomotor_indices(series: list, locked: bool) -> dict:
         out["reason"] = "degenerate amplitude series"
         return out
     out["available"] = True
+    # A robust CV (1.4826*MAD/median) was tried on 2026-09-16 (iteration 29):
+    # it lowered the phone clips' tone (54 -> 34, 55 -> 26) far more than the
+    # rig clip's (81 -> 72), so cross-record consistency fell 0.652 -> 0.472
+    # and the gate rejected it. SD/mean stays; the phone series' heavy tail
+    # is real signal-quality evidence, not an outlier to discard.
     out["amplitude_cv"] = round(float(np.std(a) / mean), 5)
     out["score"] = tone_score_from_cv(out["amplitude_cv"])
     out["score_typical_range"] = list(TONE_TYPICAL)
@@ -644,7 +649,41 @@ def cardiorespiratory_indices(regularity, hr_bpm, participant=None, *,
     rate_guard = guard_resting_pulse(
         hr, spectral_hr_bpm, harmonic_fraction=harmonic_fraction,
         spectral_snr=spectral_snr, ref_bpm=ref_bpm)
-    if rate_guard.get("guarded"):
+    # Audit 2026-09-17 #7 (CALC-4): the guard ran BEFORE the >= 3-region bar
+    # above and could replace the count with a spectral peak that 0-2 regions
+    # backed - exactly what the rate head refuses. It now overrides only when
+    # backed; a doubling signature without backing abstains (fail-closed).
+    # A CLEAN double/half (count within 15% of 2x or 0.5x the spectral rate) is
+    # two independent estimators agreeing on the halved rate; that is evidence
+    # in itself and needs no region quota (on the holdout it is what keeps
+    # 9b3023/ebe749 at ~55 bpm instead of a doubled ~110). Split-inflation
+    # (ratio ~1.5 with many half-length intervals) has no such agreement and
+    # keeps the >= 3-region bar - the 2026-09-15 subharmonic case (54 vs 67,
+    # ratio 1.24) never reaches this branch at all.
+    try:
+        _hf = float(harmonic_fraction or 0.0)
+    except (TypeError, ValueError):
+        _hf = 0.0
+    clean_fold = (rate_guard.get("signature") in ("double", "half")
+                  and _hf >= FOLD_MIN_HARMONIC_FRACTION)
+    rate_guard["applied"] = bool(rate_guard.get("guarded") and (spectral_backed or clean_fold))
+    if rate_guard.get("guarded") and not rate_guard["applied"]:
+        # Card robustness (owner, 2026-09-16): a count that carries a
+        # doubling/split signature and has NO backing for the fold is not a
+        # resting rate, it is a detector artefact - on two staging scans that
+        # day (counts 109 and 114 against a 78 bpm waveform rhythm and a 72-74
+        # reference) this branch published fitness 6.5/100 "provisional" while
+        # the pulse head on the same scan reported 78. One resolver, one
+        # number: the card now abstains exactly where features/rate_guard.
+        # resolve_resting_rate says 'uncertain', and names both estimates.
+        # (Blanking used to cost 2 of 3 holdout phone clips their card; those
+        # clips are CLEAN doubles, which the clean-fold rule above now applies.)
+        tier = None
+        tier_reasons.append("the beat count shows a doubling/halving signature and "
+                            "too few facial regions back the waveform rhythm to "
+                            "replace it; no resting rate is reported")
+        hr, rate_source = None, None
+    elif rate_guard["applied"]:
         hr, rate_source = rate_guard["reported_bpm"], "spectral_doubling_guard"
         tier = "provisional"
         tier_reasons.append(rate_guard["reason"])
@@ -683,8 +722,19 @@ def cardiorespiratory_indices(regularity, hr_bpm, participant=None, *,
     idx = rate_only
     reason = reason_code = None
     if idx is None:
-        reason_code = "no_resting_rate"
-        reason = "no resting pulse rate could be measured from this scan"
+        if rate_guard.get("guarded") and not rate_guard.get("applied"):
+            reason_code = "resting_rate_unverified"
+            _c = rate_guard.get("count_bpm") or hr_bpm
+            _s = rate_guard.get("spectral_bpm") or spectral_hr_bpm
+            reason = ("the resting rate could not be verified: the beat count "
+                      + (f"({float(_c):.0f} bpm) " if _c is not None else "")
+                      + "shows a doubling/halving signature against the "
+                      "waveform rhythm"
+                      + (f" ({float(_s):.0f} bpm)" if _s is not None else "")
+                      + " and too few facial regions back either")
+        else:
+            reason_code = "no_resting_rate"
+            reason = "no resting pulse rate could be measured from this scan"
         tier = None
     demographics = {
         "age_years": pc.get("age_years") or pc.get("age"),

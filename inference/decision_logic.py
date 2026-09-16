@@ -92,6 +92,40 @@ def harmonic_fraction(ibi_ms: np.ndarray, half_tol: float = 0.15,
                          (np.abs(r - 2.0) < double_tol)))
 
 
+# Audit #2: how much interval irregularity the scan's own beat-timing noise
+# predicts, so the interim rules can require the observed irregularity to
+# exceed it. Derivation (features/regularity.py timing_jitter_budget documents
+# the same propagation): per-ROI beat sigma = tp / 0.954 (tp = median |t_a-t_b|
+# over ROI pairs = 0.6745*sqrt(2)*sigma); a fused beat averages k ROIs ->
+# sigma_f = sigma/sqrt(k); a successive interval difference spans three beats
+# -> sd = sqrt(6)*sigma_f; median|d| of a half-normal = 0.6745*sd. The margin
+# is calibrated so a metronome is read irregular < 5% of the time at 40 ms
+# (simulation 2026-09-17; to be confirmed on regularity_floor.beat_error_study).
+NOISE_FLOOR_MARGIN = 2.0
+
+
+def irregularity_noise_floor(ev: dict) -> dict:
+    """{'mad_floor_ms', 'sd_d_ms', 'sigma_fused_ms', 'k'} from the evidence,
+    or all-None when timing precision is unknown (then no floor applies)."""
+    tp = (ev or {}).get("timing_precision_ms")
+    try:
+        tp = float(tp)
+    except (TypeError, ValueError):
+        tp = float("nan")
+    if not np.isfinite(tp) or tp <= 0:
+        return {"mad_floor_ms": None, "sd_d_ms": None, "sigma_fused_ms": None, "k": None}
+    agree = (ev or {}).get("mean_roi_agreement")
+    try:
+        k = max(1.0, 4.0 * float(agree)) if agree is not None else 2.0
+    except (TypeError, ValueError):
+        k = 2.0
+    sigma = tp / 0.954
+    sigma_f = sigma / np.sqrt(k)
+    sd_d = np.sqrt(6.0) * sigma_f
+    return {"mad_floor_ms": round(0.6745 * sd_d, 2), "sd_d_ms": round(sd_d, 2),
+            "sigma_fused_ms": round(sigma_f, 2), "k": round(k, 2)}
+
+
 def timing_precision_from_trains(trains: dict, tol_s: float = 0.10) -> dict:
     """Beat-TIMING precision without ECG (Gate 1's precondition, proxied).
 
@@ -152,6 +186,7 @@ def beat_evidence_from_series(series, runset, sqi_components: Optional[dict] = N
                               if ibi_clean.size >= 4 else None),
         "pulse_lattice_n_intervals": int(ibi_clean.size),
         "frac_multi_roi": float(np.mean(agree >= 0.75)) if agree.size else 0.0,
+        "mean_roi_agreement": float(np.mean(agree)) if agree.size else 0.0,   # audit #2: k = 4 * this
         "n_beats": int(t.size),
         "n_intervals": int(getattr(runset, "n_intervals", 0)),
         "harmonic_fraction": harmonic_fraction(ibi),
@@ -339,9 +374,24 @@ def decide_with_rationale(features: RhythmFeatures, sqi: float,
         deficit_path = False
         why["rule"]["afib_probability"] = afib_prob
     else:
-        afib_pattern = (mad >= r["afib_median_abs_ms"] and pnn50 >= r["afib_pnn50"])
+        # Audit 2026-09-17 #2. mad/pnn50 are compared to ECG-scale thresholds
+        # (set on synthetic data with 1-5 ms beat timing) while the phone's
+        # beat timing is 20-59 ms. Successive differences amplify per-beat
+        # timing error by sqrt(6): a PERFECTLY regular rhythm reads
+        # median|dRR| ~29 ms / pNN50 ~0.33 at 40 ms precision and trips the
+        # rule on most phone scans, after which only the AF-grade bar or an
+        # abstention is reachable - a regular heart can never be called
+        # regular. The thresholds are NOT loosened; the observed irregularity
+        # must also clearly exceed what the scan's own timing noise predicts.
+        floor = irregularity_noise_floor(ev if have_ev else {})
+        why["rule"]["noise_floor"] = floor
+        exceeds_noise = (floor["mad_floor_ms"] is None or
+                         mad >= NOISE_FLOOR_MARGIN * floor["mad_floor_ms"])
+        why["rule"]["irregularity_exceeds_noise"] = bool(exceeds_noise)
+        afib_pattern = (mad >= r["afib_median_abs_ms"] and pnn50 >= r["afib_pnn50"]
+                        and exceeds_noise)
         deficit_path = (mad >= r["afib_deficit_median_abs_ms"] and
-                        dropout >= r["afib_deficit_dropout"])
+                        dropout >= r["afib_deficit_dropout"] and exceeds_noise)
         why["rule"]["afib_pattern_rule"] = bool(afib_pattern)
         why["rule"]["afib_deficit_rule"] = bool(deficit_path)
 
@@ -418,12 +468,40 @@ def decide_with_rationale(features: RhythmFeatures, sqi: float,
                                          reasons),
                            confidence=confidence, sqi=sqi)
 
-    other = mad >= r["other_median_abs_ms"] and pnn50 >= r["other_pnn50"]
+    other = (mad >= r["other_median_abs_ms"] and pnn50 >= r["other_pnn50"]
+             and why["rule"].get("irregularity_exceeds_noise", True))
+    # Audit 2026-09-17 #7 (CALC-2): the ACCEPT pulse and the HIGH_RATE call were
+    # decided on the raw interval median alone. A uniformly doubled count reads
+    # ~2x the true rate with harmonic_fraction ~0, and the pulse cross-check the
+    # pipeline already computes was never consulted here. The one resolver
+    # (features/rate_guard.resolve_resting_rate) is now the pulse the result
+    # carries, and a fast rate whose count is unverified fails closed.
+    reported_bpm = float(bpm) if _finite(bpm) else None
+    rate_res = None
+    if have_ev:
+        from features.rate_guard import resolve_resting_rate
+        rate_res = resolve_resting_rate(reported_bpm, n_int, ev,
+                                        min_intervals=int(ec["min_intervals_any"]))
+        why["rule"]["resting_rate"] = {k: rate_res.get(k) for k in
+                                       ("bpm", "source", "confidence", "verdict",
+                                        "spectral_backed")}
+        if rate_res.get("bpm") is not None:
+            reported_bpm = float(rate_res["bpm"])
     if afib:
         cls = "AFIB_SUGGESTIVE"
     elif other:
         cls = "OTHER_IRREGULAR"
     elif _finite(bpm) and bpm >= r["high_rate_bpm"]:
+        unverified = (rate_res is not None and
+                      rate_res.get("confidence") in ("uncertain", "provisional"))
+        if unverified:
+            why["rule"]["fired"] = "ABSTAIN (fast count unverified)"
+            return _finish(why, _abstain(recording_id, ScanOutcome.REPEAT_SCAN, sqi,
+                                         ["fast pulse seen, but the beat count is not "
+                                          "verified against the waveform rhythm "
+                                          "(doubling signature or disagreement): "
+                                          "rate unverified"]),
+                           confidence=confidence, sqi=sqi)
         cls = "HIGH_RATE"
     else:
         cls = "SINUS"
@@ -433,7 +511,7 @@ def decide_with_rationale(features: RhythmFeatures, sqi: float,
         recording_id=recording_id, outcome=ScanOutcome.ACCEPT,
         afib_probability=afib_prob,
         predicted_class=cls, signal_quality_index=float(sqi),
-        mean_pulse_rate_bpm=float(bpm) if _finite(bpm) else None,
+        mean_pulse_rate_bpm=reported_bpm,
         no_read_reasons=[], model_version=model_version)
     return _finish(why, res, confidence=confidence, sqi=sqi)
 
