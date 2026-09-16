@@ -202,6 +202,14 @@ Added 2026-09-16 (afternoon), from the first three retained staging clips with S
   holdout's CARD values swung with four extra intervals (tone 54 -> 100, fitness 82 -> 20),
   consistency 0.652 -> 0.31 / 0.43. The blocker is card instability, not the segment rule:
   make the cards robust to the interval set first, then retry 28.
+- Iteration 29/29b (cards, `features/hemodynamics.py`) — the fitness card abstains where
+  the resolver says 'uncertain' (doubling/split signature, no fold backing), naming both
+  estimates; live evidence 10:09/10:13 (counts 109/114 vs 78 bpm rhythm, reference 72-74,
+  fitness 6.7/6.5 published). Holdout metric-identical; shipped on the owner's word. The
+  robust tone CV tried beside it was REJECTED (phone clips' tone fell 54 -> 34, 55 -> 26
+  vs rig 81 -> 72; consistency 0.652 -> 0.472). Still open: a count with no spectral
+  anchor at all (10:09: 108.8 bpm from 5 intervals, "no dominant rhythm") is still shown
+  provisional per the 2026-09-09 decision - nothing in the pipeline can contradict it.
 - ShenAI comparison (`scripts/compare_shenai_signal.py`, harness fixed to follow the
   downscaled path): on the same two scans ShenAI's own beat train gave 49 and 51 clean
   intervals at coverage 0.98/0.94 (RMSSD 28/32 ms, SDNN 31/57 ms, not TOO-GOOD) against
