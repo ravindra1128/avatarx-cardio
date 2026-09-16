@@ -1,0 +1,13 @@
+{
+  "notice": "Software counterexamples using stubbed lifecycle dependencies; not a browser or clinical test.",
+  "explicitNullNumber": 0,
+  "missingNumber": null,
+  "disabledProcessor": {
+    "finishedCalls": 0,
+    "results": {}
+  },
+  "latePreviousScan": {
+    "before": "new-B",
+    "after": "old-A"
+  }
+}

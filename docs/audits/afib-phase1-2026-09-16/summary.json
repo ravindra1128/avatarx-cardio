@@ -1,0 +1,162 @@
+{
+  "n_clips": 11,
+  "n_runs": 22,
+  "structured_runs": 22,
+  "deterministic_clips": 11,
+  "inputs_unchanged": true,
+  "video_counts": {
+    "NO_RESULT/None": 3,
+    "REPEAT_SCAN/None": 8
+  },
+  "final_counts": {
+    "NO_RESULT/None": 3,
+    "ACCEPT/SINUS": 4,
+    "REPEAT_SCAN/None": 4
+  },
+  "median_server_job_s": 26.77,
+  "per_clip": [
+    {
+      "clip": "20260916T080712Z-1234567890-mu3th.webm",
+      "video_outcome": "NO_RESULT",
+      "video_intervals": 4,
+      "video_coverage": 0.328,
+      "final_outcome": "NO_RESULT",
+      "final_class": null,
+      "source": "video",
+      "stars": 2,
+      "route_reason": "the scan itself did not support a rhythm statement: sqi, timing_precision_any_class",
+      "deterministic": true,
+      "head_agrees": true
+    },
+    {
+      "clip": "20260916T081255Z-1234567890-mu3tp.webm",
+      "video_outcome": "REPEAT_SCAN",
+      "video_intervals": 13,
+      "video_coverage": 0.368,
+      "final_outcome": "ACCEPT",
+      "final_class": "SINUS",
+      "source": "shenai_train",
+      "stars": 2,
+      "route_reason": "used: 51 clean intervals at coverage 0.94, rate 69 bpm backed by our resting rate 79 bpm (verified) and our waveform rhythm 78 bpm (2 of 4 regions)",
+      "deterministic": true,
+      "head_agrees": false
+    },
+    {
+      "clip": "20260916T085327Z-1234567890-mu3v3.webm",
+      "video_outcome": "REPEAT_SCAN",
+      "video_intervals": 7,
+      "video_coverage": 0.15,
+      "final_outcome": "REPEAT_SCAN",
+      "final_class": null,
+      "source": "video",
+      "stars": 2,
+      "route_reason": "train rate 79 bpm is not corroborated by our evidence: our rate unresolved (uncertain), waveform 72 bpm (1 of 4)",
+      "deterministic": true,
+      "head_agrees": true
+    },
+    {
+      "clip": "20260916T100913Z-1234567890-mu3xu.webm",
+      "video_outcome": "REPEAT_SCAN",
+      "video_intervals": 9,
+      "video_coverage": 0.572,
+      "final_outcome": "REPEAT_SCAN",
+      "final_class": null,
+      "source": "video",
+      "stars": 2,
+      "route_reason": "train rate 74 bpm is not corroborated by our evidence: our rate unresolved (uncertain)",
+      "deterministic": true,
+      "head_agrees": true
+    },
+    {
+      "clip": "20260916T101245Z-1234567890-mu3xz.webm",
+      "video_outcome": "REPEAT_SCAN",
+      "video_intervals": 11,
+      "video_coverage": 0.383,
+      "final_outcome": "ACCEPT",
+      "final_class": "SINUS",
+      "source": "shenai_train",
+      "stars": 2,
+      "route_reason": "used: 57 clean intervals at coverage 0.98, rate 72 bpm backed by our resting rate 79 bpm (verified) and our waveform rhythm 78 bpm (2 of 4 regions)",
+      "deterministic": true,
+      "head_agrees": false
+    },
+    {
+      "clip": "20260916T113355Z-1234567890-mu40v.webm",
+      "video_outcome": "NO_RESULT",
+      "video_intervals": 4,
+      "video_coverage": 0.292,
+      "final_outcome": "NO_RESULT",
+      "final_class": null,
+      "source": "video",
+      "stars": 2,
+      "route_reason": "train rate 73 bpm is not corroborated by our evidence: our rate 53 bpm (provisional), waveform 53 bpm (3 of 4)",
+      "deterministic": true,
+      "head_agrees": true
+    },
+    {
+      "clip": "20260916T114237Z-1234567890-mu416.webm",
+      "video_outcome": "REPEAT_SCAN",
+      "video_intervals": 5,
+      "video_coverage": 0.181,
+      "final_outcome": "REPEAT_SCAN",
+      "final_class": null,
+      "source": "video",
+      "stars": 2,
+      "route_reason": "train rate 75 bpm is not corroborated by our evidence: our rate 51 bpm (provisional), waveform 51 bpm (3 of 4)",
+      "deterministic": true,
+      "head_agrees": true
+    },
+    {
+      "clip": "20260916T114555Z-1234567890-mu41b.webm",
+      "video_outcome": "NO_RESULT",
+      "video_intervals": 0,
+      "video_coverage": 0,
+      "final_outcome": "NO_RESULT",
+      "final_class": null,
+      "source": "video",
+      "stars": 2,
+      "route_reason": "the scan itself did not support a rhythm statement: timing_precision_any_class",
+      "deterministic": true,
+      "head_agrees": true
+    },
+    {
+      "clip": "20260916T115045Z-1234567890-mu41h.webm",
+      "video_outcome": "REPEAT_SCAN",
+      "video_intervals": 13,
+      "video_coverage": 0.348,
+      "final_outcome": "ACCEPT",
+      "final_class": "SINUS",
+      "source": "shenai_train",
+      "stars": 2,
+      "route_reason": "used: 50 clean intervals at coverage 0.94, rate 67 bpm backed by our resting rate 69 bpm (provisional) and our waveform rhythm 69 bpm (4 of 4 regions)",
+      "deterministic": true,
+      "head_agrees": false
+    },
+    {
+      "clip": "20260916T123737Z-1234567890-mu434.webm",
+      "video_outcome": "REPEAT_SCAN",
+      "video_intervals": 15,
+      "video_coverage": 0.387,
+      "final_outcome": "ACCEPT",
+      "final_class": "SINUS",
+      "source": "shenai_train",
+      "stars": 2,
+      "route_reason": "used: 57 clean intervals at coverage 0.95, rate 81 bpm backed by our resting rate 81 bpm (verified) and our waveform rhythm 81 bpm (2 of 4 regions)",
+      "deterministic": true,
+      "head_agrees": false
+    },
+    {
+      "clip": "20260916T124523Z-1234567890-mu43f.webm",
+      "video_outcome": "REPEAT_SCAN",
+      "video_intervals": 18,
+      "video_coverage": 0.502,
+      "final_outcome": "REPEAT_SCAN",
+      "final_class": null,
+      "source": "video",
+      "stars": 2,
+      "route_reason": "train rate 75 bpm is not corroborated by our evidence: our rate 51 bpm (provisional), waveform 51 bpm (0 of 4)",
+      "deterministic": true,
+      "head_agrees": true
+    }
+  ]
+}
