@@ -251,10 +251,22 @@ DEFAULT_WINDOW_S = float(os.environ.get("AFIB_WINDOW_S", "40"))
 # never capture jitter: the phone's frame interval wanders 30-70 ms, a chunk
 # is 3 s. A step BACKWARDS is a discontinuity at any size.
 GAP_S = 1.0
+# A forward gap shorter than this is a stalled or lost recorder chunk INSIDE
+# the tail, not the hole: the clip keeps running on the same clock after it,
+# capture_segments (inference/evidence.py) already splits the analysis around
+# it, and beats never span it (Beat.segment, 2026-09-16). Measured 2026-09-16
+# on a real staging scan: one 2.85 s gap at 51.2 s (exactly one 3.37 s chunk
+# missing from the upload) made the cut start AFTER it, keeping 14.6 s of a
+# 44.9 s tail — 12 clean intervals against the 15 needed, on a scan whose
+# other gates all passed. The rolling recorder's hole is never this short in
+# practice (session length minus ~51 s) and a two-chunk loss (6.7 s) is not
+# spanned either, so the muxer's 60 s limit stays far away.
+SPAN_GAP_S = 5.0
 
 
 def choose_tail_cut(timeline: list, window_s: float,
-                    gap_s: float = GAP_S) -> dict:
+                    gap_s: float = GAP_S,
+                    span_gap_s: float = SPAN_GAP_S) -> dict:
     """Pure. Where to cut so that what remains is ONE continuous run of
     frames, about `window_s` long, starting on a keyframe.
 
@@ -274,21 +286,34 @@ def choose_tail_cut(timeline: list, window_s: float,
     (MAX_COLLAPSED_INTERVAL_FRACTION 0.02 -> 0.05 on the staging service).
     The transcode that follows saw all of it too.
 
+    Two kinds of discontinuity. A backwards step, or a forward gap of
+    `span_gap_s` or more, is HARD: the tail starts after the last of them
+    (the hole, chunk 0's clock step). A forward gap between `gap_s` and
+    `span_gap_s` is SOFT — a stalled or dropped chunk inside the tail — and
+    is kept inside the window, because the pipeline segments around it and
+    cutting after it throws away the footage before it (see SPAN_GAP_S).
+
     Returns cut_s (keyframe pts to start from; None when there is nothing to
     do, or no keyframe to start a stream copy on), tail_start_s,
-    discontinuities, head_dropped_s, gap_s, kept_s, expected_packets, and
-    reason when cut_s is None."""
+    discontinuities (all kinds), spanned_gaps (the soft ones kept inside the
+    cut), head_dropped_s, gap_s, kept_s, expected_packets, and reason when
+    cut_s is None."""
     n = len(timeline)
     if n < 2:
         return {"cut_s": None, "reason": "fewer than two video packets"}
     pts = [t for t, _ in timeline]
-    tail_i, disc, biggest_gap = 0, 0, 0.0
+    tail_i, disc, hard, biggest_gap = 0, 0, 0, 0.0
+    soft: list[tuple[int, float]] = []          # (index, gap) of soft ones
     for i in range(1, n):
         d = pts[i] - pts[i - 1]
         if d > gap_s or d <= 0:
             disc += 1
-            tail_i = i
             biggest_gap = max(biggest_gap, d)
+            if d <= 0 or d >= span_gap_s:
+                hard += 1
+                tail_i = i
+            else:
+                soft.append((i, d))
     tail_start, last = pts[tail_i], pts[-1]
     out = {
         "tail_start_s": round(tail_start, 3),
@@ -296,8 +321,9 @@ def choose_tail_cut(timeline: list, window_s: float,
         "head_dropped_s": (round(pts[tail_i - 1] - pts[0], 3)
                            if tail_i else 0.0),
         "gap_s": round(biggest_gap, 3),
+        "spanned_gaps": [round(d, 3) for _, d in soft],
     }
-    if disc == 0 and last - pts[0] <= window_s + 1.0:
+    if hard == 0 and last - pts[0] <= window_s + 1.0:
         out.update(cut_s=None, reason=(f"clip is {last - pts[0]:.1f}s — "
                                        "already within the window"))
         return out
@@ -312,13 +338,17 @@ def choose_tail_cut(timeline: list, window_s: float,
     cut_i = before[-1] if before else keys[0]
     out.update(cut_s=pts[cut_i], cut_index=cut_i,
                kept_s=round(last - pts[cut_i], 3),
-               expected_packets=n - cut_i, reason=None)
+               expected_packets=n - cut_i, reason=None,
+               spanned_gaps=[round(d, 3) for i, d in soft if i > cut_i])
     return out
 
 
-def _verify_cut(ffprobe: str, path: str, expected: int) -> str | None:
-    """None when `path` is one continuous run of about `expected` packets;
-    otherwise what is wrong with it."""
+def _verify_cut(ffprobe: str, path: str, expected: int,
+                spanned: int = 0) -> str | None:
+    """None when `path` is about `expected` packets on one monotonic clock
+    with at most `spanned` forward gaps, each under SPAN_GAP_S (the soft
+    gaps choose_tail_cut kept on purpose); otherwise what is wrong with it.
+    A backwards step or a gap of SPAN_GAP_S or more is never acceptable."""
     tl = _packet_timeline(ffprobe, path)
     if not tl:
         return "no readable video packets"
@@ -326,9 +356,14 @@ def _verify_cut(ffprobe: str, path: str, expected: int) -> str | None:
         return (f"got {len(tl)} packets, expected {expected} "
                 "(the seek landed elsewhere)")
     pts = [t for t, _ in tl]
-    bad = sum(1 for a, b in zip(pts, pts[1:]) if b - a > GAP_S or b - a <= 0)
-    if bad:
-        return f"{bad} discontinuit{'y' if bad == 1 else 'ies'} remain"
+    steps = [b - a for a, b in zip(pts, pts[1:])]
+    hard = sum(1 for d in steps if d <= 0 or d >= SPAN_GAP_S)
+    soft = sum(1 for d in steps if GAP_S < d < SPAN_GAP_S)
+    if hard:
+        return f"{hard} hard discontinuit{'y' if hard == 1 else 'ies'} remain"
+    if soft > spanned:
+        return (f"{soft} gap{'' if soft == 1 else 's'} remain, "
+                f"{spanned} expected")
     return None
 
 
@@ -405,7 +440,8 @@ def trim_tail(video_path: str, window_s: float) -> dict:
     cut = None
     if timeline:
         cut = choose_tail_cut(timeline, window_s)
-        for k in ("tail_start_s", "discontinuities", "head_dropped_s", "gap_s"):
+        for k in ("tail_start_s", "discontinuities", "head_dropped_s", "gap_s",
+                  "spanned_gaps"):
             if k in cut:
                 info[k] = cut[k]
         if cut.get("cut_s") is None:
@@ -450,7 +486,8 @@ def trim_tail(video_path: str, window_s: float) -> dict:
             problems.append(f"{label}: empty file")
             continue
         if expected is not None:
-            wrong = _verify_cut(ffprobe, out, expected)
+            wrong = _verify_cut(ffprobe, out, expected,
+                                len((cut or {}).get("spanned_gaps") or []))
             if wrong:
                 problems.append(f"{label}: {wrong}")
                 continue
@@ -470,6 +507,12 @@ def trim_tail(video_path: str, window_s: float) -> dict:
                 note += (f"; dropped {info['head_dropped_s']:.1f}s head + "
                          f"{info['gap_s']:.1f}s hole ({n_d} discontinuit"
                          f"{'y' if n_d == 1 else 'ies'})")
+            if info.get("spanned_gaps"):
+                sg = info["spanned_gaps"]
+                note += (f"; kept across {len(sg)} gap"
+                         f"{'' if len(sg) == 1 else 's'} of "
+                         + "+".join(f"{g:.1f}s" for g in sg)
+                         + " (segmented, not cut)")
             info["note"] = f"{note}; {label}"
         else:
             info["note"] = (f"kept from {start:.2f}s (duration only, no packet "

@@ -91,6 +91,43 @@ def test_no_keyframe_after_the_hole_means_no_copy_cut():
     assert "keyframe" in cut["reason"]
 
 
+def test_a_lost_chunk_inside_the_tail_is_spanned_not_cut():
+    # The 2026-09-16 08:53 staging scan: chunk 0 with its step back, a 20 s
+    # hole, then a 44.9 s tail with ONE 3.37 s chunk missing at 51.2 s.
+    # Cutting after the missing chunk kept 14.6 s (12 clean intervals, three
+    # short of a rhythm statement) and threw away 27.5 s of good footage.
+    tl = (_run(0.0, 90, key_every=100)
+          + _run(0.752, 78, first_key=False)              # steps back 2.17 s
+          + _run(23.695, 825, key_every=100)              # tail, part 1
+          + _run(54.028, 439, key_every=100))             # 2.85 s gap, part 2
+    cut = choose_tail_cut(tl, window_s=45.0)
+    assert cut["discontinuities"] == 3
+    assert cut["spanned_gaps"] == [pytest.approx(2.85, abs=0.05)]
+    assert cut["cut_s"] == 23.695                        # the tail's first keyframe
+    assert cut["kept_s"] == pytest.approx(44.9, abs=0.1)
+    assert cut["expected_packets"] == 825 + 439
+
+
+def test_two_lost_chunks_are_still_a_hard_break():
+    # 6.7 s of missing footage is past SPAN_GAP_S: the run after it is the
+    # tail, exactly as before.
+    tl = (_run(0.0, 90, key_every=30)
+          + _run(60.0, 600, key_every=30)
+          + _run(86.7, 300, key_every=30))                # 6.7 s gap
+    cut = choose_tail_cut(tl, window_s=45.0)
+    assert cut["cut_s"] == 86.7
+    assert cut["spanned_gaps"] == []
+    assert cut["discontinuities"] == 2
+
+
+def test_a_soft_gap_in_a_short_continuous_clip_is_still_a_no_op():
+    tl = _run(0.0, 300, key_every=30) + _run(12.5, 300, key_every=30)  # 2.5 s stall
+    cut = choose_tail_cut(tl, window_s=45.0)
+    assert cut["cut_s"] is None
+    assert "already within" in cut["reason"]
+    assert cut["spanned_gaps"] == [pytest.approx(2.5, abs=0.05)]
+
+
 def test_jitter_is_not_a_discontinuity():
     # 30-70 ms frame intervals are the phone's normal wander.
     tl = [(0.0, True)]
@@ -182,12 +219,12 @@ def test_a_cut_that_lands_elsewhere_is_rejected_not_trusted(tmp_path, monkeypatc
     calls = []
     real = measure_prep._verify_cut
 
-    def strict(ffprobe, path, expected):
+    def strict(ffprobe, path, expected, spanned=0):
         calls.append(expected)
         # Pretend the first cut came back as the whole clip.
         if len(calls) == 1:
             return "got 300 packets, expected 210 (the seek landed elsewhere)"
-        return real(ffprobe, path, expected)
+        return real(ffprobe, path, expected, spanned)
 
     monkeypatch.setattr(measure_prep, "_verify_cut", strict)
     info = trim_tail(src, window_s=40.0)
