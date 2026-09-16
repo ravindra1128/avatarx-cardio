@@ -42,7 +42,14 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The suite is ~54 min on the owner's Mac (CLAUDE.md's baseline) and a
+    # hosted runner is slower; test_vasotone_harness alone is 15m36s. The
+    # first cap here was 20 min, which no machine could have met — the gate
+    # would have timed out on every run. 120 is headroom, not a target: if
+    # this becomes the bottleneck, shard by file across a matrix rather than
+    # reaching for -n auto, which the threaded scan-engine tests may not
+    # survive.
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
 

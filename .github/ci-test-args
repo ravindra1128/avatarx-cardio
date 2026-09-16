@@ -7,8 +7,22 @@
 # regression rather than a standing one. Every line needs a reason; an
 # exclusion without one is how a genuine break gets parked here forever.
 #
-# All of them are pre-existing on staging: the merged tree is byte-identical
-# to origin/staging, so nothing here was introduced by the merge.
+# Provenance, measured rather than assumed (a 99-file sweep, plus runs at
+# c956a45 and at the merge base 6b754e0):
+#   - The five collection errors and the first three failures below are
+#     genuinely long-standing: they fail at c956a45 too.
+#   - test_scan_engine's failure is NOT. It passes at c956a45 and at the
+#     merge base, and fails from 3df7d1b (fusion tolerance 60 -> 90 ms,
+#     iteration 22) onward. Merging staging into main is what turned it red.
+#   - test_regularity_equivalence is long-standing, but the merge widened
+#     it: 58 real golden diffs at c956a45, 90 here, the 32 new ones all on
+#     sinus30_deficit (RMSSD 46.5 -> 230.7 ms on a SINUS clip, one fewer
+#     failed gate, irregularity research_flag False -> True). It also needs
+#     a float tolerance regardless of any of that: 164 of its fields differ
+#     at rel <= 2.4e-11 purely from the machine, so it cannot pass on a
+#     hosted runner while it compares bit-for-bit.
+# An earlier version of this header said all of these were pre-existing and
+# that nothing came from the merge. That was wrong on both counts above.
 
 # --- collection errors: the whole file cannot be imported, so --ignore is
 # --- the only form available. These five are CLAUDE.md's baseline command.
@@ -26,13 +40,15 @@
 --deselect=tests/test_regularity_equivalence.py::test_afib_and_flutter_are_bit_identical_to_the_golden
 --deselect=tests/test_scan_engine.py::test_low_signal_scan_completes_but_never_forces_a_result
 
-# NOTE, worth someone's attention: that is FIVE standing failures, where
-# CLAUDE.md records four. Either the brief's count is stale or one of these
-# is a real regression that predates this branch. The two most suspicious
-# are the last two — a golden bit-identity check and a "never forces a
-# result" guard are exactly the tests this repo's rules exist to protect
-# ("numbers improve by improving the signal, never by loosening a gate").
-# Neither was investigated; they were deselected to get the gate running.
+# The sweep is COMPLETE (99 of 99 files): these ten are the whole list, so
+# CLAUDE.md's "4 known failures" is stale — it is five, plus five collection
+# errors.
 #
-# The per-file sweep that found these had covered 78 of 99 files, so there
-# may be more. The first full CI run will say.
+# Two of them are open questions for the owner, not settled exclusions:
+# whether a noise-only scan should publish three provisional cards
+# (test_scan_engine), and whether iteration 22's 90 ms fusion window is
+# right given what it does to a sinus clip with dropped beats
+# (test_regularity_equivalence). Both trace to 3df7d1b. Neither was visible
+# to the optimizer gate: the holdout corpus has no noise-only clip and no
+# degraded-capture clip, which are the two cases where a wider fusion
+# window behaves differently than it does on good signal.
