@@ -17,13 +17,13 @@ from app.report_data import report_biomarkers  # noqa: E402
 
 
 def _measure_video_source() -> str:
-    return inspect.getsource(measure_api.measure_video)
+    return inspect.getsource(measure_api.measure_video_details)
 
 
 def test_biomarkers_call_uses_only_names_bound_in_measure_video():
     """Every name the report_biomarkers(...) call references must be a
     parameter or local of measure_video, never a caller's local."""
-    src = inspect.getsource(measure_api.measure_video)
+    src = inspect.getsource(measure_api.measure_video_details)
     tree = ast.parse("".join(src.splitlines(keepends=True)[0:]).lstrip())
     fn = tree.body[0]
     bound = {a.arg for a in fn.args.args} | {a.arg for a in fn.args.kwonlyargs}

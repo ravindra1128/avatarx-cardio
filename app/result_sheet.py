@@ -101,6 +101,12 @@ COLUMNS = [
     # decides whether a regular heart is being read as irregular because of
     # timing noise (audit finding #2) and by how much.
     "MAD ms", "pNN50", "Rate N",
+    # ShenAI route (2026-09-16): which interval source the rhythm statement
+    # above came from ("video" | "shenai_train"), what the route did on this
+    # scan and why (used or not), and the train's own rate. When the route is
+    # used, Rhythm Class/Text/MAD/pNN50/Rate N above are ITS numbers and the
+    # video path's own rationale is kept under debug.video_rationale.
+    "Rhythm Source", "ShenAI Route", "ShenAI Rate",
 ]
 
 _POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sheet")
@@ -228,6 +234,18 @@ def _rate_guard_cell(g) -> str:
         return f"{g.get('signature')}: {float(raw):.0f}->{float(rep):.0f}"
     except (TypeError, ValueError):
         return str(g.get("signature") or "guarded")
+
+
+def _shenai_route_cell(r) -> str:
+    """One glance: 'used: 56 clean intervals at coverage 0.98, rate 67 bpm
+    backed by ...' or 'not used: <why>' (never blank once the build has the
+    route, so an absent sidecar is visible per scan)."""
+    if not isinstance(r, dict):
+        return ""
+    why = str(r.get("reason") or "")
+    if r.get("used"):
+        return (why if why.startswith("used") else f"used: {why}")[:300]
+    return (f"not used: {why}" if why else "not used")[:300]
 
 
 def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
@@ -379,6 +397,9 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
         "pNN50": _num(_g(ra, "features", "pnn50"), 3),
         "Rate N": (_g(ra, "features", "n_intervals")
                    if _g(ra, "features", "n_intervals") is not None else ""),
+        "Rhythm Source": str(doc.get("rhythm_source") or ""),
+        "ShenAI Route": _shenai_route_cell(_g(doc, "debug", "shenai_route")),
+        "ShenAI Rate": _num(_g(doc, "debug", "shenai_route", "train", "bpm"), 1),
     }
 
 

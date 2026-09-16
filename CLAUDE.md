@@ -210,6 +210,30 @@ Added 2026-09-16 (afternoon), from the first three retained staging clips with S
   vs rig 81 -> 72; consistency 0.652 -> 0.472). Still open: a count with no spectral
   anchor at all (10:09: 108.8 bpm from 5 intervals, "no dominant rhythm") is still shown
   provisional per the 2026-09-09 decision - nothing in the pipeline can contradict it.
+- **ShenAI train route** (`inference/shenai_route.py`, wired in `app/measure_api.py`,
+  owner: "build the shenai train route", 2026-09-16). The sidecar's beat train is a SECOND
+  interval source for the SAME decision (`decide_with_rationale`, same gates, text, star
+  coupling, rate resolver). It runs only when the video path abstained on interval gates
+  alone (coverage / count / split / NaN features) with every scan gate our regions provide
+  passing (sqi, coherence or two-region, timing); the train must be contiguous (a dropped
+  beat is a segment break), >= 15 beats over >= 20 s, SDK quality >= 0.5, and its RMSSD must
+  agree with the SDK's own lnRMSSD (regularisation control); and its rate must be
+  corroborated by OUR evidence on the scan (resolved rate verified/provisional, or the
+  waveform rhythm with >= 2 regions, within 15 %). Noise floor: mean_roi_agreement 1/4
+  (k = 1, one unaveraged detector at the scan's timing precision). The sidecar is HELD IN
+  MEMORY per in-flight upload (`_SIGNALS`, never disk; the retention gate is untouched) and
+  the job waits up to `AFIB_SHENAI_WAIT_S` (8 s) for it; `AFIB_SHENAI_ROUTE=0` disables.
+  Response: `rhythm_source` ("video" | "shenai_train"), `debug.shenai_route` (used or not,
+  with the reason), the video path's own answer kept under `debug.video_rationale` /
+  `debug.video_outcome`. Sheet: `Rhythm Source`, `ShenAI Route`, `ShenAI Rate`.
+  Offline on the nine 2026-09-16 clips (consumer profile, 640x480, 45 s): used on 3 - all
+  ACCEPT/SINUS, MAD 16-21 ms, pNN50 0.05-0.14, pulse 68-75 vs SDK 67-72; refused on 2 for a
+  scan gate (sqi / timing) and on 4 for corroboration - in three of those our own spectral
+  rhythm sat at 51-53 bpm against a 73-75 bpm train the SDK's HR agreed with, i.e. OUR
+  side was the wrong one and the route still refused, by design. Nine clips, not the ten
+  the harness rule asks for; AF sensitivity through the route is untested on real AF
+  (same classifier, same MIMIC PERform gap as #2). Holdout gate is blind (replay calls
+  measure_video, no sidecars): metric-identical.
 - ShenAI comparison (`scripts/compare_shenai_signal.py`, harness fixed to follow the
   downscaled path): on the same two scans ShenAI's own beat train gave 49 and 51 clean
   intervals at coverage 0.98/0.94 (RMSSD 28/32 ms, SDNN 31/57 ms, not TOO-GOOD) against

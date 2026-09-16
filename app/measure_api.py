@@ -358,6 +358,7 @@ _STARTED_LOCK = threading.Lock()
 
 
 def _discard_part_dir(upload_id: str) -> None:
+    _drop_signals(upload_id)
     """Remove a finished job's working directory (assembled clip, FFV1
     intermediate, timestamp/ShenAI sidecars). Kept only when AFIB_KEEP_UPLOADS
     asks for on-disk debugging; the retained clip lives in CLIPS_DIR."""
@@ -599,6 +600,22 @@ def measure_video(video_path: str, *, manifest=None,
                   client_timestamps_s=None, duration_ms=None,
                   config_overrides=None, window_s=None, scale=None) -> dict:
     """Run THE production path and return a JSON-ready ScanResult."""
+    doc, _ = measure_video_details(
+        video_path, manifest=manifest, client_timestamps_s=client_timestamps_s,
+        duration_ms=duration_ms, config_overrides=config_overrides,
+        window_s=window_s, scale=scale)
+    return doc
+
+
+def measure_video_details(video_path: str, *, manifest=None,
+                          client_timestamps_s=None, duration_ms=None,
+                          config_overrides=None, window_s=None,
+                          scale=None) -> tuple:
+    """measure_video, plus the pipeline's own details dict (`det`: config,
+    evidence, sqi, runset, min_conf ...) for a caller that runs a second
+    interval source through the same decision (inference/shenai_route.py)
+    after the sidecar it needs has landed. The doc is what measure_video
+    returns, unchanged."""
     video_path = _protect_input(video_path)
     # TRIM BEFORE DOWNSCALE. Both orders give the same analysis window, but
     # trim_tail is an ffmpeg stream COPY (no re-encode, ~instant) while
@@ -705,7 +722,76 @@ def measure_video(video_path: str, *, manifest=None,
     doc["launch_overrides"] = LAUNCH_OVERRIDES or None
     doc["debug"] = {"rationale": det.get("rationale"),
                     "evidence": det.get("evidence")}
-    return doc
+    return doc, det
+
+
+# ---------------------------------------------------- ShenAI route (2026-09-16)
+# The sidecar the phone posts to /api/scan-signals is HELD IN MEMORY for the
+# job that is running for that upload, so the rhythm decision can use the
+# train (inference/shenai_route.py) whether or not retention is on. Nothing
+# here touches disk: the retention gate (_clips_enabled) stays the single
+# thing between a public URL and persisted physiological data. Bounded to a
+# handful of in-flight uploads; an entry lives until its job's part dir is
+# discarded.
+_SIGNALS: dict = {}
+_SIGNALS_LOCK = threading.Lock()
+SIGNALS_HOLD_MAX = 8
+SHENAI_ROUTE_ON = os.environ.get("AFIB_SHENAI_ROUTE", "1").strip().lower() in (
+    "1", "true", "yes", "on")
+SHENAI_WAIT_S = float(os.environ.get("AFIB_SHENAI_WAIT_S", "8"))
+
+
+def _hold_signals(upload_id: str, payload: dict) -> None:
+    with _SIGNALS_LOCK:
+        _SIGNALS[upload_id] = payload
+        while len(_SIGNALS) > SIGNALS_HOLD_MAX:
+            _SIGNALS.pop(next(iter(_SIGNALS)))
+
+
+def _peek_signals(upload_id: str):
+    with _SIGNALS_LOCK:
+        return _SIGNALS.get(upload_id)
+
+
+def _drop_signals(upload_id: str) -> None:
+    with _SIGNALS_LOCK:
+        _SIGNALS.pop(upload_id, None)
+
+
+def _apply_shenai_route(doc: dict, det: dict, upload_id: str, part_dir=None) -> None:
+    """Wait (bounded) for the sidecar, run the route, record the outcome on
+    the doc. Best effort: a scan must return whether or not any of this works."""
+    from inference import shenai_route
+
+    def _get():
+        raw = _peek_signals(upload_id)
+        if raw is None and part_dir is not None:
+            # Retention on and the memory hold missed (a restart between the
+            # POST and the job): the file is on disk, gated as ever.
+            try:
+                src = pathlib.Path(part_dir) / SHENAI_PART_NAME
+                if _clips_enabled() and src.exists():
+                    raw = json.loads(src.read_text())
+            except Exception:                                  # noqa: BLE001
+                raw = None
+        return raw if isinstance(raw, dict) else None
+
+    try:
+        if not SHENAI_ROUTE_ON:
+            rec = {"route": shenai_route.ROUTE_NAME, "attempted": False, "used": False,
+                   "reason": "route disabled (AFIB_SHENAI_ROUTE)"}
+        else:
+            raw, waited = shenai_route.wait_for(_get, SHENAI_WAIT_S)
+            rec = shenai_route.evaluate(doc, det, raw, waited_s=waited)
+        doc.setdefault("rhythm_source", "video")
+        doc.setdefault("debug", {})["shenai_route"] = rec
+        print(f"[measure] shenai route: used={rec.get('used')} "
+              f"{rec.get('reason')} -> outcome={doc.get('outcome')} "
+              f"class={doc.get('predicted_class')}", flush=True)
+    except Exception as e:                                     # noqa: BLE001
+        doc.setdefault("rhythm_source", "video")
+        doc.setdefault("debug", {})["shenai_route"] = {
+            "used": False, "reason": f"route failed safely: {type(e).__name__}: {e}"}
 
 
 # ------------------------------------------------------------ transport
@@ -1295,15 +1381,25 @@ class MeasureHandler(BaseHTTPRequestHandler):
             self._json(400, {"error": f"bad signal parameters: {e}"})
             self.close_connection = True
             return
+        # ShenAI route (2026-09-16): hold the document IN MEMORY for the job
+        # running on this upload - no directory is created, nothing is
+        # written, and the hold dies with the job's part dir. Only an upload
+        # that is actually in progress is held; a flood of anonymous POSTs is
+        # bounded by SIGNALS_HOLD_MAX entries of at most MAX_SIDECAR_BYTES.
+        held = False
+        if d.is_dir():
+            _hold_signals(d.name, payload)
+            held = True
         # NEVER 404 of our own accord. The client treats 404 from an upload
         # route as "this service predates the route" and stops; 404 here stays
         # reserved for a service that genuinely has no such path (the catch-all
         # below). Retention off means accepted-and-dropped, not refused.
         if not _clips_enabled():
             print(f"[signals] dropped {len(body)} B for {upload_id!r}: "
-                  f"retention OFF: {_clips_gate_reason()}", flush=True)
+                  f"retention OFF: {_clips_gate_reason()}"
+                  f"{' (held for the route)' if held else ''}", flush=True)
             self._json(200, {"ok": True, "upload_id": d.name,
-                             "bytes": len(body), "stored": False})
+                             "bytes": len(body), "stored": False, "held": held})
             return
         # This route never CREATES a part dir, only writes into one an upload
         # already opened. It is unauthenticated: measured 2026-09-11 against a
@@ -1454,13 +1550,19 @@ class MeasureHandler(BaseHTTPRequestHandler):
     @staticmethod
     def _run_assembled(path: str, header: dict) -> dict:
         """The same production path as `_run`, on a clip already on disk."""
-        doc = measure_video(
+        doc, det = measure_video_details(
             path, manifest=MeasureHandler._build_manifest(header),
             client_timestamps_s=header.get("timestamps_s"),
             duration_ms=header.get("duration_ms"),
             config_overrides=header.get("config_overrides"),
             window_s=header.get("window_s"), scale=header.get("scale"))
         doc["session"] = header.get("session") or ""
+        # ShenAI route (2026-09-16): the sidecar posted after /api/start was
+        # accepted is held in memory under the part dir's name; the route runs
+        # the SAME decision on the train when the video path abstained on
+        # interval gates alone. Recorded on the doc used or not.
+        _apply_shenai_route(doc, det, os.path.basename(os.path.dirname(path)),
+                            part_dir=os.path.dirname(path))
         if header.get("reference"):
             doc["reference"] = header["reference"]
         if header.get("client_capture"):
