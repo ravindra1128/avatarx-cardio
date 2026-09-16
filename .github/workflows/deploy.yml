@@ -1,0 +1,144 @@
+# Test, then deploy to the Railway service that serves this repo's main.
+#
+# The gate is the point: Railway's own GitHub integration deploys whatever
+# is pushed, green or not. This workflow deploys only after the tests pass,
+# and then refuses to call the deploy a success until the service actually
+# answers /healthz with THIS commit and the right sheet tab.
+#
+# Railway's GitHub auto-deploy MUST be disconnected for this service, or two
+# deploy paths race and the losing build silently wins. (Disconnecting also
+# clears RAILWAY_GIT_COMMIT_SHA, which is why the deploy job sets
+# AFIB_BUILD_SHA itself — see app/measure_api.py:450.)
+#
+# Repo -> Settings -> Secrets and variables -> Actions:
+#   secret   RAILWAY_TOKEN       a PROJECT token, scoped to the new
+#                                environment (Railway -> project -> Settings
+#                                -> Tokens). An account token would need an
+#                                extra `railway link` step and can reach
+#                                every environment, including production.
+#   variable RAILWAY_SERVICE     the service name as Railway shows it
+#   variable RAILWAY_HEALTH_URL  e.g. https://<service>.up.railway.app
+#   variable AFIB_SHEET_GID      46617440 — the tab this service may write.
+#                                Asserted after every deploy: CLAUDE.md is
+#                                explicit that a service writing into
+#                                another's tab silently corrupts the
+#                                baseline it is being measured against, and
+#                                that mistake is invisible until someone
+#                                reads the numbers weeks later.
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  # One deploy at a time. Never cancel in progress: a half-applied Railway
+  # build is worse than a queued one.
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # 3.12, matching the Dockerfile. 3.14 has no scipy/opencv wheels.
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-measure.txt
+
+      # A hard runtime requirement, not a convenience: app/measure_prep.py
+      # shells out to ffmpeg for the downscale and the tail trim, and the
+      # trim tests assert on its stderr.
+      - name: install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+
+      - name: install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-measure.txt pytest
+
+      - name: pytest
+        run: python -m pytest tests/ -q -p no:cacheprovider $(cat .github/ci-test-args)
+
+  deploy:
+    needs: test
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install the Railway CLI
+        # Pinned to a major: `up --ci` and `variable set --skip-deploys` are
+        # v5 spellings (`--set` on `variables` is legacy). Version is echoed
+        # so a future flag break is one line into the log, not a mystery.
+        run: |
+          npm install -g '@railway/cli@^5'
+          railway --version
+
+      - name: deploy
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          SERVICE: ${{ vars.RAILWAY_SERVICE }}
+        run: |
+          set -euo pipefail
+          # Stamp the commit so /healthz can prove which build is serving.
+          # Without the GitHub integration Railway does not set
+          # RAILWAY_GIT_COMMIT_SHA, so AFIB_BUILD_SHA is what the service reads.
+          railway variable set "AFIB_BUILD_SHA=$GITHUB_SHA" \
+            --service "$SERVICE" --skip-deploys
+          # --ci streams the build log and exits when the BUILD finishes.
+          # Whether the container then boots is what the next step checks.
+          railway up --service "$SERVICE" --ci
+
+      # `railway up` returning 0 means the BUILD succeeded, not that the new
+      # container is serving. Poll until the service answers with this commit.
+      - name: verify the deploy is live, on this commit, on the right tab
+        env:
+          HEALTH_URL: ${{ vars.RAILWAY_HEALTH_URL }}
+          WANT_GID: ${{ vars.AFIB_SHEET_GID }}
+        run: |
+          set -euo pipefail
+          want_build="${GITHUB_SHA:0:12}"   # app/measure_api.py truncates to 12
+          for attempt in $(seq 1 60); do
+            body="$(curl -fsS --max-time 10 "$HEALTH_URL/healthz" || true)"
+            got_build="$(printf '%s' "$body" | python3 -c 'import json,sys; print((json.load(sys.stdin) or {}).get("build",""))' 2>/dev/null || true)"
+            if [ "$got_build" = "$want_build" ]; then
+              echo "serving $got_build after ${attempt} attempt(s)"
+              printf '%s' "$body" > health.json
+            python3 - "$WANT_GID" <<'PY'
+          import json, sys
+          want = sys.argv[1]
+          h = json.load(open("health.json"))
+          sheet = h.get("sheet") or {}
+          gid = str(sheet.get("gid") or "")
+          print("config_hash:", h.get("config_hash"))
+          print("sheet:", sheet)
+          if not sheet.get("configured"):
+              sys.exit("FAIL: the sheet is not configured — GOOGLE_SHEETS_CREDENTIALS_JSON "
+                       "is not set on this Railway environment (variables are NOT "
+                       "inherited from production). Scans will return results and "
+                       "record nothing.")
+          if gid != want:
+              sys.exit(f"FAIL: this service writes gid {gid}, expected {want}. "
+                       "140358874 is production's cardio-data and 342232654 is "
+                       "cardio-staging — writing into either corrupts the baseline "
+                       "every comparison in this repo depends on.")
+          print(f"OK: gid {gid}")
+          PY
+              exit 0
+            fi
+            echo "attempt ${attempt}: build=${got_build:-<no answer>}, want ${want_build}"
+            sleep 10
+          done
+          echo "FAIL: ${HEALTH_URL}/healthz never reported ${want_build} (10 min)."
+          echo "The build may have succeeded while the container crashed on boot —"
+          echo "check the Railway deploy log."
+          exit 1

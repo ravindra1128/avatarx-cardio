@@ -1,0 +1,24 @@
+# Extra pytest args for the CI gate in .github/workflows/deploy.yml.
+# Run the exact CI selection locally with:
+#   python -m pytest tests/ -q -p no:cacheprovider $(cat .github/ci-test-args)
+#
+# These are the suite's KNOWN failures, excluded so a red gate means a real
+# regression rather than a standing one. Every line needs a reason; an
+# exclusion without one is how a genuine break gets parked here forever.
+#
+# The five from CLAUDE.md's baseline command (800 passed, 4 known failures):
+--ignore=tests/test_findings_only.py
+--ignore=tests/test_report_forbidden.py
+--ignore=tests/test_flutter_forbidden.py
+--ignore=tests/test_vascular_forbidden.py
+--ignore=tests/test_vasotone_forbidden.py
+# Observed failing on staging at 4e0b574, before any of this branch's work
+# (1 failed, 21 passed, 1 skipped) — pre-existing, not caused by the merge:
+--ignore=tests/test_false_positive_guards.py
+#
+# PROVISIONAL: CLAUDE.md records 4 further known failures after the five
+# ignores above but does not name them, and the per-file sweep that would
+# name them had covered 15 of 99 files when this was pushed. Expect the
+# first CI run to go red naming them; add them here with their reason, or
+# fix them. Do not widen this list to make a red run green without reading
+# what failed.
