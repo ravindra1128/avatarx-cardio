@@ -95,7 +95,8 @@ class Calibrator:
                       signal_quality=b.signal_quality, amplitude=b.amplitude,
                       prominence=b.prominence,
                       source_rois=list(b.source_rois),
-                      interpolated=b.interpolated)
+                      interpolated=b.interpolated,
+                      segment=int(getattr(b, 'segment', -1)))
                  for b, m in zip(series.beats, mapped)]
         return BeatSeries(beats, series.fps, series.duration_s)
 

@@ -30,6 +30,7 @@ class Beat:
     prominence: float
     source_rois: list[str] = field(default_factory=list)
     interpolated: bool = False       # inserted to bridge a suspected missed beat
+    segment: int = -1                # capture segment index (audit #4c); -1 = unknown
 
 
 @dataclass
@@ -186,6 +187,13 @@ def detect_beats_single_roi(signal: np.ndarray, fps: float, roi: str = "roi",
     return beats
 
 
+def _cluster_segment(members: list) -> int:
+    """The capture segment a fused beat belongs to: the members' common
+    segment, or -1 when they disagree or were never tagged."""
+    segs = {int(getattr(b, 'segment', -1)) for b in members}
+    return segs.pop() if len(segs) == 1 else -1
+
+
 def _one_per_roi(cluster: list) -> list:
     """Keep the most prominent detection per ROI in a fused cluster."""
     best: dict = {}
@@ -312,7 +320,8 @@ def fuse_multi_roi(per_roi: dict[str, list[Beat]], fps: float, duration_s: float
             signal_quality=float(np.mean([b.signal_quality for _, _, b in cl])),
             amplitude=float(np.mean([b.amplitude for _, _, b in cl])),
             prominence=float(np.mean([b.prominence for _, _, b in cl])),
-            source_rois=sorted(seen)))
+            source_rois=sorted(seen),
+            segment=_cluster_segment([b for _, _, b in cl])))
 
     fused.sort(key=lambda b: b.t_s)
     return BeatSeries(fused, fps, duration_s)

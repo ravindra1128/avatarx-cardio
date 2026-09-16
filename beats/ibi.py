@@ -206,7 +206,13 @@ def clean_runs(series: BeatSeries, min_conf: float = 0.5,
         ok = b.confidence >= min_conf
         if ok and prev is not None and cur:
             gap = (b.t_s - prev.t_s) * 1000.0
-            if not (min_physiologic_ibi_ms <= gap <= max_physiologic_ibi_ms):
+            # Audit 2026-09-17 #4c: a capture gap is a hole in the clock, not
+            # an interval. Beats carry the segment they were detected in; an
+            # interval across two segments was never measured and must not
+            # enter any run (it read as a 'clean' irregular interval before).
+            seg_a, seg_b = getattr(prev, 'segment', -1), getattr(b, 'segment', -1)
+            crosses_gap = seg_a >= 0 and seg_b >= 0 and seg_a != seg_b
+            if crosses_gap or not (min_physiologic_ibi_ms <= gap <= max_physiologic_ibi_ms):
                 candidates.append(cur); cur = []
         if ok:
             cur.append(b)
