@@ -161,6 +161,34 @@ separately; never blend them into one "accuracy" number.
   → baseline 800 passed, 4 known failures (listed in the skill), 54 min. The three card
   modules (`test_hemodynamics`, `test_realworld_hardening`, `test_scan_engine`) take 6 min.
 
+## Audit of 2026-09-17 (state of the staging branch)
+
+Deep audit of the running pipeline (63 findings, 8 of 10 stages agent-read,
+the rest hand-verified). The binding constraint on phone scans is NOT the
+quality floors: 5 of 12 real scans cleared every any-call gate and still
+abstained because the interim irregularity rule (median|dRR| >= 60 ms AND
+pNN50 >= 0.40, synthetic-era thresholds) fires on a regular rhythm at the
+phone's 20-59 ms beat timing, after which only the AF-grade bar or an
+abstention is reachable. The offline holdout cannot see this stage: none of
+its 8 phone clips reaches the classifier under either capture profile.
+
+Changes on `staging` since (each its own gated iteration; "owner to confirm"
+= gate said no-improvement with zero regression, kept as correctness):
+- #1 sheet columns MAD ms / pNN50 / Rate N (the classifier's inputs per scan).
+- #6 /api/start takes the worker slot before consuming the slices; job cleanup;
+  client treats a cached server error as terminal.
+- #3 fusion tolerance 60 -> 90 ms + same-ROI merge — ACCEPTED (signal 0.602 -> 0.652,
+  consistency 0.539 -> 0.652). 120 ms rejected: noise clears the SQI floor from 110.
+- #4a POS overlap-add normalisation — REJECTED (signal 0.65 -> 0.74 but consistency
+  -0.09); patch kept in data/eval_cache/pos_normalise_iter23.patch.
+- #4c runs never span a capture gap — owner to confirm.
+- #7 one resting-rate resolver; HIGH_RATE fails closed on an unverified count — owner
+  to confirm (strict-abstain and provisional-count variants both rejected by the gate).
+- #2 noise-aware irregularity rule — owner to confirm (simulation: false-irregular at
+  40 ms 0.24 -> 0.01; AF pattern 1.00 -> 0.97; needs MIMIC PERform for AF on real hearts).
+Not done: #5 recorder 48 -> 72 s (upload-cost A/B on the phone), #8 graded abstention,
+#10 MKV passthrough clock, #11 refractory floor, #12 tracker fallback, #13 stars hint.
+
 ## Owner decisions on record
 
 | date | decision | evidence |
