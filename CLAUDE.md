@@ -291,6 +291,14 @@ only when the evidence cannot support a decision. Full freedom to redesign.
    INCONCLUSIVE). Offline on the retained clips with the switch: the two ShenAI-route scans
    gave p = 0.007 / 0.003 -> AFIB_NOT_DETECTED.
 
+**E6c (real PPG beats through OUR detector, `scripts/e6c_ppg_end_to_end.py`):** MIMIC
+PERform's contact PPG at 30 Hz -> beats/detector.py -> production features -> the classifier,
+each fold fitted on OTHER participants' ECG-derived windows. Detector found 0.97 of ECG beats
+(IQR 0.88-1.00). OOF AUROC 0.939 [0.81, 1.00]; under the shipped band 4 % inconclusive,
+decided sens 0.991 / spec 0.917; 34 of 35 subjects majority-correct. Specificity is the
+weaker side on real beats (missed beats raise irregularity on non-AF windows) - the price of
+the detector, not the model, and the reason the band's precondition gates matter.
+
 **Caveats, stated:** MIMIC PERform is ICU ECG-derived RR with SYNTHETIC rPPG degradation,
 35 subjects; no facial-video AF validation exists here or publicly; markov_surprise and
 spectral_entropy are NaN on most 45 s windows and are median-imputed (near-inert).

@@ -1,0 +1,81 @@
+{
+ "band": {
+  "tau_lo": 0.4739,
+  "tau_hi": 0.8251,
+  "inconclusive_fraction": 0.09010989010989012,
+  "decided_sensitivity": 0.9537037037037037,
+  "decided_specificity": 0.9722222222222222,
+  "n_decided": 828,
+  "n_windows": 910
+ },
+ "rates": {
+  "30": {
+   "n_windows": 910,
+   "n_usable": 910,
+   "detector_count_ratio_median": 0.9672131147540983,
+   "detector_count_ratio_iqr": [
+    0.875,
+    1.0
+   ],
+   "oof_auroc": 0.9388625038928683,
+   "oof_auroc_ci": [
+    0.8141785412389808,
+    0.9999192700790335
+   ],
+   "sens_spec_at_0.5": [
+    0.9898785425101214,
+    0.8990384615384616
+   ],
+   "band": {
+    "inconclusive_fraction": 0.036263736263736246,
+    "decided_sensitivity": 0.9914712153518124,
+    "decided_specificity": 0.9166666666666666,
+    "n_decided": 877
+   },
+   "three_way_all_windows": {
+    "AFIB_DETECTED": 499,
+    "AFIB_NOT_DETECTED": 378,
+    "INCONCLUSIVE": 33
+   },
+   "subjects": {
+    "n": 35,
+    "majority_correct": 34,
+    "undecided": 0
+   }
+  },
+  "125": {
+   "n_windows": 910,
+   "n_usable": 910,
+   "detector_count_ratio_median": 0.9675666199158486,
+   "detector_count_ratio_iqr": [
+    0.8733203820624899,
+    1.0
+   ],
+   "oof_auroc": 0.9355438336966677,
+   "oof_auroc_ci": [
+    0.8050543664211247,
+    0.9999651486334179
+   ],
+   "sens_spec_at_0.5": [
+    0.9898785425101214,
+    0.8990384615384616
+   ],
+   "band": {
+    "inconclusive_fraction": 0.03516483516483515,
+    "decided_sensitivity": 0.9893617021276596,
+    "decided_specificity": 0.9166666666666666,
+    "n_decided": 878
+   },
+   "three_way_all_windows": {
+    "AFIB_DETECTED": 499,
+    "AFIB_NOT_DETECTED": 379,
+    "INCONCLUSIVE": 32
+   },
+   "subjects": {
+    "n": 35,
+    "majority_correct": 34,
+    "undecided": 0
+   }
+  }
+ }
+}
