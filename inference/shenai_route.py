@@ -478,6 +478,15 @@ def _evaluate(doc: dict, det: dict, raw: Optional[dict], rec: dict) -> dict:
     doc["analysed_seconds"] = analysed_s
     doc["user_facing_text"] = res.user_facing_text()
     doc["rhythm_source"] = ROUTE_NAME
+    # One rate per scan: the rate head's reported pulse (the sheet's "Pulse
+    # bpm") follows the corroborated train rate too; its own answer is kept.
+    for h in doc.get("head_results") or []:
+        if isinstance(h, dict) and h.get("head") == "rate_flags":
+            val = h.get("value") if isinstance(h.get("value"), dict) else {}
+            val["video_median_bpm"] = val.get("median_bpm")
+            val["median_bpm"] = res.mean_pulse_rate_bpm
+            val["rate_source"] = ROUTE_NAME
+            h["value"] = val
     return rec
 
 

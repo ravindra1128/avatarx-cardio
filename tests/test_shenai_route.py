@@ -396,3 +396,21 @@ def test_fitness_is_untouched_without_a_sound_train_or_when_rates_agree():
     rec = sr.evaluate(doc, det, None)                 # no sidecar at all
     assert sr.reconcile_fitness_rate(doc, rec)["action"] == "none"
     assert doc["biomarkers"]["items"][1]["value"] == 87.3
+
+
+def test_the_rate_head_and_the_result_carry_one_pulse_when_the_route_is_used():
+    doc, det = _video()
+    doc["head_results"] = [{"head": "rate_flags", "value": {"median_bpm": 108.0}}]
+    rec = sr.evaluate(doc, det, _sidecar(_regular(bpm=72.0)))
+    assert rec["used"] is True
+    val = doc["head_results"][0]["value"]
+    assert val["median_bpm"] == doc["mean_pulse_rate_bpm"] == pytest.approx(72.0, abs=2.0)
+    assert val["video_median_bpm"] == 108.0 and val["rate_source"] == "shenai_train"
+
+
+def test_sheet_puts_the_afib_result_beside_the_cards():
+    from app.result_sheet import COLUMNS
+    i = COLUMNS.index("Fitness")
+    assert COLUMNS[i + 1:i + 3] == ["AFib Result", "AFib p"]
+    assert "AFib Basis" in COLUMNS
+

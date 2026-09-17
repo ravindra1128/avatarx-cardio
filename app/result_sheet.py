@@ -51,6 +51,11 @@ COLUMNS = [
     # The three cards first (owner's request), then identity and verdict,
     # then the cards' unit/status/reason, then evidence, capture and timing.
     "Timestamp (UTC)", "Arterial Stiffness", "Vascular Tone", "Fitness",
+    # 2026-09-17 (owner): the AFib result beside the cards, where it is read
+    # first - AFIB_DETECTED | AFIB_NOT_DETECTED | INCONCLUSIVE and the
+    # classifier's probability (inference/afib_result.py). The basis stays at
+    # the end with the other long text.
+    "AFib Result", "AFib p",
     "Session", "Outcome", "Stars",
     "AS Unit", "AS Status", "AS Reason",
     "VT Unit", "VT Status", "VT Reason",
@@ -111,7 +116,7 @@ COLUMNS = [
     # - AFIB_DETECTED | AFIB_NOT_DETECTED | INCONCLUSIVE - with the classifier's
     # probability when a probabilistic classifier ran, and the basis: for an
     # inconclusive, WHICH of capture / signal / rhythm was missing.
-    "AFib Result", "AFib p", "AFib Basis",
+    "AFib Basis",
 ]
 
 _POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sheet")
