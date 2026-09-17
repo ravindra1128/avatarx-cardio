@@ -22,11 +22,15 @@ const context = vm.createContext({
     removeItem(key) { stored.delete(key); },
   },
 });
-const processor = read("lib/scan/staging/AFibProcessor.js")
-  .replace(/^import .*;\s*$/gm, "").replace("export class AFibProcessor", "class AFibProcessor");
+const stripImports = (source) => source.replace(/^import[\s\S]*?from ["'][^"']+["'];\s*/gm, "");
+const deliveryPath = path.join(root, "src/lib/scan/staging/delivery.js");
+const delivery = fs.existsSync(deliveryPath)
+  ? stripImports(fs.readFileSync(deliveryPath, "utf8")).replace(/^export\s+/gm, "") : "";
+const processor = stripImports(read("lib/scan/staging/AFibProcessor.js"))
+  .replace("export class AFibProcessor", "class AFibProcessor");
 const orchestrator = read("lib/scan/ScanOrchestrator.js")
   .replace("export class ScanOrchestrator", "class ScanOrchestrator");
-vm.runInContext(`${numberFn}\n${processor}\n${orchestrator}`, context);
+vm.runInContext(`${numberFn}\n${delivery}\n${processor}\n${orchestrator}`, context);
 
 (async () => {
   const report = await vm.runInContext(`(async () => {
@@ -34,14 +38,19 @@ vm.runInContext(`${numberFn}\n${processor}\n${orchestrator}`, context);
     const options = {enabled: true, url: "https://offline.invalid", getClip: () => null};
     const scanA = new AFibProcessor(options);
     const scanB = new AFibProcessor(options);
+    scanA._scanId = "old-A";
+    scanB._scanId = "new-B";
+    await scanA.onScanStart({warn: log, log});
     await scanB.onScanStart({warn: log, log});
     scanB._settle({ok: true, data: {scan_id: "new-B", outcome: "ACCEPT", predicted_class: "SINUS"}});
     const before = JSON.parse(sessionStorage.getItem(STAGING_RESULT_KEY));
     scanA._settle({ok: true, data: {scan_id: "old-A", outcome: "ACCEPT", predicted_class: "AFIB_SUGGESTIVE"}});
     const after = JSON.parse(sessionStorage.getItem(STAGING_RESULT_KEY));
     let finishedCalls = 0;
-    const disabled = new ScanOrchestrator({sdk: {}, processors: [{id: "afib", enabled: false,
-      onScanStart: async () => {}, onScanFinish: async () => {finishedCalls++;}}]});
+    const disabledProcessor = new AFibProcessor({...options, enabled: false});
+    const finish = disabledProcessor.onScanFinish.bind(disabledProcessor);
+    disabledProcessor.onScanFinish = async (ctx) => { finishedCalls++; return finish(ctx); };
+    const disabled = new ScanOrchestrator({sdk: {}, processors: [disabledProcessor]});
     await disabled.start();
     const results = await disabled.finish();
     return {

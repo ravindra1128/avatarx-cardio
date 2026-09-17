@@ -97,6 +97,10 @@ _RESULTS_LOCK = threading.Lock()
 def _remember_result(session, doc: dict) -> None:
     if not session or not isinstance(doc, dict):
         return
+    # Delivery identity belongs to this upload, never a previous scan. These
+    # additive fields do not classify a transport/runtime failure as a rhythm.
+    doc["upload_id"] = doc["scan_id"] = str(session)
+    doc["analysis_state"] = "failed" if doc.get("error") else "complete"
     with _RESULTS_LOCK:
         _RESULTS[str(session)] = (time.time(), doc)
         _RESULTS.move_to_end(str(session))
@@ -424,8 +428,9 @@ def _sweep_parts(max_age_s: float = 3600.0) -> None:
     try:
         now = time.time()
         for d in UPLOAD_DIR.glob("*"):
-            if d.is_dir() and now - d.stat().st_mtime > max_age_s:
-                shutil.rmtree(d, ignore_errors=True)
+            with _STARTED_LOCK:
+                if d.name not in _STARTED and d.is_dir() and now - d.stat().st_mtime > max_age_s:
+                    shutil.rmtree(d, ignore_errors=True)
     except OSError:
         pass
 
@@ -1456,23 +1461,48 @@ class MeasureHandler(BaseHTTPRequestHandler):
         _, header = _parse_envelope(b"", "video/webm", q)
         upload_id = str((q.get("upload_id") or [""])[0])
         ext = str(header.get("ext") or (q.get("ext") or ["webm"])[0]).lstrip(".")
+        try:
+            if _part_dir(upload_id).name != upload_id or not upload_id.isascii():
+                raise ValueError("upload_id must be an ASCII identifier of at most 80 characters")
+            if not ext.isascii() or not ext.isalnum() or len(ext) > 10:
+                raise ValueError("invalid video extension")
+        except ValueError as e:
+            self._json(400, {"error": str(e)})
+            return
+        poll = f"/api/result?upload_id={upload_id}"
+        # Check and reserve atomically. A lost 202 or simultaneous retry must
+        # find the accepted job BEFORE testing capacity or consuming parts.
+        with _STARTED_LOCK:
+            completed = _recall_result(upload_id)
+            if completed is not None:
+                reply = (200, {"status": "complete", "upload_id": upload_id,
+                               "scan_id": upload_id, "poll": poll})
+            elif upload_id in _STARTED:
+                reply = (202, {"status": "processing", "upload_id": upload_id,
+                               "scan_id": upload_id, "poll": poll})
+            elif not _INFLIGHT.acquire(blocking=False):
+                reply = (503, {"error": "measure workers busy — retry",
+                               "max_concurrent": MAX_CONCURRENT})
+            else:
+                _STARTED[upload_id] = True
+                reply = None
+        if reply is not None:
+            self._json(*reply)
+            return
         # Take the worker slot BEFORE assembling: _assemble_parts deletes the
         # slices, so a 503 issued after it left the client's retry with "no
         # parts" -> 400 and the scan was lost (audit 2026-09-17, #6a). Now a
         # busy service answers 503 with the slices intact, and the retry works.
-        if not _INFLIGHT.acquire(blocking=False):
-            self._json(503, {"error": "measure workers busy — retry",
-                             "max_concurrent": MAX_CONCURRENT})
-            return
         try:
             path, upload_s = _assemble_parts(upload_id, ext)
+            size = os.path.getsize(path)
         except (ValueError, OSError) as e:
+            with _STARTED_LOCK:
+                _STARTED.pop(upload_id, None)
             _INFLIGHT.release()
             self._json(400, {"error": str(e), "upload_id": upload_id})
             return
-        size = os.path.getsize(path)
-        with _STARTED_LOCK:
-            _STARTED[upload_id] = True
+        header["upload_id"] = upload_id
         header.setdefault("session", (q.get("session") or [upload_id])[0])
         ua = self.headers.get("User-Agent", "")
 
@@ -1483,9 +1513,13 @@ class MeasureHandler(BaseHTTPRequestHandler):
                   f"({size} B, inflight {n}/{MAX_CONCURRENT})", flush=True)
             try:
                 doc = self._run_assembled(path, header)
+                if not isinstance(doc, dict) or (not doc.get("error") and
+                        doc.get("outcome") not in {"ACCEPT", "REPEAT_SCAN", "NO_RESULT"}):
+                    raise TypeError("analysis did not return a valid result document")
             except Exception as e:                        # noqa: BLE001
                 traceback.print_exc()
-                doc = {"error": f"{type(e).__name__}: {e}"}
+                doc = {"error": f"{type(e).__name__}: {e}",
+                       "error_code": "analysis_failed"}
             try:
                 doc["size_bytes"] = size
                 # Keep the upload columns meaningful on this path too.
@@ -1514,13 +1548,25 @@ class MeasureHandler(BaseHTTPRequestHandler):
                 print(f"[measure] detached job end for {upload_id!r} after "
                       f"{time.perf_counter() - t0:.1f}s", flush=True)
 
-        _POOL.submit(job)
+        try:
+            _POOL.submit(job)
+        except Exception as e:                            # noqa: BLE001
+            doc = {"error": f"Could not schedule analysis: {type(e).__name__}",
+                   "error_code": "job_submission_failed"}
+            _remember_result(upload_id, doc)
+            with _STARTED_LOCK:
+                _STARTED.pop(upload_id, None)
+            _INFLIGHT.release()
+            _discard_part_dir(upload_id)
+            self._json(503, doc)
+            return
         # Tell the client roughly when to bother asking. Measured on Railway:
         # ~1.6 s of work per MB (downscale + analysis), floor 12 s. Without a
         # hint the client polls blindly from t=0 and burns a dozen requests
         # before the answer can possibly exist.
         eta = max(12.0, round(size / (1024 * 1024) * 1.6, 1))
         self._json(202, {"status": "processing", "upload_id": upload_id,
+                         "scan_id": upload_id,
                          "size_bytes": size, "eta_s": eta,
                          "poll": f"/api/result?upload_id={upload_id}"})
 

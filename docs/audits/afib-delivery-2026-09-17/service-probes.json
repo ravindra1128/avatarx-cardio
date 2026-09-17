@@ -1,0 +1,36 @@
+{
+  "notice": "Software counterexamples, not clinical validation.",
+  "lost_start_acknowledgement": {
+    "first_http": 202,
+    "retry_http": 202,
+    "retry_body": {
+      "status": "processing",
+      "upload_id": "probe-lost-start-response",
+      "scan_id": "probe-lost-start-response",
+      "poll": "/api/result?upload_id=probe-lost-start-response"
+    },
+    "submitted_jobs": 1
+  },
+  "inherited_confidence": [
+    {
+      "constructed_train": "regular",
+      "video_intervals": 8,
+      "recomputed_video_stars": 2,
+      "route_used": true,
+      "outcome": "ACCEPT",
+      "class": "SINUS",
+      "reasons": []
+    },
+    {
+      "constructed_train": "afib",
+      "video_intervals": 8,
+      "recomputed_video_stars": 2,
+      "route_used": true,
+      "outcome": "REPEAT_SCAN",
+      "class": null,
+      "reasons": [
+        "irregular rhythm seen, but scan confidence 2 of 5 is below the 3-star floor an AF call requires"
+      ]
+    }
+  ]
+}
