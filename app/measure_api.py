@@ -1712,7 +1712,28 @@ class _MeasureServer(ThreadingHTTPServer):
         super().handle_error(request, client_address)
 
 
+def _maybe_reorder_sheet() -> None:
+    """One-time maintenance at startup, opt-in: AFIB_SHEET_REORDER_ON_START
+    truthy makes THIS service rewrite its own sheet tab so the columns follow
+    result_sheet.COLUMNS (rows re-mapped by header name, nothing lost). It
+    runs where the sheet credentials already live, so no key has to leave
+    Railway; the outcome is echoed on /healthz under launch_overrides. Remove
+    the variable after the deploy that ran it."""
+    v = os.environ.get("AFIB_SHEET_REORDER_ON_START", "").strip().lower()
+    if v not in ("1", "true", "yes", "on"):
+        return
+    try:
+        if not result_sheet.is_configured():
+            LAUNCH_OVERRIDES["sheet.reorder"] = "requested, but the sheet is not configured"
+            return
+        LAUNCH_OVERRIDES["sheet.reorder"] = result_sheet.reorder_existing_tab()
+    except Exception as e:                                     # noqa: BLE001
+        LAUNCH_OVERRIDES["sheet.reorder"] = f"FAILED ({type(e).__name__}: {str(e)[:120]})"
+    print(f"[sheet] reorder on start: {LAUNCH_OVERRIDES['sheet.reorder']}", flush=True)
+
+
 def serve(host: str = "127.0.0.1", port: int = 8790):
+    _maybe_reorder_sheet()
     httpd = _MeasureServer((host, port), MeasureHandler)
     print(f"[measure] afib measure API on http://{host}:{port}", flush=True)
     print(f"[measure]   POST /api/process-video   GET /healthz", flush=True)

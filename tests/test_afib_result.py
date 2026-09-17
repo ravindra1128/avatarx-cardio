@@ -132,3 +132,18 @@ def test_the_sheet_carries_the_result_and_its_basis():
     assert row["AFib Basis"].startswith("signal: only 33%")
     for c in ("AFib Result", "AFib p", "AFib Basis"):
         assert c in result_sheet.COLUMNS
+
+
+def test_sheet_reorder_on_start_is_opt_in_and_echoed(monkeypatch):
+    from app import measure_api as api
+    calls = []
+    monkeypatch.setattr(api.result_sheet, "is_configured", lambda: True)
+    monkeypatch.setattr(api.result_sheet, "reorder_existing_tab", lambda: (calls.append(1), "reordered 3 row(s); 90 columns")[1])
+    monkeypatch.delenv("AFIB_SHEET_REORDER_ON_START", raising=False)
+    api.LAUNCH_OVERRIDES.pop("sheet.reorder", None)
+    api._maybe_reorder_sheet()
+    assert calls == [] and "sheet.reorder" not in api.LAUNCH_OVERRIDES
+    monkeypatch.setenv("AFIB_SHEET_REORDER_ON_START", "1")
+    api._maybe_reorder_sheet()
+    assert calls == [1] and api.LAUNCH_OVERRIDES["sheet.reorder"].startswith("reordered 3 row(s)")
+    api.LAUNCH_OVERRIDES.pop("sheet.reorder", None)
