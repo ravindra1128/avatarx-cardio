@@ -111,6 +111,15 @@ COLUMNS = [
     "Scan ID", "Signals State", "Signals Received", "Signals Transport",
     "Input Beats N", "Input PPG N", "Input PPG Missing N", "Input PPG Clock",
     "SDK Quality", "SDK Bad Signal s", "SDK HR", "SDK lnRMSSD",
+    # Codex diagnostics: independent of selected rhythm source and retention.
+    "Video Audit", "Video Retained s", "Video Processed s", "Video Short Fragments s",
+    "Video Excluded ROI Steps s", "Video Clean s", "Video Whole Coverage", "Frame Step p99 ms",
+    "SDK Train Audit", "SDK Train Span s", "SDK Invalid Beats", "SDK Order Errors",
+    "SDK Gap Boundaries", "SDK Overlap Boundaries", "SDK Raw RMSSD ms",
+    "SDK Clean Intervals", "SDK Clean s", "SDK Longest Clean Run s", "SDK Clean Coverage",
+    "SDK Clean RMSSD ms", "SDK RMSSD Relative Error", "SDK Video Alignment", "SDK Audit Issues",
+    "SDK Train Checks",
+    "Video ROI Excluded Frames", "Video ROI Edge Loss s", "ROI Step p99 ms",
 ]
 
 _POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sheet")
@@ -259,6 +268,8 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
     cm = doc.get("capture_meta") or {}
     tm = doc.get("timing") or {}
     dsc = doc.get("downscale") or {}
+    vd = _g(doc, "debug", "video_duration", default={}) or {}
+    saudit = _g(doc, "debug", "shenai_assessment", default={}) or {}
     items = {i.get("key"): i for i in _g(doc, "biomarkers", "items", default=[]) or []
              if isinstance(i, dict)}
     pulse = ""
@@ -417,6 +428,33 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
         "SDK Bad Signal s": _num(_g(doc, "debug", "shenai_input", "sdk_bad_signal_s"), 2),
         "SDK HR": _num(_g(doc, "debug", "shenai_input", "sdk_hr_bpm"), 1),
         "SDK lnRMSSD": _num(_g(doc, "debug", "shenai_input", "sdk_lnrmssd"), 3),
+        "Video Audit": str(vd.get("state") or ""),
+        "Video Retained s": _num(vd.get("retained_span_s"), 3),
+        "Video Processed s": _num(vd.get("processing_segment_s"), 3),
+        "Video Short Fragments s": _num(vd.get("discarded_fragment_s"), 3),
+        "Video Excluded ROI Steps s": _num(vd.get("excluded_roi_step_s"), 3),
+        "Video Clean s": _num(vd.get("clean_interval_s"), 3),
+        "Video Whole Coverage": _num(vd.get("clean_fraction_retained"), 4),
+        "Frame Step p99 ms": _num(vd.get("frame_step_p99_ms"), 3),
+        "SDK Train Audit": str(saudit.get("state") or ""),
+        "SDK Train Span s": _num(_g(saudit, "integrity", "span_s"), 3),
+        "SDK Invalid Beats": _g(saudit, "integrity", "invalid_beats_n", default=""),
+        "SDK Order Errors": _g(saudit, "integrity", "non_increasing_starts_n", default=""),
+        "SDK Gap Boundaries": _g(saudit, "integrity", "gap_boundaries_n", default=""),
+        "SDK Overlap Boundaries": _g(saudit, "integrity", "overlap_boundaries_n", default=""),
+        "SDK Raw RMSSD ms": _num(_g(saudit, "reported_intervals", "rmssd_ms"), 3),
+        "SDK Clean Intervals": _g(saudit, "current_route_train", "intervals_n", default=""),
+        "SDK Clean s": _num(_g(saudit, "current_route_train", "seconds"), 3),
+        "SDK Longest Clean Run s": _num(_g(saudit, "current_route_train", "longest_run_s"), 3),
+        "SDK Clean Coverage": _num(_g(saudit, "current_route_train", "coverage"), 4),
+        "SDK Clean RMSSD ms": _num(_g(saudit, "current_route_train", "rmssd_ms"), 3),
+        "SDK RMSSD Relative Error": _num(_g(saudit, "internal_comparison", "rmssd_relative_error"), 4),
+        "SDK Video Alignment": str(_g(saudit, "timing", "video_alignment") or ""),
+        "SDK Audit Issues": " | ".join(saudit.get("issues") or [])[:500],
+        "SDK Train Checks": " | ".join(_g(saudit, "current_route_train", "checks_failed", default=[]) or [])[:500],
+        "Video ROI Excluded Frames": vd.get("roi_excluded_frames_n") if vd.get("roi_excluded_frames_n") is not None else "",
+        "Video ROI Edge Loss s": _num(vd.get("unobserved_edge_s"), 3),
+        "ROI Step p99 ms": _num(vd.get("roi_step_p99_ms"), 3),
     }
 
 

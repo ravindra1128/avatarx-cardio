@@ -542,6 +542,13 @@ def build_timestamp_sidecar(video_path: str, *,
             f"({100.0 * repaired / max(ts.size - 1, 1):.2f}% of steps)")
 
     d2 = np.diff(ts)
+    # Scalar provenance for whole-video coverage. Ingest later omits frames
+    # without a usable face, so its ROI timestamps cannot define this span.
+    info["first_frame_s"] = float(ts[0])
+    info["last_frame_s"] = float(ts[-1])
+    info["span_s"] = float(ts[-1] - ts[0])
+    info["frame_step_p99_ms"] = float(np.percentile(d2, 99) * 1000) if d2.size else None
+    info["frame_step_max_ms"] = float(np.max(d2) * 1000) if d2.size else None
     info["median_dt_ms"] = round(float(np.median(d2)) * 1000.0, 3)
     info["implied_fps"] = round(1.0 / float(np.median(d2)), 2)
     with open(video_path + ".timestamps.json", "w") as f:
@@ -727,6 +734,8 @@ def measure_video_details(video_path: str, *, manifest=None,
     doc["launch_overrides"] = LAUNCH_OVERRIDES or None
     doc["debug"] = {"rationale": det.get("rationale"),
                     "evidence": det.get("evidence")}
+    from app.scan_evidence import record_summary, video_duration_summary
+    record_summary(doc, "video_duration", video_duration_summary, doc, det, duration_ms)
     return doc, det
 
 
@@ -847,6 +856,8 @@ def _apply_shenai_route(doc: dict, det: dict, upload_id: str, part_dir=None,
             doc.setdefault("debug", {})["shenai_input"] = {
                 "received": isinstance(raw, dict), "transport": transport,
                 "state": "summary_failed", "error_type": type(summary_error).__name__}
+        from app.scan_evidence import record_summary, shenai_evidence_summary
+        record_summary(doc, "shenai_assessment", shenai_evidence_summary, raw, det)
         if not SHENAI_ROUTE_ON:
             rec = {"route": shenai_route.ROUTE_NAME, "attempted": False, "used": False,
                    "reason": "route disabled (AFIB_SHENAI_ROUTE)"}
