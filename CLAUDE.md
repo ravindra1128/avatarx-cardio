@@ -323,6 +323,18 @@ spectral_entropy are NaN on most 45 s windows and are median-imputed (near-inert
 The 3-star floor and the AF-call verification gates are unchanged: an AFIB_DETECTED still
 needs coherence >= 0.35 or a two-region timing match, >= 20 intervals, and 3 stars.
 
+**On-device traces, BUILT as a recorded path (2026-09-17, iteration 34):**
+`inference/trace_ingest.py` turns the client's per-frame ROI means (webapp
+`lib/scan/staging/traceCapture.js`: the service's own oval geometry and robust mean on a
+16x16 downsample of each region, from the SDK's live track and face box, posted to
+`/api/scan-traces` beside the clip) into an IngestResult and runs THE pipeline on it
+through a registry wrapper around `inference.pipeline.ingest_video` (the protected file is
+untouched). Held in memory only; `AFIB_TRACE_PATH=0` disables. The answer is RECORDED under
+`debug.trace_path` and the sheet's `Trace *` columns beside the video path and the ShenAI
+train on every scan; it decides nothing until the live comparison says it should. Synthetic
+end-to-end test: a 72 bpm pulse on four regions -> ACCEPT/SINUS at 72. First live scans
+will show whether the SDK's box lands the regions (coherence and timing tell).
+
 **Next (in order):** (a) on-device ROI traces from the live frames (the SDK exposes
 `getNormalizedFaceBbox()`; ~100x cheaper than the abandoned JPEG stream in
 `afibLiveStream.js`; ship beside the clip as a second sidecar for offline validation first;

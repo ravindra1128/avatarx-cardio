@@ -788,6 +788,99 @@ def _apply_afib_result(doc: dict, det: dict) -> None:
                                     "why": f"result layer failed safely: {type(e).__name__}: {e}"}
 
 
+# Live-frame ROI traces (inference/trace_ingest.py, 2026-09-17): held in
+# memory exactly like the ShenAI sidecar, never written; dropped with the
+# job's part dir. AFIB_TRACE_PATH=0 disables the (recorded-only) trace path.
+_TRACES: dict = {}
+TRACE_PATH_ON = os.environ.get("AFIB_TRACE_PATH", "1").strip().lower() in (
+    "1", "true", "yes", "on")
+
+
+def _hold_traces(upload_id: str, payload: dict) -> None:
+    with _SIGNALS_LOCK:
+        _TRACES[upload_id] = payload
+        while len(_TRACES) > SIGNALS_HOLD_MAX:
+            _TRACES.pop(next(iter(_TRACES)))
+
+
+def _peek_traces(upload_id: str):
+    with _SIGNALS_LOCK:
+        return _TRACES.get(upload_id)
+
+
+def _trace_summary(res, det, cfg) -> dict:
+    """The trace path's answer, flattened for debug.trace_path and the sheet."""
+    from inference.afib_result import afib_result
+    ing = (det or {}).get("ingest")
+    out = {"ran": True, "ingest_ok": bool(getattr(ing, "ok", False)),
+           "ingest_reasons": list(getattr(ing, "reasons", []) or [])}
+    if res is None:
+        return out
+    ev = (det or {}).get("evidence") or {}
+    ra = (det or {}).get("rationale") or {}
+    meta = getattr(ing, "meta", None)
+    doc = {"outcome": res.outcome.value, "predicted_class": res.predicted_class,
+           "afib_probability": res.afib_probability, "confidence_stars": res.confidence_stars,
+           "no_read_reasons": list(res.no_read_reasons),
+           "debug": {"rationale": ra}, "rhythm_source": "client_traces"}
+    r = afib_result(doc, cfg)
+    feats = ra.get("features") or {}
+    out.update({
+        "outcome": res.outcome.value, "predicted_class": res.predicted_class,
+        "afib_probability": res.afib_probability, "stars": res.confidence_stars,
+        "afib_result": r["result"], "afib_basis": r["basis"].get("why"),
+        "no_read_reasons": list(res.no_read_reasons),
+        "gates_failed": list(ra.get("gates_failed") or []),
+        "sqi": res.signal_quality_index,
+        "coherence": ev.get("cross_roi_coherence"),
+        "timing_ms": ev.get("timing_precision_ms"),
+        "timing_matched": ev.get("timing_matched_fraction"),
+        "n_intervals": ev.get("n_intervals"), "n_beats": ev.get("n_beats"),
+        "coverage": ra.get("coverage"), "pulse_bpm": res.mean_pulse_rate_bpm,
+        "spectral_bpm": ev.get("pulse_spectral_bpm"),
+        "mad_ms": feats.get("median_abs_succ_diff"), "pnn50": feats.get("pnn50"),
+        "fps": getattr(meta, "measured_fps_mean", None),
+        "jitter_ms": getattr(meta, "measured_fps_jitter_ms", None),
+        "duration_s": getattr(meta, "duration_s", None),
+        "n_frames": getattr(meta, "n_frames", None),
+        "tracking_stability": getattr(getattr(ing, "track", None), "stability", None),
+    })
+    return out
+
+
+def _apply_trace_path(doc: dict, det: dict, upload_id: str, manifest: dict) -> None:
+    """Run THE pipeline on the client's live-frame traces when they arrived,
+    and record the answer beside the video path's. Recorded only: nothing
+    here changes afib_result (owner decision pending the live comparison)."""
+    if not TRACE_PATH_ON:
+        doc.setdefault("debug", {})["trace_path"] = {"ran": False, "reason": "disabled (AFIB_TRACE_PATH)"}
+        return
+    try:
+        from inference import shenai_route, trace_ingest
+        raw, waited = shenai_route.wait_for(lambda: _peek_traces(upload_id), SHENAI_WAIT_S)
+        if not isinstance(raw, dict):
+            doc.setdefault("debug", {})["trace_path"] = {
+                "ran": False, "reason": "no trace document arrived"
+                + (f" (waited {waited:.1f} s)" if waited else "")}
+            return
+        t0 = time.perf_counter()
+        res, tdet = trace_ingest.run_on_traces(raw, manifest=manifest,
+                                               config=(det or {}).get("config"),
+                                               upload_id=upload_id)
+        rec = _trace_summary(res, tdet, (det or {}).get("config"))
+        rec["waited_s"] = round(waited, 2)
+        rec["analysis_s"] = round(time.perf_counter() - t0, 2)
+        rec["sampler"] = raw.get("sampler") if isinstance(raw.get("sampler"), dict) else None
+        doc.setdefault("debug", {})["trace_path"] = rec
+        print(f"[measure] trace path: ok={rec.get('ingest_ok')} outcome={rec.get('outcome')} "
+              f"class={rec.get('predicted_class')} result={rec.get('afib_result')} "
+              f"coh={rec.get('coherence')} tp={rec.get('timing_ms')} n={rec.get('n_intervals')} "
+              f"pulse={rec.get('pulse_bpm')} in {rec['analysis_s']}s", flush=True)
+    except Exception as e:                                     # noqa: BLE001
+        doc.setdefault("debug", {})["trace_path"] = {
+            "ran": False, "reason": f"trace path failed safely: {type(e).__name__}: {e}"}
+
+
 def _hold_signals(upload_id: str, payload: dict) -> None:
     with _SIGNALS_LOCK:
         _SIGNALS[upload_id] = payload
@@ -803,6 +896,7 @@ def _peek_signals(upload_id: str):
 def _drop_signals(upload_id: str) -> None:
     with _SIGNALS_LOCK:
         _SIGNALS.pop(upload_id, None)
+        _TRACES.pop(upload_id, None)
 
 
 def _apply_shenai_route(doc: dict, det: dict, upload_id: str, part_dir=None) -> None:
@@ -1237,6 +1331,9 @@ class MeasureHandler(BaseHTTPRequestHandler):
         if u.path == "/api/scan-signals":
             self._upload_signals(parse_qs(u.query))
             return
+        if u.path == "/api/scan-traces":
+            self._upload_traces(parse_qs(u.query))
+            return
         if u.path not in ("/api/process-video", "/api/measure"):
             self._json(404, {"error": "not found"})
             return
@@ -1499,6 +1596,42 @@ class MeasureHandler(BaseHTTPRequestHandler):
         self._json(200, {"ok": True, "upload_id": d.name,
                          "bytes": len(body), "stored": True})
 
+    def _upload_traces(self, q: dict) -> None:
+        """POST /api/scan-traces?upload_id=...: the client's live-frame ROI
+        traces (inference/trace_ingest.py). Held in memory for the job on
+        that upload, never written to disk; accepted-and-dropped when no
+        upload is in progress. Always 200 on a well-formed document, so a
+        client can never mistake this for a missing route."""
+        one = lambda k: (q.get(k) or [None])[0]                  # noqa: E731
+        try:
+            upload_id = str(one("upload_id") or "")
+            d = _part_dir(upload_id)
+        except (TypeError, ValueError) as e:
+            self._json(400, {"error": f"bad trace parameters: {e}"})
+            self.close_connection = True
+            return
+        body = self._read_body(MAX_SIDECAR_BYTES)
+        if body is None:
+            self.close_connection = True
+            return
+        try:
+            payload = json.loads(body.decode("utf-8"))
+            if not isinstance(payload, dict):
+                raise ValueError("body is not a JSON object")
+        except (UnicodeDecodeError, ValueError, RecursionError) as e:
+            self._json(400, {"error": f"bad trace document: {e}"})
+            self.close_connection = True
+            return
+        held = False
+        if d.is_dir():
+            _hold_traces(d.name, payload)
+            held = True
+        n = len(payload.get("t_s") or []) if isinstance(payload.get("t_s"), list) else 0
+        print(f"[traces] {'held' if held else 'dropped'} {len(body)} B ({n} frames) for "
+              f"{upload_id!r}", flush=True)
+        self._json(200, {"ok": True, "upload_id": d.name, "bytes": len(body),
+                         "frames": n, "held": held})
+
     def _start_job(self, q: dict):
         """Assemble the slices and detach the analysis. Returns immediately:
         the client polls GET /api/result, so no connection is held through the
@@ -1614,6 +1747,8 @@ class MeasureHandler(BaseHTTPRequestHandler):
         # interval gates alone. Recorded on the doc used or not.
         _apply_shenai_route(doc, det, os.path.basename(os.path.dirname(path)),
                             part_dir=os.path.dirname(path))
+        _apply_trace_path(doc, det, os.path.basename(os.path.dirname(path)),
+                          MeasureHandler._build_manifest(header))
         _apply_afib_result(doc, det)
         if header.get("reference"):
             doc["reference"] = header["reference"]

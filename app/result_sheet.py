@@ -117,6 +117,13 @@ COLUMNS = [
     # probability when a probabilistic classifier ran, and the basis: for an
     # inconclusive, WHICH of capture / signal / rhythm was missing.
     "AFib Basis",
+    # 2026-09-17: the trace path - THE pipeline run on ROI traces the phone
+    # sampled from the live camera frames (no codec), recorded beside the
+    # video path and the ShenAI train on every scan until the live comparison
+    # says it may decide. inference/trace_ingest.py.
+    "Trace Ran", "Trace Outcome", "Trace Result", "Trace p", "Trace SQI",
+    "Trace Coherence", "Trace Timing ms", "Trace Intervals", "Trace Coverage",
+    "Trace Pulse", "Trace FPS", "Trace Note",
 ]
 
 _POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sheet")
@@ -275,6 +282,7 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
     v_t = _card(items, "vascular_tone")
     fit = _card(items, "cardiorespiratory_fitness")
     fit_d = (items.get("cardiorespiratory_fitness") or {}).get("details") or {}
+    tp = _g(doc, "debug", "trace_path") or {}
     ex = extra or {}
     ref = doc.get("reference") or {}
     cap = doc.get("client_capture") or {}
@@ -410,6 +418,19 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
         "Rhythm Source": str(doc.get("rhythm_source") or ""),
         "ShenAI Route": _shenai_route_cell(_g(doc, "debug", "shenai_route")),
         "ShenAI Rate": _num(_g(doc, "debug", "shenai_route", "train", "bpm"), 1),
+        "Trace Ran": (("TRUE" if tp.get("ran") else "FALSE") if tp else ""),
+        "Trace Outcome": str(tp.get("outcome") or "") if tp else "",
+        "Trace Result": str(tp.get("afib_result") or "") if tp else "",
+        "Trace p": _num(tp.get("afib_probability"), 3) if tp else "",
+        "Trace SQI": _num(tp.get("sqi"), 3) if tp else "",
+        "Trace Coherence": _num(tp.get("coherence"), 3) if tp else "",
+        "Trace Timing ms": _num(tp.get("timing_ms"), 1) if tp else "",
+        "Trace Intervals": (tp.get("n_intervals") if tp and tp.get("n_intervals") is not None else ""),
+        "Trace Coverage": _num(tp.get("coverage"), 2) if tp else "",
+        "Trace Pulse": _num(tp.get("pulse_bpm"), 1) if tp else "",
+        "Trace FPS": _num(tp.get("fps"), 1) if tp else "",
+        "Trace Note": ((" | ".join(tp.get("no_read_reasons") or tp.get("ingest_reasons") or [])
+                        or str(tp.get("reason") or ""))[:300] if tp else ""),
         "AFib Result": str(doc.get("afib_result") or ""),
         "AFib p": _num(doc.get("afib_probability"), 3),
         "AFib Basis": (lambda b: (f"{b.get('category')}: {b.get('why')}" if b.get("category")
