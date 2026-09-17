@@ -345,3 +345,54 @@ def test_peak_at_rate_is_exact_bin_and_needs_a_local_maximum():
     assert sr.peak_at_rate(fb, psd, 200.0)["ok"] is False     # outside the band
     flat = np.full(fb.size, 0.01)
     assert sr.peak_at_rate(fb, flat, 84.0)["ok"] is False     # no peak anywhere
+
+
+def _fitness_doc(doc, bpm, value):
+    doc["biomarkers"] = {"items": [
+        {"key": "arterial_stiffness", "status": "computed", "value": 50.0},
+        {"key": "cardiorespiratory_fitness", "status": "computed", "value": value,
+         "tier": "provisional", "tier_reasons": ["only 5 clean beat intervals (a measured value needs 15)"],
+         "raw": {"name": "resting_heart_rate", "value": bpm, "unit": "bpm"}, "details": {}}],
+        "complete": True}
+    return doc
+
+
+def test_fitness_follows_the_train_rate_when_the_route_is_used():
+    from features.hemodynamics import resting_rate_index
+    doc, det = _video()
+    _fitness_doc(doc, 45.0, 87.3)                     # the 06:11 shape: folded to half
+    rec = sr.evaluate(doc, det, _sidecar(_regular(bpm=72.0)))
+    assert rec["used"] is True
+    r = sr.reconcile_fitness_rate(doc, rec)
+    card = doc["biomarkers"]["items"][1]
+    assert r["action"] == "recomputed" and card["status"] == "computed"
+    assert card["raw"]["value"] == pytest.approx(doc["mean_pulse_rate_bpm"], abs=0.1)
+    assert card["value"] == pytest.approx(round(100 * resting_rate_index(doc["mean_pulse_rate_bpm"]), 1), abs=0.2)
+    assert any("live-frame beat train" in x for x in card["tier_reasons"])
+
+
+def test_fitness_abstains_when_a_sound_train_contradicts_the_video_rate():
+    # Route refused for corroboration, but the train itself is sound and its
+    # rate (84) is nowhere near the card's folded 45: no number is shown.
+    doc, det = _video(spectral=45.0, roi_agree=3, lattice=None, n_int=3)
+    _fitness_doc(doc, 45.0, 87.3)
+    rec = sr.evaluate(doc, det, _sidecar(_regular(bpm=84.0)))
+    assert rec["used"] is False and rec.get("train_ok") is True
+    r = sr.reconcile_fitness_rate(doc, rec)
+    card = doc["biomarkers"]["items"][1]
+    assert r["action"] == "abstained" and card["status"] == "not_computed" and card["value"] is None
+    assert "45 bpm" in card["reason"] and "84 bpm" in card["reason"]
+    assert doc["biomarkers"]["complete"] is False
+
+
+def test_fitness_is_untouched_without_a_sound_train_or_when_rates_agree():
+    doc, det = _video(spectral=45.0, roi_agree=3, lattice=None, n_int=3)
+    _fitness_doc(doc, 80.0, 40.0)
+    rec = sr.evaluate(doc, det, _sidecar(_regular(bpm=84.0)))
+    r = sr.reconcile_fitness_rate(doc, rec)
+    assert r["action"] == "agree" and doc["biomarkers"]["items"][1]["value"] == 40.0
+    doc, det = _video()
+    _fitness_doc(doc, 45.0, 87.3)
+    rec = sr.evaluate(doc, det, None)                 # no sidecar at all
+    assert sr.reconcile_fitness_rate(doc, rec)["action"] == "none"
+    assert doc["biomarkers"]["items"][1]["value"] == 87.3

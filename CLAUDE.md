@@ -308,9 +308,14 @@ third corroboration: a LOCAL PEAK in our fused spectrum at the train's rate (exa
 >= 2x in-band median) - 9/13 true rates confirmed, 4 % false pass (a +-1 bin tolerance
 triples that). Retained-clip replay with model_a: route used 9/16 (was 4), every one
 AFIB_NOT_DETECTED with p <= 0.05; 7 INCONCLUSIVE (3 scan gates, 1 face, 3 uncorroborated).
-STILL OPEN: the same wrong dominant rhythm drives the rate resolver's fold and the fitness
-card (87/100 at a folded 45 bpm on 06:11; 5.5 at an unfolded 112 on 06:15) - the fold should
-require the peak test too, or the card should abstain; owner decision.
+Iteration 32 (owner: "build the fold fix"): ONE rate per scan. The route's published pulse is
+the corroborated train rate (the decision's resolver had folded 84 -> 48 onto our dominant
+rhythm on 06:26); the fitness card follows it when the route is used
+(`shenai_route.reconcile_fitness_rate`: 06:15 2.4/100 at 124 bpm -> 21.2 at 90; 06:26
+84.7 at 48 -> 29.2 at 84), abstains when a sound train contradicts the video rate by > 15 %
+and the route is not used, and is untouched without a sound train (06:11: the SDK flagged
+6 of 49 s bad, so the train could not veto). Pulses on the four 09-17 clips: 84/84/90/73
+vs SDK 84/84/90/77.
 
 **Caveats, stated:** MIMIC PERform is ICU ECG-derived RR with SYNTHETIC rPPG degradation,
 35 subjects; no facial-video AF validation exists here or publicly; markov_surprise and

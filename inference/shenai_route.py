@@ -335,15 +335,15 @@ def _evaluate(doc: dict, det: dict, raw: Optional[dict], rec: dict) -> dict:
     rec["video_gates_failed"] = (list(rationale.get("gates_failed") or [])
                                  if isinstance(rationale, dict) else None)
     ok, why = video_path_allows_route(rationale, doc.get("outcome"))
-    if not ok:
-        rec["reason"] = why
-        return rec
     if not isinstance(raw, dict):
-        rec["reason"] = ("no ShenAI sidecar arrived for this scan"
+        rec["reason"] = (why if not ok else
+                         "no ShenAI sidecar arrived for this scan"
                          + (f" (waited {rec['waited_s']:.1f} s)" if rec["waited_s"] else ""))
         return rec
-    rec["attempted"] = True
-
+    # The train is built and checked FIRST, whether or not the route may
+    # answer: a sound train is the one independent rate on the scan and the
+    # fitness card is reconciled against it (reconcile_fitness_rate) even
+    # when a scan gate keeps the route out.
     train = train_from_sidecar(raw)
     cfg = det.get("config")
     if not cfg:
@@ -378,8 +378,14 @@ def _evaluate(doc: dict, det: dict, raw: Optional[dict], rec: dict) -> dict:
     }
     bad = train_checks(train, rmssd)
     if bad:
-        rec["reason"] = "train refused: " + "; ".join(bad)
+        rec["reason"] = (why if not ok else "train refused: " + "; ".join(bad))
+        rec["train_refused"] = "; ".join(bad)
         return rec
+    rec["train_ok"] = True
+    if not ok:
+        rec["reason"] = why
+        return rec
+    rec["attempted"] = True
 
     video_ev = dict(det.get("evidence") or (doc.get("debug") or {}).get("evidence") or {})
     ec_min_int = int(((cfg.get("decision") or {}).get("evidence") or {})
@@ -427,6 +433,15 @@ def _evaluate(doc: dict, det: dict, raw: Optional[dict], rec: dict) -> dict:
     rid = str(doc.get("recording_id") or "unspecified")
     res, why = decide_with_rationale(features, sqi, coverage, cfg, recording_id=rid,
                                      evidence=ev, confidence=stars)
+    # The decision's own resolver may fold the train's rate onto OUR dominant
+    # waveform rhythm - the estimate that agreed with the SDK on 4 of 13
+    # clips (2026-09-17: 84 -> 48). On this route the train's rate IS the
+    # corroborated rate (condition 3 above); it is what the result carries.
+    if res.outcome.value == "ACCEPT" and train_bpm is not None:
+        why.setdefault("rule", {})["resting_rate_route"] = {
+            "resolver_bpm": res.mean_pulse_rate_bpm, "train_bpm": round(train_bpm, 1),
+            "backed_by": list(rate["backed_by"])}
+        res.mean_pulse_rate_bpm = round(float(train_bpm), 1)
     why["rhythm_source"] = ROUTE_NAME
     why["confidence"] = conf
     why["sqi_components"] = {k: float(v) for k, v in comps.items() if _f(v) is not None}
@@ -479,3 +494,76 @@ def wait_for(getter: Callable[[], Optional[dict]], budget_s: float,
         time.sleep(poll_s)
         doc = getter()
     return doc, time.perf_counter() - t0
+
+
+# ------------------------------------------------- the fitness card's rate
+FITNESS_RATE_TOL = 0.15
+
+
+def reconcile_fitness_rate(doc: dict, rec: dict) -> dict:
+    """One rate per scan (owner, 2026-09-17). The fitness card is a map of
+    the resting rate, and the resting rate it used came from the video path's
+    resolver - whose fold follows the dominant waveform rhythm, which on a
+    7 Mb/s clip agreed with the SDK's rate on 4 of 13 clips (06:11: 87/100 at
+    a folded 45 bpm against a true 85). The live-frame train is the one
+    independent rate on the scan:
+      route used        -> the card is recomputed from the SAME rate the
+                           rhythm result carries (doc.mean_pulse_rate_bpm);
+      train sound, route
+      not used          -> a card whose rate disagrees with the train by more
+                           than FITNESS_RATE_TOL abstains: the rate could not
+                           be verified;
+      no sound train    -> unchanged.
+    Mutates doc["biomarkers"] in place; returns the record. Never raises."""
+    out = {"applied": False, "action": "none"}
+    try:
+        items = ((doc.get("biomarkers") or {}).get("items")) or []
+        card = next((it for it in items if it.get("key") == "cardiorespiratory_fitness"), None)
+        train = rec.get("train") or {}
+        train_bpm = _f(train.get("bpm"))
+        if card is None or not rec.get("train_ok") or train_bpm is None:
+            return out
+        raw = card.get("raw") if isinstance(card.get("raw"), dict) else {}
+        card_bpm = _f(raw.get("value"))
+        if rec.get("used") and _f(doc.get("mean_pulse_rate_bpm")) is not None:
+            from features.hemodynamics import resting_rate_index
+            hr = float(doc["mean_pulse_rate_bpm"])
+            idx = resting_rate_index(hr)
+            if idx is None:
+                return out
+            old = card.get("value")
+            card["status"] = "computed"
+            card["value"] = round(100.0 * float(idx), 1)
+            card["tier"] = "provisional"
+            reasons = [r for r in (card.get("tier_reasons") or [])
+                       if "clean beat intervals" not in r and "unverified" not in r]
+            reasons.append(f"resting rate {hr:.0f} bpm from the live-frame beat train, "
+                           f"corroborated on this scan (video path read "
+                           f"{card_bpm:.0f} bpm)" if card_bpm is not None else
+                           f"resting rate {hr:.0f} bpm from the live-frame beat train")
+            card["tier_reasons"] = reasons
+            card["raw"] = {"name": "resting_heart_rate", "value": round(hr, 1), "unit": "bpm"}
+            card.pop("reason", None)
+            det = card.get("details") if isinstance(card.get("details"), dict) else {}
+            det["resting_hr_bpm"] = round(hr, 2)
+            det["resting_rate_source"] = "shenai_train_via_resolver"
+            out.update(applied=True, action="recomputed", from_bpm=card_bpm, to_bpm=round(hr, 1),
+                       from_value=old, to_value=card["value"])
+        elif card.get("status") == "computed" and card_bpm is not None \
+                and abs(card_bpm - train_bpm) / train_bpm > FITNESS_RATE_TOL:
+            card["status"] = "not_computed"
+            card["value"] = None
+            card["band"] = None
+            card["tier"] = None
+            card["reason"] = (f"the resting rate could not be verified: the video path read "
+                              f"{card_bpm:.0f} bpm, the live-frame beat train {train_bpm:.0f} bpm, "
+                              f"and neither is corroborated by the other")
+            out.update(applied=True, action="abstained", card_bpm=card_bpm, train_bpm=train_bpm)
+        else:
+            out.update(action="agree", card_bpm=card_bpm, train_bpm=train_bpm)
+        b = doc.get("biomarkers") or {}
+        b["complete"] = all(x.get("status") == "computed" for x in items)
+        return out
+    except Exception as e:                                     # noqa: BLE001
+        out["error"] = f"{type(e).__name__}: {e}"
+        return out

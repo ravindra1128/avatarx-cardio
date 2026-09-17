@@ -830,6 +830,10 @@ def _apply_shenai_route(doc: dict, det: dict, upload_id: str, part_dir=None) -> 
         else:
             raw, waited = shenai_route.wait_for(_get, SHENAI_WAIT_S)
             rec = shenai_route.evaluate(doc, det, raw, waited_s=waited)
+            # One rate per scan: the fitness card follows the live-frame
+            # train's rate when the route is used, and abstains when a sound
+            # train contradicts the video path's rate (iteration 32).
+            rec["fitness_reconciliation"] = shenai_route.reconcile_fitness_rate(doc, rec)
         doc.setdefault("rhythm_source", "video")
         doc.setdefault("debug", {})["shenai_route"] = rec
         print(f"[measure] shenai route: used={rec.get('used')} "
