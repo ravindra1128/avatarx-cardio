@@ -262,6 +262,17 @@ def stiffness_contour(contour: dict) -> dict:
             return None
 
     ri = finite(contour.get("reflection_index"))
+    # 2026-09-17 (09:02 staging scan: stiffness 0/100 at a reflection index of
+    # -0.08). The index is (diastolic peak - foot) / (systolic peak - foot); a
+    # value at or below 0 says the "diastolic peak" sat below the foot and a
+    # value above 1 that it topped the systolic wave - neither is a reflected
+    # wave, both are a notch found in noise. Such a value is NOT a marker:
+    # the card falls through to the crest-time band, or abstains, and the
+    # rejected number is kept for audit.
+    ri_rejected = None
+    if ri is not None and not (0.0 < float(ri) <= 1.0):
+        ri_rejected = round(float(ri), 5)
+        ri = None
     agi = aging_index(contour)
     rise = finite(contour.get("rise_time_s"))
     slope = finite(contour.get("norm_upstroke_slope"))
@@ -269,6 +280,7 @@ def stiffness_contour(contour: dict) -> dict:
     out = {
         "aging_index": agi,
         "reflection_index": (None if ri is None else round(float(ri), 5)),
+        "reflection_index_rejected": ri_rejected,
         "rise_time_s": rise,
         "norm_upstroke_slope": slope,
         "pulse_width50_s": width,

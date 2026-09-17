@@ -242,3 +242,21 @@ def test_pooling_does_not_starve_the_provisional_tone_score():
     # below the provisional floor there is still nothing to pool
     thin = {"forehead": [(i * 1.0, 1.0) for i in range(n - 1)]}
     assert pool_amplitudes(thin) == []
+
+
+def test_a_reflection_index_outside_zero_to_one_is_not_a_stiffness_marker():
+    """2026-09-17: a staging scan published stiffness 0/100 from a reflection
+    index of -0.08 - a notch found in noise, not a reflected wave."""
+    from features.hemodynamics import stiffness_contour
+    bad = stiffness_contour({"reflection_index": -0.078, "rise_time_s": None,
+                             "aging_index": None, "notch_present": True})
+    assert bad["available"] is False and bad["reflection_index"] is None
+    assert bad["reflection_index_rejected"] == -0.078
+    # with a crest time available the card still gets its provisional band
+    with_rise = stiffness_contour({"reflection_index": 1.4, "rise_time_s": 0.2,
+                                   "aging_index": None, "notch_present": True})
+    assert with_rise["available"] is True and with_rise["raw_name"] == "pulse_rise_time"
+    assert with_rise["tier"] == "provisional" and with_rise["reflection_index_rejected"] == 1.4
+    ok = stiffness_contour({"reflection_index": 0.45, "rise_time_s": 0.2,
+                            "aging_index": None, "notch_present": True})
+    assert ok["raw_name"] == "reflection_index" and ok["score"] == 45.0
