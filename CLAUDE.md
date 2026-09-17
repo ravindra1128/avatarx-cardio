@@ -299,6 +299,19 @@ decided sens 0.991 / spec 0.917; 34 of 35 subjects majority-correct. Specificity
 weaker side on real beats (missed beats raise irregularity on non-AF windows) - the price of
 the detector, not the model, and the reason the band's precondition gates matter.
 
+**Iteration 31 (2026-09-17, route corroboration):** on the four 2026-09-17 scans (SDK 84-90
+bpm) our dominant waveform rhythm read 45-48 on 3 regions - a 0.8 Hz artefact out-powering the
+1.4 Hz pulse, not the subharmonic branch. `scripts/spectral_variants.py` scored four estimator
+variants against the SDK's rate on 13 clips: the best agrees on 6/13 (current 4/13) - the
+dominant peak of a 7 Mb/s clip is not a rate estimate, so no estimator was gated. Instead a
+third corroboration: a LOCAL PEAK in our fused spectrum at the train's rate (exact bin,
+>= 2x in-band median) - 9/13 true rates confirmed, 4 % false pass (a +-1 bin tolerance
+triples that). Retained-clip replay with model_a: route used 9/16 (was 4), every one
+AFIB_NOT_DETECTED with p <= 0.05; 7 INCONCLUSIVE (3 scan gates, 1 face, 3 uncorroborated).
+STILL OPEN: the same wrong dominant rhythm drives the rate resolver's fold and the fitness
+card (87/100 at a folded 45 bpm on 06:11; 5.5 at an unfolded 112 on 06:15) - the fold should
+require the peak test too, or the card should abstain; owner decision.
+
 **Caveats, stated:** MIMIC PERform is ICU ECG-derived RR with SYNTHETIC rPPG degradation,
 35 subjects; no facial-video AF validation exists here or publicly; markov_surprise and
 spectral_entropy are NaN on most 45 s windows and are median-imputed (near-inert).

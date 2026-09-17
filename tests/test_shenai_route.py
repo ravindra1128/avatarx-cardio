@@ -306,3 +306,42 @@ def test_the_sheet_shows_the_source_and_the_route_verdict():
     assert row["ShenAI Rate"] == ""
     for c in ("Rhythm Source", "ShenAI Route", "ShenAI Rate"):
         assert c in result_sheet.COLUMNS
+
+
+def test_a_peak_in_our_own_spectrum_corroborates_when_the_dominant_rhythm_is_wrong():
+    """2026-09-17: on four staging scans our dominant rhythm read ~half the
+    SDK's 84-90 bpm (a 0.8 Hz artefact), so the train had no corroboration.
+    A local peak in our fused spectrum AT the train's rate, >= 2x the in-band
+    median, is the third path (measured: 9/13 true rates, 4 % false)."""
+    import numpy as np
+    fb = np.round(np.arange(0.75, 3.0, 0.05), 3)
+    psd = np.full(fb.size, 0.01)
+    psd[np.argmin(np.abs(fb - 0.80))] = 0.12          # the artefact wins
+    psd[np.argmin(np.abs(fb - 1.40))] = 0.05          # the pulse: a clear local peak, 5x median
+    # our count doubled/uncertain and our dominant rhythm at 48 with 3 regions:
+    # neither rate path corroborates an 84 bpm train...
+    doc, det = _video(spectral=48.0, roi_agree=3, lattice=None, n_int=3)
+    det = dict(det); det["_fused_psd"] = (fb, psd)
+    rec = sr.evaluate(doc, det, _sidecar(_regular(bpm=84.0)))
+    assert rec["used"] is True, rec
+    assert "peak in our own waveform spectrum at 84 bpm" in rec["reason"]
+    assert doc["outcome"] == "ACCEPT" and doc["predicted_class"] == "SINUS"
+    # ...and a train whose rate has NO peak in our spectrum is still refused.
+    doc, det = _video(spectral=48.0, roi_agree=3, lattice=None, n_int=3)
+    det = dict(det); det["_fused_psd"] = (fb, psd)
+    rec = sr.evaluate(doc, det, _sidecar(_regular(bpm=110.0)))
+    assert rec["used"] is False and "not corroborated" in rec["reason"]
+    assert rec["rate_check"]["peak_at_rate"]["ok"] is False
+
+
+def test_peak_at_rate_is_exact_bin_and_needs_a_local_maximum():
+    import numpy as np
+    fb = np.round(np.arange(0.75, 3.0, 0.05), 3)
+    psd = np.full(fb.size, 0.01)
+    i = int(np.argmin(np.abs(fb - 1.40)))
+    psd[i - 1], psd[i], psd[i + 1] = 0.03, 0.06, 0.04       # peak at 84 bpm
+    assert sr.peak_at_rate(fb, psd, 84.0)["ok"] is True
+    assert sr.peak_at_rate(fb, psd, 81.0)["ok"] is False      # the neighbour bin is a shoulder
+    assert sr.peak_at_rate(fb, psd, 200.0)["ok"] is False     # outside the band
+    flat = np.full(fb.size, 0.01)
+    assert sr.peak_at_rate(fb, flat, 84.0)["ok"] is False     # no peak anywhere

@@ -67,6 +67,16 @@ MAX_BAD_SIGNAL_FRACTION = 0.10  # bad_signal_seconds / span, when present
 RATE_TOL = 0.15                 # same tolerance as features.hemodynamics.PULSE_AGREEMENT_TOL
 MIN_SPECTRAL_ROI_AGREE = 2      # for the spectral rhythm to corroborate the train
 RMSSD_CONSISTENCY_TOL = 0.30    # train RMSSD vs the SDK's own lnRMSSD
+# Third corroboration (2026-09-17): OUR fused waveform spectrum has a LOCAL
+# PEAK at the train's rate with power >= PEAK_SNR_MIN x the in-band median,
+# judged at the exact 0.05 Hz bin. Measured on the 13 retained clips with a
+# readable spectrum: confirms the SDK's own rate on 9, lets an arbitrary rate
+# through 4 % of the time (a +-1 bin tolerance would triple that). Needed
+# because the DOMINANT peak of a 7 Mb/s clip agreed with the SDK's rate on only
+# 4 of 13 clips - on 2026-09-17 a 0.8 Hz artefact out-powered a true 1.4 Hz
+# pulse on three regions of four, and the route lost its corroboration on
+# every scan of the morning while the train was right on all of them.
+PEAK_SNR_MIN = 2.0
 DROPPED_BEAT_GAP_S = 0.05       # start[i+1] - end[i] beyond this = a dropped beat
 SINGLE_TRAIN_ROI_AGREEMENT = 0.25   # k = 4 * this = 1: one detector, no averaging
 
@@ -186,8 +196,61 @@ def train_checks(train: dict, rmssd_ms: Optional[float]) -> list:
     return why
 
 
+def fused_interior_psd(det: dict):
+    """(f_hz, normalised mean PSD) of OUR raw per-region waveforms, strictly
+    inside the pulse band - the same construction inference.evidence.
+    spectral_pulse fuses, recomputed from the ingest the pipeline kept. None
+    when it cannot be built."""
+    try:
+        from inference.evidence import extract_and_detect, _welch_psd, SPECTRAL_BAND_HZ
+        from preprocessing.roi import ROI_NAMES
+        ing = det.get("ingest")
+        cfg = det.get("config")
+        if ing is None or cfg is None:
+            return None
+        fps = float(ing.meta.measured_fps_mean)
+        ts = np.asarray(ing.timestamps_s, float)
+        raw, _, _ = extract_and_detect(ing.traces, ts, fps, cfg)
+        lo, hi = SPECTRAL_BAND_HZ
+        psds, fb_ref = [], None
+        for roi in ROI_NAMES:
+            f, p = _welch_psd(raw.get(roi), fps) if raw.get(roi) is not None else (None, None)
+            if f is None:
+                continue
+            m = (f >= lo) & (f <= hi)
+            fb, pb = f[m], p[m]
+            if fb.size > 2:
+                fb, pb = fb[1:-1], pb[1:-1]
+            tot = float(np.sum(pb))
+            if tot <= 0 or (fb_ref is not None and fb.shape != fb_ref.shape):
+                continue
+            fb_ref = fb
+            psds.append(pb / tot)
+        if not psds:
+            return None
+        return fb_ref, np.mean(psds, axis=0)
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
+def peak_at_rate(fb, psd, bpm: float, snr_min: float = PEAK_SNR_MIN) -> dict:
+    """Does the spectrum hold a local maximum at the bin nearest `bpm` with
+    power >= snr_min x the in-band median? Exact bin, no tolerance."""
+    fb = np.asarray(fb, float); psd = np.asarray(psd, float)
+    if fb.size < 3 or psd.size != fb.size:
+        return {"ok": False, "snr": None, "reason": "no spectrum"}
+    med = float(np.median(psd))
+    i = int(np.argmin(np.abs(fb - bpm / 60.0)))
+    if abs(fb[i] - bpm / 60.0) > 0.06:
+        return {"ok": False, "snr": None, "reason": "rate outside our spectral band"}
+    snr = float(psd[i] / (med + 1e-12))
+    local_max = 0 < i < psd.size - 1 and psd[i] >= psd[i - 1] and psd[i] >= psd[i + 1]
+    return {"ok": bool(local_max and snr >= snr_min), "snr": round(snr, 2),
+            "local_max": bool(local_max), "bin_hz": round(float(fb[i]), 3)}
+
+
 def corroborate_rate(train_bpm: Optional[float], video_ev: dict,
-                     min_intervals: int) -> dict:
+                     min_intervals: int, det: Optional[dict] = None) -> dict:
     """Is the train's rate backed by OUR evidence on the same scan? Two
     independent checks, either suffices: our resolved resting rate (the same
     resolver every head uses) or our waveform's dominant rhythm when enough
@@ -221,6 +284,14 @@ def corroborate_rate(train_bpm: Optional[float], video_ev: dict,
     if spec is not None and spec > 0 and roia is not None and roia >= MIN_SPECTRAL_ROI_AGREE \
             and abs(train_bpm - spec) / spec <= RATE_TOL:
         out["backed_by"].append(f"our waveform rhythm {spec:.0f} bpm ({roia} of 4 regions)")
+    if not out["backed_by"] and det is not None:
+        spec_psd = det.get("_fused_psd") or fused_interior_psd(det)
+        if spec_psd is not None:
+            pk = peak_at_rate(spec_psd[0], spec_psd[1], train_bpm)
+            out["peak_at_rate"] = pk
+            if pk.get("ok"):
+                out["backed_by"].append(f"a peak in our own waveform spectrum at "
+                                        f"{train_bpm:.0f} bpm ({pk['snr']:.1f}x the in-band median)")
     out["ok"] = bool(out["backed_by"])
     if not out["ok"]:
         parts = []
@@ -313,7 +384,7 @@ def _evaluate(doc: dict, det: dict, raw: Optional[dict], rec: dict) -> dict:
     video_ev = dict(det.get("evidence") or (doc.get("debug") or {}).get("evidence") or {})
     ec_min_int = int(((cfg.get("decision") or {}).get("evidence") or {})
                      .get("min_intervals_any", 15))
-    rate = corroborate_rate(train_bpm, video_ev, ec_min_int)
+    rate = corroborate_rate(train_bpm, video_ev, ec_min_int, det=det)
     rec["rate_check"] = rate
     if not rate["ok"]:
         rec["reason"] = rate.get("reason")
