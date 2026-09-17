@@ -32,7 +32,8 @@ def test_classifier_inputs_reach_the_sheet():
                         "debug": {"rationale": {"features": {
                             "median_abs_succ_diff": 67.4, "pnn50": 0.6087, "n_intervals": 23}}}})
     assert row["MAD ms"] == 67.4 and row["pNN50"] == 0.609 and row["Rate N"] == 23
-    assert COLUMNS[-6:-3] == ["MAD ms", "pNN50", "Rate N"]   # the ShenAI route columns follow (2026-09-16)
+    i = COLUMNS.index("Rhythm Source")
+    assert COLUMNS[i - 3:i] == ["MAD ms", "pNN50", "Rate N"]  # later fields are additive
 
 
 def test_classifier_inputs_blank_when_no_rationale():

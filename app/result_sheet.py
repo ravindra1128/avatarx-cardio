@@ -107,6 +107,10 @@ COLUMNS = [
     # used, Rhythm Class/Text/MAD/pNN50/Rate N above are ITS numbers and the
     # video path's own rationale is kept under debug.video_rationale.
     "Rhythm Source", "ShenAI Route", "ShenAI Rate",
+    # Receipt from the job's memory, independent of retained sidecars.
+    "Scan ID", "Signals State", "Signals Received", "Signals Transport",
+    "Input Beats N", "Input PPG N", "Input PPG Missing N", "Input PPG Clock",
+    "SDK Quality", "SDK Bad Signal s", "SDK HR", "SDK lnRMSSD",
 ]
 
 _POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sheet")
@@ -400,6 +404,19 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
         "Rhythm Source": str(doc.get("rhythm_source") or ""),
         "ShenAI Route": _shenai_route_cell(_g(doc, "debug", "shenai_route")),
         "ShenAI Rate": _num(_g(doc, "debug", "shenai_route", "train", "bpm"), 1),
+        "Scan ID": str(doc.get("scan_id") or doc.get("upload_id") or "")[:80],
+        "Signals State": str(_g(doc, "debug", "shenai_input", "state") or "")[:80],
+        "Signals Received": ({True: "TRUE", False: "FALSE"}.get(
+            _g(doc, "debug", "shenai_input", "received"), "")),
+        "Signals Transport": str(_g(doc, "debug", "shenai_input", "transport") or "")[:40],
+        "Input Beats N": _g(doc, "debug", "shenai_input", "beats_n", default=""),
+        "Input PPG N": _g(doc, "debug", "shenai_input", "ppg_n", default=""),
+        "Input PPG Missing N": _g(doc, "debug", "shenai_input", "ppg_missing_n", default=""),
+        "Input PPG Clock": str(_g(doc, "debug", "shenai_input", "ppg_fs_source") or "")[:40],
+        "SDK Quality": _num(_g(doc, "debug", "shenai_input", "sdk_quality"), 3),
+        "SDK Bad Signal s": _num(_g(doc, "debug", "shenai_input", "sdk_bad_signal_s"), 2),
+        "SDK HR": _num(_g(doc, "debug", "shenai_input", "sdk_hr_bpm"), 1),
+        "SDK lnRMSSD": _num(_g(doc, "debug", "shenai_input", "sdk_lnrmssd"), 3),
     }
 
 

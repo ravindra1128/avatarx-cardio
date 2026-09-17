@@ -215,7 +215,7 @@ def test_an_upload_id_cannot_escape_the_parts_directory(tmp_path, monkeypatch):
         measure_api._part_dir("../..")
 
 
-def test_both_upload_paths_send_the_same_manifest():
+def test_both_upload_paths_send_the_same_manifest(tmp_path, monkeypatch):
     """The detached path once omitted capture_profile, so the pipeline
     defaulted to "research" and the same clip that returned REPEAT_SCAN with
     cards came back NO_RESULT. One builder, used by both."""
@@ -227,8 +227,20 @@ def test_both_upload_paths_send_the_same_manifest():
     m = measure_api.MeasureHandler._build_manifest(h3)
     assert m["exposure_locked"] is True and m["illuminance_lux"] == 120.0
     assert m["capture_profile"] == "consumer"
-    src = inspect.getsource(measure_api.MeasureHandler._run)
-    assert "_build_manifest(header)" in src, "the single-shot path must use it too"
+    manifests = []
+    def measure(path, **kwargs):
+        manifests.append(kwargs["manifest"])
+        return {"outcome": "REPEAT_SCAN"}, {}
+    monkeypatch.setattr(measure_api, "WORK_DIR", tmp_path / "work")
+    monkeypatch.setattr(measure_api, "measure_video_details", measure)
+    monkeypatch.setattr(measure_api, "_apply_shenai_route", lambda *a, **kw: None)
+    monkeypatch.setattr(measure_api, "_pair_shenai", lambda *a, **kw: None)
+    monkeypatch.setattr(measure_api, "_retain_clip", lambda *a, **kw: None)
+    monkeypatch.setenv("AFIB_KEEP_UPLOADS", "0")
+    for header in (h, h2, h3):
+        measure_api.MeasureHandler._run(b"video", header)
+        measure_api.MeasureHandler._run_assembled(str(tmp_path / "scan.webm"), header)
+        assert manifests[-2:] == [measure_api.MeasureHandler._build_manifest(header)] * 2
 
 
 def test_slices_may_differ_in_size_and_the_last_total_wins(tmp_path, monkeypatch):

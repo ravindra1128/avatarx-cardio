@@ -763,7 +763,56 @@ def _drop_signals(upload_id: str) -> None:
         _SIGNALS.pop(upload_id, None)
 
 
-def _apply_shenai_route(doc: dict, det: dict, upload_id: str, part_dir=None) -> None:
+def _validate_signal_attachment(header: dict, upload_id: str) -> dict:
+    """Bounded optional input; its identity must agree with the video job."""
+    delivery = header.get("signal_delivery")
+    raw = header.get("shenai_signals")
+    if delivery is None and raw is None:
+        return {}                           # legacy separate-sidecar client
+    states = {"attached", "empty_snapshot", "missing_snapshot", "snapshot_too_large",
+              "snapshot_serialization_failed"}
+    if not isinstance(delivery, dict) or type(delivery.get("version")) is not int \
+            or delivery.get("version") != 1 or not isinstance(delivery.get("state"), str) \
+            or delivery.get("state") not in states:
+        raise ValueError("invalid signal delivery metadata")
+    if raw is not None and (not isinstance(raw, dict) or not upload_id
+                            or raw.get("upload_id") != upload_id):
+        raise ValueError("ShenAI snapshot upload_id does not match the video")
+    if (delivery["state"] in {"attached", "empty_snapshot"}) != isinstance(raw, dict):
+        raise ValueError("signal delivery state does not match its payload")
+    return {"signal_delivery": {"version": 1, "state": delivery["state"]},
+            "shenai_signals": raw}
+
+
+def _signal_input_summary(raw, delivery, transport: str, waited_s: float) -> dict:
+    """Receipt is independent of retention. No sample arrays leave the job."""
+    received = isinstance(raw, dict)
+    out = {"received": received, "transport": transport,
+           "state": delivery.get("state") if delivery else ("received" if received else "not_received"),
+           "waited_s": round(waited_s, 2)}
+    if not received:
+        return out
+    out.update(_shenai_summary(raw))
+    ppg = raw.get("ppg") if isinstance(raw.get("ppg"), dict) else {}
+    signal = ppg.get("signal")
+    out["ppg_n"] = len(signal) if isinstance(signal, list) else 0
+    out["ppg_missing_n"] = sum(not isinstance(x, (int, float)) or isinstance(x, bool)
+                               or not math.isfinite(x) for x in signal) if isinstance(signal, list) else 0
+    # These are the SDK's reported figures, not an independent validation of
+    # beat timing or an AFib probability. Keep missing quality distinct from 0.
+    ref = raw.get("reference") if isinstance(raw.get("reference"), dict) else {}
+    for dest, src in (("sdk_quality", "average_signal_quality"),
+                      ("sdk_bad_signal_s", "bad_signal_seconds"),
+                      ("sdk_hr_bpm", "heart_rate_bpm"),
+                      ("sdk_lnrmssd", "hrv_lnrmssd_ms")):
+        value = ref.get(src)
+        out[dest] = (float(value) if isinstance(value, (int, float)) and
+                     not isinstance(value, bool) and math.isfinite(value) else None)
+    return out
+
+
+def _apply_shenai_route(doc: dict, det: dict, upload_id: str, part_dir=None,
+                        *, attachment=None) -> None:
     """Wait (bounded) for the sidecar, run the route, record the outcome on
     the doc. Best effort: a scan must return whether or not any of this works."""
     from inference import shenai_route
@@ -781,12 +830,27 @@ def _apply_shenai_route(doc: dict, det: dict, upload_id: str, part_dir=None) -> 
                 raw = None
         return raw if isinstance(raw, dict) else None
 
+    delivery = (attachment or {}).get("signal_delivery")
+    raw = (attachment or {}).get("shenai_signals")
+    waited = 0.0
+    transport = "job_request" if delivery else "sidecar"
     try:
+        if not delivery:
+            if SHENAI_ROUTE_ON:
+                raw, waited = shenai_route.wait_for(_get, SHENAI_WAIT_S)
+            else:
+                raw = _get()
+        try:
+            doc.setdefault("debug", {})["shenai_input"] = _signal_input_summary(
+                raw, delivery, transport, waited)
+        except Exception as summary_error:                  # diagnostics cannot change a decision
+            doc.setdefault("debug", {})["shenai_input"] = {
+                "received": isinstance(raw, dict), "transport": transport,
+                "state": "summary_failed", "error_type": type(summary_error).__name__}
         if not SHENAI_ROUTE_ON:
             rec = {"route": shenai_route.ROUTE_NAME, "attempted": False, "used": False,
                    "reason": "route disabled (AFIB_SHENAI_ROUTE)"}
         else:
-            raw, waited = shenai_route.wait_for(_get, SHENAI_WAIT_S)
             rec = shenai_route.evaluate(doc, det, raw, waited_s=waited)
         doc.setdefault("rhythm_source", "video")
         doc.setdefault("debug", {})["shenai_route"] = rec
@@ -794,6 +858,9 @@ def _apply_shenai_route(doc: dict, det: dict, upload_id: str, part_dir=None) -> 
               f"{rec.get('reason')} -> outcome={doc.get('outcome')} "
               f"class={doc.get('predicted_class')}", flush=True)
     except Exception as e:                                     # noqa: BLE001
+        doc.setdefault("debug", {}).setdefault("shenai_input", {
+            "received": isinstance(raw, dict), "transport": transport,
+            "state": "summary_failed", "error_type": type(e).__name__})
         doc.setdefault("rhythm_source", "video")
         doc.setdefault("debug", {})["shenai_route"] = {
             "used": False, "reason": f"route failed safely: {type(e).__name__}: {e}"}
@@ -818,9 +885,20 @@ def _parse_envelope(body: bytes, ctype: str, query: dict) -> tuple:
         if len(body) < 4:
             raise ValueError("envelope shorter than its length prefix")
         (hlen,) = struct.unpack("<I", body[:4])
-        if hlen <= 0 or 4 + hlen > len(body):
+        if hlen <= 0 or hlen > MAX_SIDECAR_BYTES or 4 + hlen > len(body):
             raise ValueError(f"bad envelope header length {hlen}")
         header = json.loads(body[4:4 + hlen].decode())
+        if not isinstance(header, dict):
+            raise ValueError("envelope header is not a JSON object")
+        # The browser keeps video metadata in the query and attaches the
+        # signal in the envelope. Preserve timestamps/metadata from older
+        # envelope clients while retaining the query's scan identity.
+        _, query_header = _parse_envelope(b"", "video/webm", query)
+        if query_header.get("upload_id") and header.get("upload_id") not in (
+                None, query_header["upload_id"]):
+            raise ValueError("envelope upload_id does not match query")
+        header = {**query_header, **header}
+        header.update(_validate_signal_attachment(header, header.get("upload_id")))
         return body[4 + hlen:], header
 
     def _one(k):
@@ -1457,11 +1535,31 @@ class MeasureHandler(BaseHTTPRequestHandler):
         """Assemble the slices and detach the analysis. Returns immediately:
         the client polls GET /api/result, so no connection is held through the
         job and a dropped link costs nothing."""
+        # Drain the bounded body even on a cached/503 response. Leaving it on
+        # an HTTP/1.1 connection would corrupt the next request's framing.
+        attachment = {}
+        if self.headers.get("Content-Length", "0") != "0":
+            body = self._read_body(MAX_SIDECAR_BYTES)
+            if body is None:
+                self.close_connection = True
+                return
+            if len(body) != int(self.headers["Content-Length"]):
+                self._json(400, {"error": "incomplete start input"})
+                self.close_connection = True
+                return
+            try:
+                attachment = json.loads(body)
+                if not isinstance(attachment, dict):
+                    raise ValueError("start body is not a JSON object")
+            except (ValueError, RecursionError) as e:
+                self._json(400, {"error": f"bad start input: {e}"})
+                return
         _sweep_parts()
-        _, header = _parse_envelope(b"", "video/webm", q)
         upload_id = str((q.get("upload_id") or [""])[0])
-        ext = str(header.get("ext") or (q.get("ext") or ["webm"])[0]).lstrip(".")
         try:
+            _, header = _parse_envelope(b"", "video/webm", q)
+            header.update(_validate_signal_attachment(attachment, upload_id))
+            ext = str(header.get("ext") or "webm").lstrip(".")
             if _part_dir(upload_id).name != upload_id or not upload_id.isascii():
                 raise ValueError("upload_id must be an ASCII identifier of at most 80 characters")
             if not ext.isascii() or not ext.isalnum() or len(ext) > 10:
@@ -1608,7 +1706,7 @@ class MeasureHandler(BaseHTTPRequestHandler):
         # the SAME decision on the train when the video path abstained on
         # interval gates alone. Recorded on the doc used or not.
         _apply_shenai_route(doc, det, os.path.basename(os.path.dirname(path)),
-                            part_dir=os.path.dirname(path))
+                            part_dir=os.path.dirname(path), attachment=header)
         if header.get("reference"):
             doc["reference"] = header["reference"]
         if header.get("client_capture"):
@@ -1639,13 +1737,8 @@ class MeasureHandler(BaseHTTPRequestHandler):
         retained = _retain_clip(path, sid)
 
         try:
-            doc = measure_video(
-                path, manifest=MeasureHandler._build_manifest(header),
-                client_timestamps_s=header.get("timestamps_s"),
-                duration_ms=header.get("duration_ms"),
-                config_overrides=header.get("config_overrides"),
-                window_s=header.get("window_s"),
-                scale=header.get("scale"))
+            # Both transports use the same video + optional train route.
+            doc = MeasureHandler._run_assembled(path, header)
             doc["session"] = sid
             doc["size_bytes"] = len(video_bytes)
             if header.get("reference"):

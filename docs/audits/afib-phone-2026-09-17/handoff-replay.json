@@ -1,0 +1,47 @@
+{
+  "baseline_build": "6be4f5a",
+  "records": [
+    {
+      "clip": "20260917T064657Z-6d1437d8-47c8-44.webm",
+      "same": {
+        "video": true,
+        "final": true,
+        "evidence": true,
+        "features": true,
+        "runs": true,
+        "run_times": true,
+        "series_beats": true
+      },
+      "input_unchanged": true,
+      "class": "AFIB_SUGGESTIVE"
+    },
+    {
+      "clip": "20260917T065112Z-8890af32-50d8-4b.webm",
+      "same": {
+        "video": true,
+        "final": true,
+        "evidence": true,
+        "features": true,
+        "runs": true,
+        "run_times": true,
+        "series_beats": true
+      },
+      "input_unchanged": true,
+      "class": "SINUS"
+    },
+    {
+      "clip": "20260917T065508Z-b20b4560-f573-48.webm",
+      "same": {
+        "video": true,
+        "final": true,
+        "evidence": true,
+        "features": true,
+        "runs": true,
+        "run_times": true,
+        "series_beats": true
+      },
+      "input_unchanged": true,
+      "class": null
+    }
+  ]
+}
