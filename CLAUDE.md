@@ -244,6 +244,68 @@ Added 2026-09-16 (afternoon), from the first three retained staging clips with S
   train equalled its own figure (14.8 ms) exactly. Retained clips are wiped by every
   redeploy: pull before pushing.
 
+## Redesign of 2026-09-17: one AFib result per completed scan
+
+**Goal (owner):** every successfully completed face scan returns exactly one of
+AFIB_DETECTED | AFIB_NOT_DETECTED | INCONCLUSIVE, from a consumer camera; Inconclusive
+only when the evidence cannot support a decision. Full freedom to redesign.
+
+**What the literature settles (read 2026-09-17):**
+- Every consumer-camera AF result with clinical numbers is an RR-interval-variability
+  classifier on beats from LIVE, UNCOMPRESSED frames: Cardiio Rhythm on iPhone facial PPG
+  (Yan 2018, JAHA: 217 inpatients, 3x20 s, sens 95 % / spec 96 %), Couderc's VPG on Android
+  (2022, >= 90 %/90 %, >= 100 lux), FibriCheck fingertip camera PPG (1 min; sens 95.6 % /
+  spec 96.6 %; 7-17 % insufficient quality; 8.5 % "inconclusive" in the 2026 head-to-head).
+  The 453-patient facial deep-learning study (Sci Rep 2022) used an 84 fps industrial
+  camera, controlled light and 10 min: 30 s segments reached only 80-95 % sensitivity.
+- Compression is the wall: McDuff 2017 puts the floor for a usable rPPG signal at ~10 Mb/s;
+  Android Chrome caps our recorder at ~7 Mb/s at 480x720 (measured), and our own harness
+  measured cross-region correlation 0.33 (rig) -> 0.16 (phone clip). No server-side
+  algorithm recovers what the codec removed.
+- Facial-video AF datasets are not public (OBF: 100 healthy + 6 AF, on request). Public AF
+  ground truth is RR/PPG: MIT-BIH AFDB, MIMIC PERform AF (Zenodo 6807403, CC-BY, 35 ICU
+  subjects, 19 AF) - the repo already validates on the latter (E6, `models/model_a_v01.json`).
+
+**Decision - the AFib Evidence Engine:**
+1. Interval sources come from live frames (today: the ShenAI train route; next: our own
+   on-device ROI traces); the compressed clip is the VERIFIER (quality, coherence, timing)
+   and the source of the cards, no longer the primary interval source.
+2. The classifier is the validated RR model, not the hand rule. E6b
+   (`scripts/e6_window45.py`, 2026-09-17) re-fits it at OUR window: 910 x 45 s windows,
+   35 subjects, participant-level OOF: AUROC 0.987 at 10 ms timing noise -> 0.967 at 60 ms
+   (3 % false beats), 0.964 at 60 ms / 8 %. Deployment artifact `models/model_a_v02_45s.json`
+   is a pooled fit over 10/20/30/40 ms.
+3. THREE-WAY DECISION BAND from the artifact (`decision_band`): tau_lo 0.474, tau_hi 0.825,
+   set on out-of-fold scores at the phone-like setting (30 ms, 8 % false): decided windows
+   sens 0.954 / spec 0.972 with 9.0 % inconclusive; the same band holds spec >= 0.94 up to
+   40 ms noise and degrades past it (0.90 at 50 ms, 0.79-0.81 at 60 ms) - which is why the
+   existing 40 ms any-call timing gate stays as the precondition. `inference/afib_result.py`
+   maps (outcome, class, probability, gates) -> the result + a basis naming which of
+   capture / signal / rhythm was missing. Sheet: `AFib Result`, `AFib p`, `AFib Basis`.
+   Webapp staging card: the three words as the primary chip; `user_facing_text` verbatim.
+4. STAGING SWITCH (no yaml edit): Railway variable
+   `AFIB_CONFIG_OVERRIDES={"decision.classifier":"model_a","decision.model_a_path":"models/model_a_v02_45s.json"}`
+   - applied through `_apply_overrides` to every job, echoed on every response and on
+   /healthz `launch_overrides`. Without it the interim rule runs and the result layer decides
+   by class (SINUS/HIGH_RATE -> NOT_DETECTED, AFIB_SUGGESTIVE -> DETECTED, OTHER_IRREGULAR ->
+   INCONCLUSIVE). Offline on the retained clips with the switch: the two ShenAI-route scans
+   gave p = 0.007 / 0.003 -> AFIB_NOT_DETECTED.
+
+**Caveats, stated:** MIMIC PERform is ICU ECG-derived RR with SYNTHETIC rPPG degradation,
+35 subjects; no facial-video AF validation exists here or publicly; markov_surprise and
+spectral_entropy are NaN on most 45 s windows and are median-imputed (near-inert).
+The 3-star floor and the AF-call verification gates are unchanged: an AFIB_DETECTED still
+needs coherence >= 0.35 or a two-region timing match, >= 20 intervals, and 3 stars.
+
+**Next (in order):** (a) on-device ROI traces from the live frames (the SDK exposes
+`getNormalizedFaceBbox()`; ~100x cheaper than the abandoned JPEG stream in
+`afibLiveStream.js`; ship beside the clip as a second sidecar for offline validation first;
+production wiring needs `run_with_details` split into ingest + analyse, a hook-protected
+file the owner must open); (b) recorder to 60-70 s so one window holds >= 20 intervals
+even at today's yield; (c) the corroboration rule for the train, revisited with the
+sheet's `ShenAI Route` reasons once ~30 scans exist; (d) real-AF validation through the
+route: the MIMIC PERform PPG channel run through OUR beat detector end to end.
+
 ## Owner decisions on record
 
 | date | decision | evidence |

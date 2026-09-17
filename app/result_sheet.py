@@ -107,6 +107,11 @@ COLUMNS = [
     # used, Rhythm Class/Text/MAD/pNN50/Rate N above are ITS numbers and the
     # video path's own rationale is kept under debug.video_rationale.
     "Rhythm Source", "ShenAI Route", "ShenAI Rate",
+    # 2026-09-17: ONE AFib result per completed scan (inference/afib_result.py)
+    # - AFIB_DETECTED | AFIB_NOT_DETECTED | INCONCLUSIVE - with the classifier's
+    # probability when a probabilistic classifier ran, and the basis: for an
+    # inconclusive, WHICH of capture / signal / rhythm was missing.
+    "AFib Result", "AFib p", "AFib Basis",
 ]
 
 _POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sheet")
@@ -400,6 +405,11 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
         "Rhythm Source": str(doc.get("rhythm_source") or ""),
         "ShenAI Route": _shenai_route_cell(_g(doc, "debug", "shenai_route")),
         "ShenAI Rate": _num(_g(doc, "debug", "shenai_route", "train", "bpm"), 1),
+        "AFib Result": str(doc.get("afib_result") or ""),
+        "AFib p": _num(doc.get("afib_probability"), 3),
+        "AFib Basis": (lambda b: (f"{b.get('category')}: {b.get('why')}" if b.get("category")
+                                  else str(b.get("why") or ""))[:300]
+                       if isinstance(b, dict) else "")(doc.get("afib_result_basis")),
     }
 
 

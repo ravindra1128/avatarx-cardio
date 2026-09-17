@@ -656,10 +656,20 @@ def measure_video_details(video_path: str, *, manifest=None,
 
     cfg = None
     override_notes = []
-    if config_overrides:
+    # Launch-level config overrides (2026-09-17): AFIB_CONFIG_OVERRIDES is a
+    # JSON object of dotted keys, e.g. {"decision.classifier": "model_a",
+    # "decision.model_a_path": "models/model_a_v02_45s.json"} - the staging
+    # switch that turns the validated RR classifier on without editing
+    # configs/*.yaml. Applied through the SAME _apply_overrides as a request's
+    # own overrides (a request's keys win), and echoed on every response and
+    # on /healthz under launch_overrides, so a run under it can never be
+    # mistaken for the yaml default.
+    merged = dict(LAUNCH_CONFIG_OVERRIDES)
+    merged.update(config_overrides or {})
+    if merged:
         from configs import load_config
         cfg = load_config()
-        override_notes = _apply_overrides(cfg, config_overrides)
+        override_notes = _apply_overrides(cfg, merged)
 
     t0 = time.perf_counter()
     result, det = run_with_details(video_path, manifest=manifest or {},
@@ -722,6 +732,10 @@ def measure_video_details(video_path: str, *, manifest=None,
     doc["launch_overrides"] = LAUNCH_OVERRIDES or None
     doc["debug"] = {"rationale": det.get("rationale"),
                     "evidence": det.get("evidence")}
+    # Every completed scan carries exactly one AFib result. The assembled job
+    # recomputes it after the ShenAI route has run; here it is the video
+    # path's own answer, so single-shot callers and replays get one too.
+    _apply_afib_result(doc, det)
     return doc, det
 
 
@@ -739,6 +753,39 @@ SIGNALS_HOLD_MAX = 8
 SHENAI_ROUTE_ON = os.environ.get("AFIB_SHENAI_ROUTE", "1").strip().lower() in (
     "1", "true", "yes", "on")
 SHENAI_WAIT_S = float(os.environ.get("AFIB_SHENAI_WAIT_S", "8"))
+
+
+def _launch_config_overrides() -> dict:
+    raw = os.environ.get("AFIB_CONFIG_OVERRIDES", "").strip()
+    if not raw:
+        return {}
+    try:
+        d = json.loads(raw)
+        if not isinstance(d, dict):
+            raise ValueError("not a JSON object")
+    except ValueError as e:
+        LAUNCH_OVERRIDES["config"] = f"AFIB_CONFIG_OVERRIDES IGNORED ({e})"
+        return {}
+    for k, v in d.items():
+        LAUNCH_OVERRIDES[f"config.{k}"] = str(v)
+    return {str(k): v for k, v in d.items()}
+
+
+LAUNCH_CONFIG_OVERRIDES = _launch_config_overrides()
+
+
+def _apply_afib_result(doc: dict, det: dict) -> None:
+    """ONE AFib result per completed scan (inference/afib_result.py), after
+    every interval source has had its say. Best effort, never raises."""
+    try:
+        from inference.afib_result import afib_result
+        r = afib_result(doc, (det or {}).get("config"))
+        doc["afib_result"] = r["result"]
+        doc["afib_result_basis"] = r["basis"]
+    except Exception as e:                                     # noqa: BLE001
+        doc["afib_result"] = "INCONCLUSIVE"
+        doc["afib_result_basis"] = {"category": "signal",
+                                    "why": f"result layer failed safely: {type(e).__name__}: {e}"}
 
 
 def _hold_signals(upload_id: str, payload: dict) -> None:
@@ -1563,6 +1610,7 @@ class MeasureHandler(BaseHTTPRequestHandler):
         # interval gates alone. Recorded on the doc used or not.
         _apply_shenai_route(doc, det, os.path.basename(os.path.dirname(path)),
                             part_dir=os.path.dirname(path))
+        _apply_afib_result(doc, det)
         if header.get("reference"):
             doc["reference"] = header["reference"]
         if header.get("client_capture"):
