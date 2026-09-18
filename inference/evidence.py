@@ -98,28 +98,38 @@ def _welch_psd(x, fps: float):
 def _fundamental(f, p):
     """Strongest in-band peak with a subharmonic check. Returns (hz, snr):
     snr is the peak's power over the in-band median."""
+    from scipy.signal import find_peaks
+
     lo, hi = SPECTRAL_BAND_HZ
     m = (f >= lo) & (f <= hi)
     if not np.any(m):
         return None, None
     fb, pb = f[m], p[m]
-    # A maximum ON a band edge is the band's edge, not a rhythm: residual
-    # drift piles up in the lowest bin (a "42 bpm" peak on many corpus
-    # regions). Judge strictly inside the band.
-    if fb.size > 2:
-        fb, pb = fb[1:-1], pb[1:-1]
-    k = int(np.argmax(pb))
+    if fb.size < 3 or not np.all(np.isfinite(pb)) or np.any(pb < 0):
+        return None, None
+    # Keep the band-edge bins as neighbours when finding interior peaks.
+    # Removing them before argmax merely moves a declining background's
+    # maximum inward (e.g. from 42 to 45 bpm) without finding a pulse peak.
+    # Flat-topped peaks have a deterministic centre; a flat or monotonic
+    # spectrum has no peak. No power threshold or frequency band is changed.
+    peaks, _ = find_peaks(pb)
+    if not peaks.size:
+        return None, None
+    k = int(peaks[np.argmax(pb[peaks])])
     f1, p1 = float(fb[k]), float(pb[k])
     if not np.isfinite(p1) or p1 <= 0:
         return None, None
     fs = f1 / 2.0
     if fs >= lo:
-        ms = np.abs(fb - fs) <= SUBHARMONIC_TOL_HZ
-        if np.any(ms):
-            j = int(np.argmax(np.where(ms, pb, -np.inf)))
+        # A half-rate alternative must itself be a peak, not the shoulder
+        # of drift or another peak that happens to enter the search window.
+        halves = peaks[np.abs(fb[peaks] - fs) <= SUBHARMONIC_TOL_HZ]
+        if halves.size:
+            j = int(halves[np.argmax(pb[halves])])
             if pb[j] >= SUBHARMONIC_RATIO * p1:
                 f1, p1 = float(fb[j]), float(pb[j])
-    return f1, float(p1 / (float(np.median(pb)) + 1e-12))
+    # Preserve the original interior-band denominator for valid peaks.
+    return f1, float(p1 / (float(np.median(pb[1:-1])) + 1e-12))
 
 
 def spectral_pulse(raw_waveforms: dict, fps: float) -> dict:

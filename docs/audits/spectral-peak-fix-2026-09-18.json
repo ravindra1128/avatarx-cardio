@@ -1,0 +1,352 @@
+{
+  "date": "2026-09-18",
+  "base_build": "7f5cd57f3619",
+  "hypothesis": "Require a local spectral maximum for dominant and subharmonic candidates, preventing boundary drift from becoming a pulse estimate without altering frequency bands or power thresholds.",
+  "profile": {
+    "AFIB_SCALE": "640x480",
+    "AFIB_WINDOW_S": "70",
+    "AFIB_MAX_COLLAPSED_FRACTION": "0.05",
+    "manifest_sha256": "0b5838b27c0542b6e1ac49b25a49f5cdcbc0746dfb04d79a9bc8f27a573c0523",
+    "hypothesis": "Require a local spectral maximum for dominant and subharmonic candidates, preventing boundary drift from becoming a pulse estimate without altering frequency bands or power thresholds."
+  },
+  "new_regression_controls": {
+    "baseline_failed": 11,
+    "baseline_passed": 14,
+    "candidate_passed": 25
+  },
+  "focused_suite_passed": 69,
+  "development_records": 13,
+  "holdout_records": 4,
+  "holdout_repetitions_per_version": 2,
+  "gate": {
+    "decision": "reject",
+    "delta_total": -0.0039,
+    "conditions": {
+      "guard": true,
+      "every_scan_returned": true,
+      "improved": false,
+      "no_regression": true,
+      "not_fluke": false
+    },
+    "reasons": [
+      "no improvement: signal 0.686->0.686, cards 0.750->0.750 (need +0.02)",
+      "only 0 record(s) improved (need >= 3); may be a fluke"
+    ],
+    "improved_records": [],
+    "baseline_metrics": {
+      "returned": 1.0,
+      "signal": 0.6864,
+      "cards": 0.75,
+      "determinism": 1.0,
+      "consistency": 0.5617,
+      "latency": 0.9459,
+      "mean_job_s": 12.865,
+      "card_cvs": [
+        0.1718,
+        0.2219,
+        0.2638
+      ]
+    },
+    "candidate_metrics": {
+      "returned": 1.0,
+      "signal": 0.6864,
+      "cards": 0.75,
+      "determinism": 1.0,
+      "consistency": 0.5617,
+      "latency": 0.9267,
+      "mean_job_s": 13.3375,
+      "card_cvs": [
+        0.1718,
+        0.2219,
+        0.2638
+      ]
+    }
+  },
+  "guard": {
+    "ok": true,
+    "violations": [],
+    "changed_files": [
+      "inference/evidence.py"
+    ],
+    "snapshot_head": "7f5cd57f3619a33f5a62fde4965b05f14bb23b56",
+    "symbols_now": {
+      "capture/ingest.py::MIN_FINITE_FRACTION": 0.98,
+      "capture/ingest.py::MAX_COLLAPSED_INTERVAL_FRACTION": 0.02,
+      "capture/ingest.py::CONSUMER_FPS_FLOOR": 24.0,
+      "datasets/schema.py::FPS_FLOOR_BEAT": 30.0,
+      "datasets/schema.py::BPP_FLOOR": 0.12,
+      "datasets/schema.py::CRF_CEILING": 18.0
+    }
+  },
+  "per_record": {
+    "tune": [
+      {
+        "id": "demo_3be50282471d",
+        "changed": {},
+        "nonpeak_selections_before": 0,
+        "nonpeak_selections_after": 0,
+        "deterministic": null,
+        "repeat_n": null,
+        "job_before_s": 8.77,
+        "job_after_s": 9.45
+      },
+      {
+        "id": "demo_3e0d3144ad12",
+        "changed": {},
+        "nonpeak_selections_before": 0,
+        "nonpeak_selections_after": 0,
+        "deterministic": null,
+        "repeat_n": null,
+        "job_before_s": 8.73,
+        "job_after_s": 8.28
+      },
+      {
+        "id": "demo_7f569c31c6db",
+        "changed": {},
+        "nonpeak_selections_before": 0,
+        "nonpeak_selections_after": 0,
+        "deterministic": null,
+        "repeat_n": null,
+        "job_before_s": 8.75,
+        "job_after_s": 8.78
+      },
+      {
+        "id": "demo_90086c783b78",
+        "changed": {},
+        "nonpeak_selections_before": 0,
+        "nonpeak_selections_after": 0,
+        "deterministic": null,
+        "repeat_n": null,
+        "job_before_s": 10.09,
+        "job_after_s": 9.16
+      },
+      {
+        "id": "demo_b4fd5b565662",
+        "changed": {},
+        "nonpeak_selections_before": 0,
+        "nonpeak_selections_after": 0,
+        "deterministic": null,
+        "repeat_n": null,
+        "job_before_s": 7.37,
+        "job_after_s": 5.94
+      },
+      {
+        "id": "demo_c2af2e2f14cb",
+        "changed": {},
+        "nonpeak_selections_before": 0,
+        "nonpeak_selections_after": 0,
+        "deterministic": null,
+        "repeat_n": null,
+        "job_before_s": 9.03,
+        "job_after_s": 9.02
+      },
+      {
+        "id": "demo_ca903e56ec5f",
+        "changed": {},
+        "nonpeak_selections_before": 0,
+        "nonpeak_selections_after": 0,
+        "deterministic": null,
+        "repeat_n": null,
+        "job_before_s": 10.6,
+        "job_after_s": 11.81
+      },
+      {
+        "id": "demo_ec35f3950358",
+        "changed": {},
+        "nonpeak_selections_before": 0,
+        "nonpeak_selections_after": 0,
+        "deterministic": null,
+        "repeat_n": null,
+        "job_before_s": 12.13,
+        "job_after_s": 11.33
+      },
+      {
+        "id": "webapp_1234567890-0fe54b.webm.scaled",
+        "changed": {},
+        "nonpeak_selections_before": 0,
+        "nonpeak_selections_after": 0,
+        "deterministic": null,
+        "repeat_n": null,
+        "job_before_s": 12.46,
+        "job_after_s": 13.14
+      },
+      {
+        "id": "webapp_1234567890-95cc7e.webm.scaled",
+        "changed": {},
+        "nonpeak_selections_before": 0,
+        "nonpeak_selections_after": 0,
+        "deterministic": null,
+        "repeat_n": null,
+        "job_before_s": 8.62,
+        "job_after_s": 13.17
+      },
+      {
+        "id": "webapp_1234567890-b45221.webm.scaled",
+        "changed": {},
+        "nonpeak_selections_before": 0,
+        "nonpeak_selections_after": 0,
+        "deterministic": null,
+        "repeat_n": null,
+        "job_before_s": 10.13,
+        "job_after_s": 13.81
+      },
+      {
+        "id": "webapp_1234567890-d2da8e",
+        "changed": {},
+        "nonpeak_selections_before": 0,
+        "nonpeak_selections_after": 0,
+        "deterministic": null,
+        "repeat_n": null,
+        "job_before_s": 40.53,
+        "job_after_s": 44.18
+      },
+      {
+        "id": "webapp_1234567890-dbafd9.webm.scaled",
+        "changed": {},
+        "nonpeak_selections_before": 0,
+        "nonpeak_selections_after": 0,
+        "deterministic": null,
+        "repeat_n": null,
+        "job_before_s": 13.23,
+        "job_after_s": 13.89
+      }
+    ],
+    "holdout": [
+      {
+        "id": "demo_93407fcd7873",
+        "changed": {},
+        "nonpeak_selections_before": 0,
+        "nonpeak_selections_after": 0,
+        "deterministic": true,
+        "repeat_n": 2,
+        "job_before_s": 10.87,
+        "job_after_s": 10.81
+      },
+      {
+        "id": "webapp_1234567890-0ff908.webm.scaled",
+        "changed": {},
+        "nonpeak_selections_before": 0,
+        "nonpeak_selections_after": 0,
+        "deterministic": true,
+        "repeat_n": 2,
+        "job_before_s": 8.36,
+        "job_after_s": 8.09
+      },
+      {
+        "id": "webapp_1234567890-9b3023.webm.scaled",
+        "changed": {},
+        "nonpeak_selections_before": 0,
+        "nonpeak_selections_after": 0,
+        "deterministic": true,
+        "repeat_n": 2,
+        "job_before_s": 10.74,
+        "job_after_s": 10.66
+      },
+      {
+        "id": "webapp_1234567890-ebe749",
+        "changed": {
+          "spectral": {
+            "before": {
+              "pulse_lattice_bpm": 75.83142663978701,
+              "pulse_spectral_bpm": 66.0,
+              "pulse_spectral_snr": 3.71,
+              "pulse_spectral_roi_bpm": {
+                "forehead": 72.0,
+                "cheek_l": 45.0,
+                "cheek_r": 66.0,
+                "nose": 63.0
+              },
+              "pulse_spectral_roi_agree": 3,
+              "pulse_agreement": 0.149
+            },
+            "after": {
+              "pulse_lattice_bpm": 75.83142663978701,
+              "pulse_spectral_bpm": 66.0,
+              "pulse_spectral_snr": 3.71,
+              "pulse_spectral_roi_bpm": {
+                "forehead": 72.0,
+                "cheek_l": 81.0,
+                "cheek_r": 66.0,
+                "nose": 63.0
+              },
+              "pulse_spectral_roi_agree": 3,
+              "pulse_agreement": 0.149
+            }
+          }
+        },
+        "nonpeak_selections_before": 1,
+        "nonpeak_selections_after": 0,
+        "deterministic": true,
+        "repeat_n": 2,
+        "job_before_s": 21.49,
+        "job_after_s": 23.79
+      }
+    ]
+  },
+  "patch": "data/eval_cache/spectral_peak_20260918/spectral_peak_fix.patch",
+  "patch_sha256": "98abaa94c99308a34bcb4b4443e4d60c73bdaf0f80abb6089b9aa48df44fb57f",
+  "active_code_restored": false,
+  "deployed": false,
+  "owner_exception_approved": true,
+  "corpus_hashes_verified_unchanged": true,
+  "limitations": [
+    "No paired ECG or new retained phone videos.",
+    "All four holdouts abstain, so AFib classification performance is not measurable here.",
+    "No improvement in aggregate signal quality, card availability or card consistency.",
+    "One regional spectral selection changes 45 to 81 bpm; no claim that 81 bpm is clinically correct.",
+    "Same-spectrum peak/median ratio is not independent beat confirmation.",
+    "Average server time 12.865 to 13.3375 seconds; latency remains within configured aggregate slack."
+  ],
+  "owner_approval": {
+    "request": "Approve deploying the specific spectral correction to cardio-codex as a correctness exception",
+    "response": "i am givng you approvance",
+    "scope": "spectral_peak_fix.patch only; original optimizer reject remains on record"
+  },
+  "release_validation": {
+    "status": "complete_with_five_documented_preexisting_failures",
+    "full_suite_first_attempt": {
+      "passed": 916,
+      "failed": 6,
+      "skipped": 3,
+      "error_events": 302,
+      "duration_s": 2551.05,
+      "known_failure_count": 5,
+      "resource_affected_distinct_tests": 152,
+      "resource_failure": "OSError: [Errno 28] No space left on device during synthetic video generation",
+      "log": "data/eval_cache/spectral_peak_20260918/release_full_tests.log"
+    },
+    "recovery": "Removed only this completed run temporary pytest-257 fixtures, freeing approximately 23 GiB; retry affected nodes serially by module with per-module fixture cleanup. No test exclusions added.",
+    "retry": {
+      "tests": 152,
+      "passed": 152,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "modules": 15,
+      "summary": "data/eval_cache/spectral_peak_20260918/release_retry_summary.json"
+    },
+    "combined_distinct_tests": {
+      "total": 1076,
+      "passed": 1068,
+      "skipped": 3,
+      "documented_failures": 5,
+      "additional_failures": 0
+    },
+    "documented_failing_tests": [
+      "tests/test_false_positive_guards.py::test_existing_af_preservation_test_still_green",
+      "tests/test_fitness_harness.py::test_transition_sensitivity_shrinks_hrr60",
+      "tests/test_flutter_harness.py::test_combined_referral_is_a_pure_fusion_that_names_nothing",
+      "tests/test_regularity_equivalence.py::test_afib_and_flutter_are_bit_identical_to_the_golden",
+      "tests/test_scan_engine.py::test_low_signal_scan_completes_but_never_forces_a_result"
+    ],
+    "full_suite_green": false,
+    "parent_ci_session_flow_failure": "Passed locally in this release run; parent Actions run failed its wall-clock transition assertion."
+  },
+  "deployment_route": {
+    "repository": "ravindra1128/avatarx-cardio-codex",
+    "repository_variables": [],
+    "repository_secret_names": [],
+    "interpretation": "Actions deployment job is unconfigured; verify the existing Railway GitHub integration via the live health build. No infrastructure changes made."
+  },
+  "deployment_status_at_commit": "approved and locally verified; live deployment receipt will be recorded separately after push"
+}
