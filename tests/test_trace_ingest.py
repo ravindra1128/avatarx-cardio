@@ -207,3 +207,32 @@ def test_measure_traces_endpoint_runs_and_writes_a_row(monkeypatch):
     code, doc = h.sent[-1]
     assert code == 200 and doc["afib_result"] == "AFIB_NOT_DETECTED"
     assert doc["predicted_class"] == "SINUS" and appended.get("doc") is doc
+
+
+def test_a_clipped_region_keeps_the_frames_and_still_reads_the_pulse():
+    """First mobile scan (2026-09-18): the forehead clipped off the top of a
+    portrait frame and was null on almost every frame; requiring all four
+    regions collapsed a 60 s scan to ~3 s. Two good regions must be enough."""
+    from configs import load_config
+    doc = _doc(seconds=45.0, bpm=72.0)
+    n = len(doc["t_s"])
+    doc["traces"]["forehead"] = [None] * n            # forehead clipped throughout
+    ing = ti.ingest_traces(doc, upload_id="clip1")
+    assert ing.ok, ing.reasons
+    assert ing.timestamps_s.size >= 0.95 * n          # frames kept, not collapsed
+    assert any("not used" in c for c in ing.capture_caveats)
+    res, det = ti.run_on_traces(doc, manifest={"capture_profile": "consumer"},
+                                config=load_config(), upload_id="clip1")
+    assert res.outcome.value == "ACCEPT" and res.predicted_class == "SINUS"
+    assert abs(res.mean_pulse_rate_bpm - 72.0) <= 3.0
+
+    # two regions clipped still works (fusion floor is 2); three fails closed
+    doc2 = _doc(seconds=45.0, bpm=72.0)
+    for r in ("forehead", "cheek_l"):
+        doc2["traces"][r] = [None] * n
+    assert ti.ingest_traces(doc2, upload_id="clip2").ok
+    doc3 = _doc(seconds=45.0, bpm=72.0)
+    for r in ("forehead", "cheek_l", "cheek_r"):
+        doc3["traces"][r] = [None] * n
+    bad = ti.ingest_traces(doc3, upload_id="clip3")
+    assert not bad.ok  # 1 region present per frame -> no usable frames, fails closed

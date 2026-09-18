@@ -51,7 +51,8 @@ from preprocessing.roi import ROI_NAMES
 SCHEME = "traces://"
 MIN_SECONDS = 3.0
 MAX_FRAMES = 5000                 # ~166 s at 30 fps; the recorder keeps 48 s
-MIN_FINITE_FRACTION = 0.98        # same bar capture/ingest.py holds a video to
+MIN_PRESENT_ROIS = 2              # a frame counts if >= this many regions are present
+GOOD_ROI_FRACTION = 0.5           # a region present less than this is flat-filled, not trusted
 
 _REGISTRY: dict = {}
 _LOCK = threading.Lock()
@@ -103,10 +104,15 @@ def _ingest(payload, profile, exposure_locked, awb_locked, rig, upload_id):
     t = t[:n]
     tr = payload.get("traces") if isinstance(payload.get("traces"), dict) else {}
     rois = {r: _rows(tr.get(r), n) for r in ROI_NAMES}
-    found = np.ones(n, bool)
+    # A frame stays on the clock when at least MIN_PRESENT_ROIS regions are
+    # present, not all four: fusion needs only two, and on a phone held close
+    # in portrait the forehead often clips off the top of the frame. Requiring
+    # all four dropped those frames and collapsed a 60 s scan to ~3 s
+    # (first mobile scan, 2026-09-18). The missing regions are handled below.
+    present = np.zeros(n, int)
     for r in ROI_NAMES:
-        found &= np.isfinite(rois[r]).all(axis=1)
-    found &= np.isfinite(t)
+        present += np.isfinite(rois[r]).all(axis=1).astype(int)
+    found = (present >= MIN_PRESENT_ROIS) & np.isfinite(t)
     # monotone clock: a frame whose time does not advance is dropped, as the
     # video reader repairs the same fault
     keep = found.copy()
@@ -154,16 +160,37 @@ def _ingest(payload, profile, exposure_locked, awb_locked, rig, upload_id):
                          longest_gap_s=float(longest / fps) if fps else 0.0,
                          stability=stability, tracker="client-sdk-bbox")
 
-    traces = {r: rois[r][keep] for r in ROI_NAMES}
+    # Per region over the kept frames: interpolate short gaps in a region that
+    # is mostly present; flat-fill (its own median, no invented pulse) a region
+    # present less than GOOD_ROI_FRACTION so a clipped forehead neither drops
+    # frames nor NaN-poisons SQI. Fail only when fewer than two regions are
+    # stable — then the scan genuinely cannot support cross-region fusion.
+    traces = {}
+    roi_finite = {}
+    good_rois = []
+    for r in ROI_NAMES:
+        a = rois[r][keep].astype(float)
+        fin = np.isfinite(a).all(axis=1)
+        roi_finite[r] = float(fin.mean()) if fin.size else 0.0
+        if fin.sum() >= 2 and roi_finite[r] >= GOOD_ROI_FRACTION:
+            good_rois.append(r)
+            if not fin.all():                        # interpolate the short gaps
+                xf = ts[fin]
+                for c in range(3):
+                    a[:, c] = np.interp(ts, xf, a[fin, c])
+        else:                                        # unreliable region: flat, no pulse
+            med = np.nanmedian(a) if np.any(np.isfinite(a)) else 128.0
+            a[~np.isfinite(a)] = med
+        traces[r] = a
     if n_kept < 2 or (ts[-1] - ts[0]) < MIN_SECONDS:
         return IngestResult(ok=False,
                             reasons=[f"only {n_kept} usable frames "
                                      f"({(ts[-1] - ts[0]) if n_kept > 1 else 0:.1f} s) in the "
                                      f"trace document (need {MIN_SECONDS:.0f} s)"],
                             track=track, capture_profile=profile)
-    luma_all = np.mean([0.299 * traces[r][:, 0] + 0.587 * traces[r][:, 1] + 0.114 * traces[r][:, 2]
-                        for r in ROI_NAMES], axis=0)
-    face_luma = float(np.median(luma_all))
+    luma_all = np.nanmean([0.299 * traces[r][:, 0] + 0.587 * traces[r][:, 1] + 0.114 * traces[r][:, 2]
+                           for r in good_rois], axis=0)
+    face_luma = float(np.nanmedian(luma_all))
     face_lux = LUX_PROXY_AT_LUMA_160 * face_luma / 160.0
     dup = 0
     if n_kept > 1:
@@ -202,11 +229,16 @@ def _ingest(payload, profile, exposure_locked, awb_locked, rig, upload_id):
     if photometric["uneven_frame_fraction"] > 0.25:
         caveats.append(f"uneven facial illumination in "
                        f"{photometric['uneven_frame_fraction']:.0%} of tracked frames")
-    finite = min(float(np.isfinite(traces[r]).all(axis=1).mean()) for r in ROI_NAMES)
-    if finite < MIN_FINITE_FRACTION:
-        return IngestResult(ok=False, reasons=["trace document has non-finite region samples"],
-                            meta=meta, capture=capture, track=track,
-                            capture_caveats=caveats, capture_profile=profile)
+    if len(good_rois) < 2:
+        return IngestResult(ok=False, meta=meta, capture=capture, track=track,
+                            capture_caveats=caveats, capture_profile=profile,
+                            reasons=[f"only {len(good_rois)} stable face region(s) "
+                                     f"(need 2); per-region presence "
+                                     + ", ".join(f"{r} {100 * roi_finite[r]:.0f}%" for r in ROI_NAMES)])
+    weak = [r for r in ROI_NAMES if r not in good_rois]
+    if weak:
+        caveats = caveats + ["region(s) mostly out of frame, not used: "
+                             + ", ".join(f"{r} ({100 * roi_finite[r]:.0f}% present)" for r in weak)]
     return IngestResult(ok=True, meta=meta, capture=capture, traces=traces,
                         timestamps_s=ts, track=track, capture_caveats=caveats,
                         capture_profile=profile, photometric=photometric)

@@ -340,6 +340,13 @@ with its own camera and its own landmarks, no ShenAI, no clip.
   `AFIB_CONFIG_OVERRIDES`, and returns the same response shape as a video scan
   (afib_result, biomarkers, user_facing_text); synchronous, takes a worker slot, writes a
   sheet row. `rhythm_source="client_traces"`.
+- First mobile scan (2026-09-18) collapsed to ~3 s captured of 60 s: the forehead clipped
+  off the top of the portrait frame and `trace_ingest` had required ALL FOUR regions per
+  frame, dropping every frame with a null forehead. Fixed: a frame is kept when >= 2
+  regions are present (fusion's floor); short gaps in a good region are interpolated, a
+  region present < 50 % is flat-filled (no invented pulse) and named in a caveat; the scan
+  fails only when < 2 regions are stable. The standalone result now also fills the sheet's
+  Trace* columns (fps, captured fraction, frames) so a short mobile scan is diagnosable.
 - WHY it should beat both: uncompressed frames (no codec floor) AND landmark-precise
   regions (unlike the box+oval traces) AND no SDK contention (ShenAI absent). Untested on a
   phone yet: the first live scans tell whether MediaPipe on the device holds >= 30 fps and

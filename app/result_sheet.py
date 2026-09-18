@@ -283,6 +283,25 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
     fit = _card(items, "cardiorespiratory_fitness")
     fit_d = (items.get("cardiorespiratory_fitness") or {}).get("details") or {}
     tp = _g(doc, "debug", "trace_path") or {}
+    # Standalone /beta/cardio-afib scan (rhythm_source client_traces): it has no
+    # sideband trace_path, but the same Trace* columns should show its capture
+    # so a short/weak mobile scan is diagnosable from the row. Map its own
+    # trace_ingest + result into tp when the sideband is absent.
+    if not tp and doc.get("rhythm_source") == "client_traces":
+        ti = _g(doc, "trace_ingest") or {}
+        ev = _g(doc, "debug", "evidence") or {}
+        tp = {"ran": True, "outcome": doc.get("outcome"),
+              "afib_result": doc.get("afib_result"), "afib_probability": doc.get("afib_probability"),
+              "sqi": doc.get("signal_quality_index"),
+              "coherence": ev.get("cross_roi_coherence"), "timing_ms": ev.get("timing_precision_ms"),
+              "n_intervals": ev.get("n_intervals"),
+              "coverage": (ti.get("duration_s") and ev.get("captured_seconds") is not None
+                           and round(ev["captured_seconds"] / ti["duration_s"], 2)) or None,
+              "pulse_bpm": doc.get("mean_pulse_rate_bpm"), "fps": ti.get("fps"),
+              "no_read_reasons": (list(doc.get("no_read_reasons") or [])
+                                  + [c for c in (ti.get("reasons") or [])]
+                                  + [f"{ti.get('n_frames')} frames / {ti.get('duration_s')}s captured"
+                                     if ti.get("n_frames") else ""])}
     ex = extra or {}
     ref = doc.get("reference") or {}
     cap = doc.get("client_capture") or {}
