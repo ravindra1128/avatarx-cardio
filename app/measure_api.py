@@ -84,14 +84,17 @@ _INFLIGHT_LOCK = threading.Lock()
 # no bytes move, and a phone on a mobile radio does not always survive that
 # quiet stretch — 2026-09-09 a scan died with ERR_HTTP2_PING_FAILED after the
 # work was done, and the completed analysis was thrown away because the socket
-# it belonged to was gone. Results are held briefly by session id so the
-# client can come back and collect one instead of re-recording and re-uploading
-# 30 MB. In memory only, small and short-lived: this is a delivery retry, not
-# storage, and the tracking sheet remains the durable record.
+# it belonged to was gone. Results are held briefly by unique upload ID so
+# the client can collect its own scan without recording and uploading again.
+# The bounded memory cache is backed by a TTL-limited SQLite result store so
+# eviction does not lose unexpired results. AFIB_RESULT_DB must point
+# to a persistent volume to survive container replacement; uploads stay transient.
 RESULT_TTL_S = float(os.environ.get("AFIB_RESULT_TTL_S", "900"))    # 15 min
 MAX_CACHED_RESULTS = int(os.environ.get("AFIB_MAX_CACHED_RESULTS", "32"))
 _RESULTS: "OrderedDict[str, tuple]" = OrderedDict()
 _RESULTS_LOCK = threading.Lock()
+from app.result_store import ResultStore
+_RESULT_STORE = ResultStore(os.environ.get("AFIB_RESULT_DB") or WORK_DIR / "results.sqlite3", RESULT_TTL_S)
 
 
 def _remember_result(session, doc: dict) -> None:
@@ -101,8 +104,15 @@ def _remember_result(session, doc: dict) -> None:
     # additive fields do not classify a transport/runtime failure as a rhythm.
     doc["upload_id"] = doc["scan_id"] = str(session)
     doc["analysis_state"] = "failed" if doc.get("error") else "complete"
+    created = time.time()
+    doc["result_recovery"] = {"persisted": True, "expires_at_unix": created + RESULT_TTL_S,
+                              "scope": "completed_results_on_this_filesystem"}
+    stored = _RESULT_STORE.put(str(session), doc, created=created)
+    doc["result_recovery"]["persisted"] = stored
+    if not stored:
+        print(f"[measure] result recovery storage unavailable: {_RESULT_STORE.last_error}", flush=True)
     with _RESULTS_LOCK:
-        _RESULTS[str(session)] = (time.time(), doc)
+        _RESULTS[str(session)] = (created, doc)
         _RESULTS.move_to_end(str(session))
         while len(_RESULTS) > MAX_CACHED_RESULTS:
             _RESULTS.popitem(last=False)
@@ -444,7 +454,9 @@ def _recall_result(session):
                   if now - ts > RESULT_TTL_S]:
             _RESULTS.pop(k, None)
         item = _RESULTS.get(str(session or ""))
-    return None if item is None else item[1]
+    if item is not None:
+        return item[1]
+    return _RESULT_STORE.get(str(session)) if session else None
 _STARTED_AT = time.time()
 # Say which way the gate is set, ONCE, in the private service log. A gate that
 # failed silently cost eight real scans of nothing on 2026-09-12. The public
@@ -857,6 +869,8 @@ def _apply_shenai_route(doc: dict, det: dict, upload_id: str, part_dir=None,
                 "received": isinstance(raw, dict), "transport": transport,
                 "state": "summary_failed", "error_type": type(summary_error).__name__}
         from app.scan_evidence import record_summary, shenai_evidence_summary
+        from app.afib_response import capture_diagnostic_summary
+        record_summary(doc, "client_capture_diagnostics", capture_diagnostic_summary, raw)
         record_summary(doc, "shenai_assessment", shenai_evidence_summary, raw, det)
         if not SHENAI_ROUTE_ON:
             rec = {"route": shenai_route.ROUTE_NAME, "attempted": False, "used": False,
@@ -1150,10 +1164,12 @@ class MeasureHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if urlparse(self.path).path in ("/healthz", "/api/healthz"):
+            _RESULT_STORE.purge()
             self._json(200, {"ok": True, "service": "afib-measure",
                              "build": BUILD_SHA,
                              "uptime_s": int(time.time() - _STARTED_AT),
                              "inflight_jobs": _inflight(0),
+                             "result_recovery": _RESULT_STORE.status(),
                              "launch_overrides": LAUNCH_OVERRIDES or None,
                              "sheet": result_sheet.status(),
                              "max_concurrent": MAX_CONCURRENT,
@@ -1727,7 +1743,8 @@ class MeasureHandler(BaseHTTPRequestHandler):
         # it has had the whole 20-45 s of this job to land - and _retain_clip,
         # which ran before the job was even queued, will have missed it.
         _pair_shenai(os.path.dirname(path), doc)
-        return doc
+        from app.afib_response import finalize_afib_response
+        return finalize_afib_response(doc)
 
     @staticmethod
     def _run(video_bytes: bytes, header: dict) -> dict:

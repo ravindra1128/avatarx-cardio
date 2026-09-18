@@ -120,6 +120,9 @@ COLUMNS = [
     "SDK Clean RMSSD ms", "SDK RMSSD Relative Error", "SDK Video Alignment", "SDK Audit Issues",
     "SDK Train Checks",
     "Video ROI Excluded Frames", "Video ROI Edge Loss s", "ROI Step p99 ms",
+    "AFib Result", "Capture Diagnostics", "SDK Version", "Capture Scope",
+    "Client Adjacent Frame p99 ms", "Client Callback p99 ms", "Client Unobserved Frames",
+    "Client Clock Reversals", "Client Hidden s", "SDK Live Quality Mean", "SDK Live Quality Min",
 ]
 
 _POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sheet")
@@ -270,6 +273,7 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
     dsc = doc.get("downscale") or {}
     vd = _g(doc, "debug", "video_duration", default={}) or {}
     saudit = _g(doc, "debug", "shenai_assessment", default={}) or {}
+    cd = _g(doc, "debug", "client_capture_diagnostics", default={}) or {}
     items = {i.get("key"): i for i in _g(doc, "biomarkers", "items", default=[]) or []
              if isinstance(i, dict)}
     pulse = ""
@@ -300,6 +304,17 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
     beats_n = _first(sa.get("beats_n"), _g(sa, "measurement", "beats_n"),
                      len(sa["heartbeats"]) if isinstance(sa.get("heartbeats"), list) else None)
     return {
+        "AFib Result": doc.get("afib_result") or "",
+        "Capture Diagnostics": cd.get("probe_state") or cd.get("state") or "",
+        "SDK Version": cd.get("sdk_version") or "",
+        "Capture Scope": cd.get("scope") or "",
+        "Client Adjacent Frame p99 ms": _num(_g(cd, "frames", "adjacent_frame_steps", "p99_ms"), 1),
+        "Client Callback p99 ms": _num(_g(cd, "frames", "callback_steps", "p99_ms"), 1),
+        "Client Unobserved Frames": _g(cd, "frames", "unobserved_presented_frames", default=""),
+        "Client Clock Reversals": _g(cd, "frames", "backward_steps", default=""),
+        "Client Hidden s": _num(cd.get("hidden_ms") / 1000 if isinstance(cd.get("hidden_ms"), (int, float)) else None, 2),
+        "SDK Live Quality Mean": _num(_g(cd, "quality", "mean"), 3),
+        "SDK Live Quality Min": _num(_g(cd, "quality", "min"), 3),
         "Timestamp (UTC)": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
         "Session": doc.get("session") or "",
         "Build": ex.get("build") or "",

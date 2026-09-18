@@ -1,0 +1,281 @@
+{
+  "date": "2026-09-18",
+  "active_classifier_changed": false,
+  "quality_thresholds_changed": false,
+  "new_video_retention": false,
+  "service_tests_passed": 130,
+  "frontend_tests_passed": 129,
+  "frontend_build": "passed",
+  "matching": {
+    "state": "tested_pending_owner_exception",
+    "unit_tests_passed": 9,
+    "guard": {
+      "ok": true,
+      "violations": [],
+      "changed_files": [
+        "inference/decision_logic.py"
+      ],
+      "snapshot_head": "ceceec526caaed6a900de97a92fd1db5f642c5bf",
+      "symbols_now": {
+        "capture/ingest.py::MIN_FINITE_FRACTION": 0.98,
+        "capture/ingest.py::MAX_COLLAPSED_INTERVAL_FRACTION": 0.02,
+        "capture/ingest.py::CONSUMER_FPS_FLOOR": 24.0,
+        "datasets/schema.py::FPS_FLOOR_BEAT": 30.0,
+        "datasets/schema.py::BPP_FLOOR": 0.12,
+        "datasets/schema.py::CRF_CEILING": 18.0
+      }
+    },
+    "verdict": {
+      "decision": "reject",
+      "delta_total": 0.0067,
+      "conditions": {
+        "guard": true,
+        "every_scan_returned": true,
+        "improved": false,
+        "no_regression": true,
+        "not_fluke": false
+      },
+      "reasons": [
+        "no improvement: signal 0.660->0.667, cards 0.750->0.750 (need +0.02)",
+        "only 2 record(s) improved (need >= 3); may be a fluke"
+      ],
+      "improved_records": [
+        "webapp_1234567890-9b3023.webm.scaled",
+        "webapp_1234567890-ebe749"
+      ],
+      "baseline_metrics": {
+        "returned": 1.0,
+        "signal": 0.6603,
+        "cards": 0.75,
+        "determinism": 1.0,
+        "consistency": 0.652,
+        "latency": 1.0,
+        "mean_job_s": 7.9225,
+        "card_cvs": [
+          0.1721,
+          0.1977,
+          0.1523
+        ]
+      },
+      "candidate_metrics": {
+        "returned": 1.0,
+        "signal": 0.667,
+        "cards": 0.75,
+        "determinism": 1.0,
+        "consistency": 0.652,
+        "latency": 1.0,
+        "mean_job_s": 8.465,
+        "card_cvs": [
+          0.1721,
+          0.1977,
+          0.1523
+        ]
+      }
+    },
+    "per_record": [
+      {
+        "id": "demo_93407fcd7873",
+        "timing_ms": [
+          33.2839309316566,
+          33.2839309316566
+        ],
+        "outcomes": [
+          "REPEAT_SCAN",
+          "REPEAT_SCAN"
+        ],
+        "cards_unchanged": true,
+        "gates_unchanged": true,
+        "deterministic": true
+      },
+      {
+        "id": "webapp_1234567890-0ff908.webm.scaled",
+        "timing_ms": [
+          null,
+          null
+        ],
+        "outcomes": [
+          "NO_RESULT",
+          "NO_RESULT"
+        ],
+        "cards_unchanged": true,
+        "gates_unchanged": true,
+        "deterministic": true
+      },
+      {
+        "id": "webapp_1234567890-9b3023.webm.scaled",
+        "timing_ms": [
+          48.647225720241494,
+          46.870689030837575
+        ],
+        "outcomes": [
+          "REPEAT_SCAN",
+          "REPEAT_SCAN"
+        ],
+        "cards_unchanged": true,
+        "gates_unchanged": true,
+        "deterministic": true
+      },
+      {
+        "id": "webapp_1234567890-ebe749",
+        "timing_ms": [
+          54.59100444601361,
+          49.54092621510853
+        ],
+        "outcomes": [
+          "REPEAT_SCAN",
+          "REPEAT_SCAN"
+        ],
+        "cards_unchanged": true,
+        "gates_unchanged": true,
+        "deterministic": true
+      }
+    ],
+    "patch": "data/eval_cache/contract_fixes_20260918/matching_fix.patch",
+    "patch_sha256": "3eb8309a874ff729069a8321cdc9f00833eebdaae3b08dfa8537f67496af7e10"
+  },
+  "sdk_validation": {
+    "state": "tested_pending_owner_exception",
+    "unit_tests_passed": 31,
+    "guard": {
+      "ok": true,
+      "violations": [],
+      "changed_files": [
+        "inference/shenai_input.py",
+        "inference/shenai_route.py"
+      ],
+      "snapshot_head": "ceceec526caaed6a900de97a92fd1db5f642c5bf",
+      "symbols_now": {
+        "capture/ingest.py::MIN_FINITE_FRACTION": 0.98,
+        "capture/ingest.py::MAX_COLLAPSED_INTERVAL_FRACTION": 0.02,
+        "capture/ingest.py::CONSUMER_FPS_FLOOR": 24.0,
+        "datasets/schema.py::FPS_FLOOR_BEAT": 30.0,
+        "datasets/schema.py::BPP_FLOOR": 0.12,
+        "datasets/schema.py::CRF_CEILING": 18.0
+      }
+    },
+    "verdict": {
+      "decision": "reject",
+      "delta_total": -0.0069,
+      "conditions": {
+        "guard": true,
+        "every_scan_returned": true,
+        "improved": false,
+        "no_regression": true,
+        "not_fluke": false
+      },
+      "reasons": [
+        "no improvement: signal 0.660->0.660, cards 0.750->0.750 (need +0.02)",
+        "only 0 record(s) improved (need >= 3); may be a fluke"
+      ],
+      "improved_records": [],
+      "baseline_metrics": {
+        "returned": 1.0,
+        "signal": 0.6603,
+        "cards": 0.75,
+        "determinism": 1.0,
+        "consistency": 0.652,
+        "latency": 1.0,
+        "mean_job_s": 7.9225,
+        "card_cvs": [
+          0.1721,
+          0.1977,
+          0.1523
+        ]
+      },
+      "candidate_metrics": {
+        "returned": 1.0,
+        "signal": 0.6603,
+        "cards": 0.75,
+        "determinism": 1.0,
+        "consistency": 0.652,
+        "latency": 0.9657,
+        "mean_job_s": 12.0125,
+        "card_cvs": [
+          0.1721,
+          0.1977,
+          0.1523
+        ]
+      }
+    },
+    "per_record": [
+      {
+        "id": "demo_93407fcd7873",
+        "unchanged": {
+          "outcome": true,
+          "no_read_reasons": true,
+          "sqi": true,
+          "stars": true,
+          "coherence": true,
+          "timing_ms": true,
+          "n_intervals": true,
+          "n_beats": true,
+          "dropout_rate": true,
+          "coverage": true,
+          "gates_failed": true,
+          "cards": true,
+          "returned": true,
+          "deterministic": true
+        }
+      },
+      {
+        "id": "webapp_1234567890-0ff908.webm.scaled",
+        "unchanged": {
+          "outcome": true,
+          "no_read_reasons": true,
+          "sqi": true,
+          "stars": true,
+          "coherence": true,
+          "timing_ms": true,
+          "n_intervals": true,
+          "n_beats": true,
+          "dropout_rate": true,
+          "coverage": true,
+          "gates_failed": true,
+          "cards": true,
+          "returned": true,
+          "deterministic": true
+        }
+      },
+      {
+        "id": "webapp_1234567890-9b3023.webm.scaled",
+        "unchanged": {
+          "outcome": true,
+          "no_read_reasons": true,
+          "sqi": true,
+          "stars": true,
+          "coherence": true,
+          "timing_ms": true,
+          "n_intervals": true,
+          "n_beats": true,
+          "dropout_rate": true,
+          "coverage": true,
+          "gates_failed": true,
+          "cards": true,
+          "returned": true,
+          "deterministic": true
+        }
+      },
+      {
+        "id": "webapp_1234567890-ebe749",
+        "unchanged": {
+          "outcome": true,
+          "no_read_reasons": true,
+          "sqi": true,
+          "stars": true,
+          "coherence": true,
+          "timing_ms": true,
+          "n_intervals": true,
+          "n_beats": true,
+          "dropout_rate": true,
+          "coverage": true,
+          "gates_failed": true,
+          "cards": true,
+          "returned": true,
+          "deterministic": true
+        }
+      }
+    ],
+    "patch": "data/eval_cache/contract_fixes_20260918/sdk_input_fix.patch",
+    "patch_sha256": "e45c76b1b4a722234eb1ab099e6cc7b596167839c128b397b349adbefffb62c8"
+  }
+}

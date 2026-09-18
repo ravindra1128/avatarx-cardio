@@ -17,6 +17,8 @@ def handler():
 
 @pytest.fixture
 def upload(tmp_path, monkeypatch):
+    from app.result_store import ResultStore
+    monkeypatch.setattr(api, "_RESULT_STORE", ResultStore(tmp_path / "results.sqlite", api.RESULT_TTL_S))
     monkeypatch.setattr(api, "UPLOAD_DIR", tmp_path)
     monkeypatch.setattr(api, "_STARTED", {})
     monkeypatch.setattr(api, "_RESULTS", api.OrderedDict())

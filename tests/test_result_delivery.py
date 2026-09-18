@@ -23,6 +23,15 @@ from app import measure_api  # noqa: E402
 from app.measure_api import MeasureHandler  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def result_store(tmp_path, monkeypatch):
+    from app.result_store import ResultStore
+    store = ResultStore(tmp_path / "results.sqlite", measure_api.RESULT_TTL_S)
+    monkeypatch.setattr(measure_api, "_RESULT_STORE", store)
+    measure_api._RESULTS.clear()
+    return store
+
+
 class _Wire(io.BytesIO):
     """A socket that can be told to break at the Nth write."""
 
@@ -138,18 +147,19 @@ def test_a_finished_result_can_be_collected_after_the_connection_dies():
     assert measure_api._recall_result(None) is None
 
 
-def test_the_cache_is_bounded_and_expires():
+def test_the_cache_is_bounded_and_expires(result_store):
     measure_api._RESULTS.clear()
     for i in range(measure_api.MAX_CACHED_RESULTS + 5):
         measure_api._remember_result(f"s{i}", {"outcome": "ACCEPT", "n": i})
     assert len(measure_api._RESULTS) == measure_api.MAX_CACHED_RESULTS
-    assert measure_api._recall_result("s0") is None            # oldest evicted
+    assert measure_api._recall_result("s0") is not None        # recovered after memory eviction
     assert measure_api._recall_result(f"s{measure_api.MAX_CACHED_RESULTS + 4}")
 
     measure_api._RESULTS.clear()
     measure_api._remember_result("old", {"outcome": "ACCEPT"})
     measure_api._RESULTS["old"] = (time.time() - measure_api.RESULT_TTL_S - 1,
                                    {"outcome": "ACCEPT"})
+    result_store.put("old", {"outcome": "ACCEPT"}, created=time.time() - measure_api.RESULT_TTL_S - 1)
     assert measure_api._recall_result("old") is None
 
 
