@@ -31,6 +31,8 @@ def handler(body=b''):
 
 @pytest.fixture(autouse=True)
 def isolated(tmp_path, monkeypatch):
+    from app.result_store import ResultStore
+    monkeypatch.setattr(api, '_RESULT_STORE', ResultStore(tmp_path / 'results.sqlite', api.RESULT_TTL_S))
     monkeypatch.setenv('AFIB_KEEP_UPLOADS', '0')
     monkeypatch.delenv('AFIB_CLIPS_TOKEN', raising=False)
     monkeypatch.setattr(api, 'WORK_DIR', tmp_path / 'work')
