@@ -739,6 +739,63 @@ def measure_video_details(video_path: str, *, manifest=None,
     return doc, det
 
 
+def measure_traces(payload: dict, *, manifest=None, config_overrides=None) -> tuple:
+    """Standalone AFib path: THE pipeline on live-frame ROI traces the client
+    sampled itself (no video clip, no ShenAI). inference/trace_ingest.py turns
+    the document into an IngestResult and runs the pipeline on it; the response
+    has the SAME shape as a video scan (afib_result, biomarkers,
+    user_facing_text), so /beta/cardio-afib renders it the same way. Honors
+    AFIB_CONFIG_OVERRIDES so the standalone scan uses the validated classifier
+    and its decision band, exactly as the video path does."""
+    from inference import trace_ingest
+    m = dict(manifest or {})
+    m.setdefault("capture_profile", "consumer")
+    cfg = None
+    override_notes = []
+    merged = dict(LAUNCH_CONFIG_OVERRIDES)
+    merged.update(config_overrides or {})
+    if merged:
+        from configs import load_config
+        cfg = load_config()
+        override_notes = _apply_overrides(cfg, merged)
+    upload_id = str((payload or {}).get("upload_id") or uuid.uuid4().hex[:12])
+    t0 = time.perf_counter()
+    result, det = trace_ingest.run_on_traces(payload, manifest=m, config=cfg,
+                                             upload_id=upload_id)
+    analysis_s = round(time.perf_counter() - t0, 2)
+    doc = dataclasses.asdict(result)
+    doc["outcome"] = result.outcome.value
+    doc["user_facing_text"] = result.user_facing_text()
+    doc["rhythm_source"] = "client_traces"
+    doc["timing"] = {"analysis_s": analysis_s, "server_total_s": analysis_s}
+    try:
+        from app.report_data import report_biomarkers
+        doc["biomarkers"] = report_biomarkers(result, det, capture=m)
+    except Exception as e:                       # noqa: BLE001
+        doc["biomarkers"] = {"error": f"{type(e).__name__}: {e}"}
+    doc["research_tracks"] = None
+    doc["config_overrides"] = override_notes or None
+    doc["launch_overrides"] = LAUNCH_OVERRIDES or None
+    doc["debug"] = {"rationale": det.get("rationale"),
+                    "evidence": det.get("evidence")}
+    ing = (det or {}).get("ingest")
+    meta = getattr(ing, "meta", None)
+    doc["trace_ingest"] = {
+        "ingest_ok": bool(getattr(ing, "ok", False)),
+        "fps": getattr(meta, "measured_fps_mean", None),
+        "n_frames": getattr(meta, "n_frames", None),
+        "duration_s": getattr(meta, "duration_s", None),
+        "tracking_stability": getattr(getattr(ing, "track", None), "stability", None),
+        "reasons": list(getattr(ing, "reasons", []) or []),
+        "sampler": (payload or {}).get("sampler") if isinstance((payload or {}).get("sampler"), dict) else None,
+    }
+    _apply_afib_result(doc, det)
+    print(f"[measure] traces: outcome={doc.get('outcome')} class={doc.get('predicted_class')} "
+          f"result={doc.get('afib_result')} pulse={doc.get('mean_pulse_rate_bpm')} "
+          f"in {analysis_s}s", flush=True)
+    return doc, det
+
+
 # ---------------------------------------------------- ShenAI route (2026-09-16)
 # The sidecar the phone posts to /api/scan-signals is HELD IN MEMORY for the
 # job that is running for that upload, so the rhythm decision can use the
@@ -1334,6 +1391,9 @@ class MeasureHandler(BaseHTTPRequestHandler):
         if u.path == "/api/scan-traces":
             self._upload_traces(parse_qs(u.query))
             return
+        if u.path == "/api/measure-traces":
+            self._measure_traces_request(parse_qs(u.query))
+            return
         if u.path not in ("/api/process-video", "/api/measure"):
             self._json(404, {"error": "not found"})
             return
@@ -1595,6 +1655,56 @@ class MeasureHandler(BaseHTTPRequestHandler):
                   f"({s['ppg_fs_source']}) beats={s['beats_n']}", flush=True)
         self._json(200, {"ok": True, "upload_id": d.name,
                          "bytes": len(body), "stored": True})
+
+    def _measure_traces_request(self, q: dict) -> None:
+        """POST /api/measure-traces: run the pipeline on a standalone trace
+        document (no clip) and return the full result synchronously. The body
+        is the trace document (schema_version, t_s, traces, bbox, ...); an
+        optional `manifest` and `config_overrides` may ride in it. Takes a
+        worker slot so it cannot overrun the box, and writes a sheet row like
+        every other scan."""
+        body = self._read_body(MAX_SIDECAR_BYTES)
+        if body is None:
+            self.close_connection = True                 # _read_body answered 400/413
+            return
+        try:
+            payload = json.loads(body.decode("utf-8"))
+            if not isinstance(payload, dict):
+                raise ValueError("body is not a JSON object")
+        except (UnicodeDecodeError, ValueError, RecursionError) as e:
+            self._json(400, {"error": f"bad trace document: {e}"})
+            self.close_connection = True
+            return
+        if not _INFLIGHT.acquire(blocking=False):
+            self._json(503, {"error": "measure workers busy — retry",
+                             "max_concurrent": MAX_CONCURRENT})
+            return
+        ua = self.headers.get("User-Agent", "")
+        n = _inflight(+1)
+        t0 = time.perf_counter()
+        print(f"[measure] traces request start "
+              f"({len(payload.get('t_s') or []) if isinstance(payload.get('t_s'), list) else 0} frames, "
+              f"inflight {n}/{MAX_CONCURRENT})", flush=True)
+        try:
+            doc, _ = measure_traces(
+                payload,
+                manifest=MeasureHandler._build_manifest(payload),
+                config_overrides=payload.get("config_overrides"))
+            doc["session"] = payload.get("session") or ""
+            if payload.get("reference"):
+                doc["reference"] = payload["reference"]
+            try:
+                result_sheet.schedule_append(doc, extra={"build": BUILD_SHA, "user_agent": ua})
+            except Exception as e:                       # noqa: BLE001
+                print(f"[measure] traces sheet append failed: {e}", flush=True)
+            self._json(200, doc)
+        except Exception as e:                           # noqa: BLE001
+            traceback.print_exc()
+            self._json(500, {"error": f"{type(e).__name__}: {e}"})
+        finally:
+            _inflight(-1)
+            _INFLIGHT.release()
+            print(f"[measure] traces request end after {time.perf_counter() - t0:.1f}s", flush=True)
 
     def _upload_traces(self, q: dict) -> None:
         """POST /api/scan-traces?upload_id=...: the client's live-frame ROI

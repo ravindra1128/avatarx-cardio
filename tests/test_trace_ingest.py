@@ -167,3 +167,43 @@ def test_the_sheet_carries_the_trace_path():
         "ran": False, "reason": "no trace document arrived (waited 8.0 s)"}}}, extra={})
     assert row["Trace Ran"] == "FALSE" and row["Trace Note"].startswith("no trace document")
     assert result_sheet.row_from_doc({"outcome": "ACCEPT"}, extra={})["Trace Ran"] == ""
+
+
+def test_measure_traces_returns_a_full_standalone_result():
+    from app import measure_api as api
+    doc, det = api.measure_traces(_doc(bpm=72.0), manifest={"capture_profile": "consumer"},
+                                  config_overrides={"decision.classifier": "model_a",
+                                                    "decision.model_a_path": "models/model_a_v02_45s.json"})
+    assert doc["outcome"] == "ACCEPT" and doc["predicted_class"] == "SINUS"
+    assert doc["rhythm_source"] == "client_traces"
+    assert doc["afib_result"] == "AFIB_NOT_DETECTED"
+    assert isinstance(doc.get("afib_probability"), float)   # the RR classifier ran
+    assert abs(doc["mean_pulse_rate_bpm"] - 72.0) <= 3.0
+    assert "user_facing_text" in doc and "No irregular rhythm" in doc["user_facing_text"]
+    assert doc["biomarkers"]["items"], "cards computed"
+    assert doc["trace_ingest"]["ingest_ok"] is True
+    # a bad document still returns exactly one of three, never throws
+    bad, _ = api.measure_traces({"t_s": [0, 0.03]}, manifest={"capture_profile": "consumer"})
+    assert bad["afib_result"] in ("INCONCLUSIVE", "AFIB_NOT_DETECTED", "AFIB_DETECTED")
+    assert bad["outcome"] in ("NO_RESULT", "REPEAT_SCAN")
+
+
+def test_measure_traces_endpoint_runs_and_writes_a_row(monkeypatch):
+    import io, json
+    from app import measure_api as api
+    appended = {}
+    monkeypatch.setattr(api.result_sheet, "schedule_append", lambda doc, extra=None: appended.update(doc=doc))
+    body = json.dumps(_doc(bpm=72.0)).encode()
+    h = api.MeasureHandler.__new__(api.MeasureHandler)
+    h.path, h.rfile = "/api/measure-traces", io.BytesIO(body)
+    h.headers = {"Content-Length": str(len(body)), "User-Agent": "t"}
+    h.close_connection = False
+    h.sent = []
+    h._json = lambda code, doc: h.sent.append((code, doc))
+    monkeypatch.setenv("AFIB_CONFIG_OVERRIDES",
+                       '{"decision.classifier":"model_a","decision.model_a_path":"models/model_a_v02_45s.json"}')
+    monkeypatch.setattr(api, "LAUNCH_CONFIG_OVERRIDES", api._launch_config_overrides())
+    h._measure_traces_request({})
+    code, doc = h.sent[-1]
+    assert code == 200 and doc["afib_result"] == "AFIB_NOT_DETECTED"
+    assert doc["predicted_class"] == "SINUS" and appended.get("doc") is doc
