@@ -303,11 +303,11 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
               "coverage": (ti.get("duration_s") and ev.get("captured_seconds") is not None
                            and round(ev["captured_seconds"] / ti["duration_s"], 2)) or None,
               "pulse_bpm": doc.get("mean_pulse_rate_bpm"), "fps": ti.get("fps"),
-              "no_read_reasons": (list(doc.get("no_read_reasons") or [])
-                                  + [c for c in (ti.get("reasons") or [])]
+              "no_read_reasons": (([_green] if _green else [])   # diagnostic FIRST so the 300-char note never truncates it
                                   + [f"{ti.get('n_frames')} frames / {ti.get('duration_s')}s captured"
                                      if ti.get("n_frames") else ""]
-                                  + ([_green] if _green else []))}
+                                  + [c for c in (ti.get("reasons") or [])]
+                                  + list(doc.get("no_read_reasons") or []))}
     ex = extra or {}
     ref = doc.get("reference") or {}
     cap = doc.get("client_capture") or {}
