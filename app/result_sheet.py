@@ -290,6 +290,11 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
     if not tp and doc.get("rhythm_source") == "client_traces":
         ti = _g(doc, "trace_ingest") or {}
         ev = _g(doc, "debug", "evidence") or {}
+        _rg = ti.get("roi_green") or {}
+        _src = ((ti.get("sampler") or {}).get("source")) or "?"
+        _green = (f"src={_src}; green mean/std " + ", ".join(
+            f"{r[:2]}={_rg[r]['mean']}/{_rg[r]['std']}" for r in
+            ("forehead", "cheek_l", "cheek_r", "nose") if r in _rg)) if _rg else ""
         tp = {"ran": True, "outcome": doc.get("outcome"),
               "afib_result": doc.get("afib_result"), "afib_probability": doc.get("afib_probability"),
               "sqi": doc.get("signal_quality_index"),
@@ -301,7 +306,8 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
               "no_read_reasons": (list(doc.get("no_read_reasons") or [])
                                   + [c for c in (ti.get("reasons") or [])]
                                   + [f"{ti.get('n_frames')} frames / {ti.get('duration_s')}s captured"
-                                     if ti.get("n_frames") else ""])}
+                                     if ti.get("n_frames") else ""]
+                                  + ([_green] if _green else []))}
     ex = extra or {}
     ref = doc.get("reference") or {}
     cap = doc.get("client_capture") or {}

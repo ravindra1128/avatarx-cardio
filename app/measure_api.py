@@ -780,7 +780,27 @@ def measure_traces(payload: dict, *, manifest=None, config_overrides=None) -> tu
                     "evidence": det.get("evidence")}
     ing = (det or {}).get("ingest")
     meta = getattr(ing, "meta", None)
+    # Per-region signal diagnostic (2026-09-18): the std and peak-to-peak of
+    # each region's green channel over the kept frames. A near-zero std means
+    # the frames the client sent do not vary (frozen/static or a dead region);
+    # a healthy pulse rides ~0.5-2 counts on a ~100-160 base. This is what
+    # tells a misplaced-region bug apart from a static-frame bug on mobile.
+    roi_green = {}
+    try:
+        import numpy as _np
+        tr = getattr(ing, "traces", None) or {}
+        for _r, _a in tr.items():
+            _a = _np.asarray(_a, float)
+            if _a.ndim == 2 and _a.shape[0] > 1:
+                g = _a[:, 1][_np.isfinite(_a[:, 1])]
+                if g.size > 1:
+                    roi_green[_r] = {"n": int(g.size), "mean": round(float(_np.mean(g)), 2),
+                                     "std": round(float(_np.std(g)), 3),
+                                     "ptp": round(float(_np.ptp(g)), 2)}
+    except Exception:                                          # noqa: BLE001
+        pass
     doc["trace_ingest"] = {
+        "roi_green": roi_green,
         "ingest_ok": bool(getattr(ing, "ok", False)),
         "fps": getattr(meta, "measured_fps_mean", None),
         "n_frames": getattr(meta, "n_frames", None),
@@ -793,6 +813,7 @@ def measure_traces(payload: dict, *, manifest=None, config_overrides=None) -> tu
     print(f"[measure] traces: outcome={doc.get('outcome')} class={doc.get('predicted_class')} "
           f"result={doc.get('afib_result')} pulse={doc.get('mean_pulse_rate_bpm')} "
           f"in {analysis_s}s", flush=True)
+    print(f"[measure] traces roi_green: {roi_green}", flush=True)
     return doc, det
 
 
