@@ -213,6 +213,8 @@ def shenai_evidence_summary(raw, det):
         "overlap_boundaries_n": overlaps_n, "positive_boundary_gap_s": gap_s,
         "continuity_tolerance_s": route.DROPPED_BEAT_GAP_S,
         "span_s": span, "segments_n": len(runs),
+        "first_beat_start_s": valid[0][0] if valid else None,
+        "last_beat_end_s": valid[-1][1] if valid else None,
         "missing_duration_n": missing_duration_n,
         "duration_disagreement_max_ms": max(duration_errors) if duration_errors else None,
     }

@@ -891,6 +891,18 @@ def _apply_shenai_route(doc: dict, det: dict, upload_id: str, part_dir=None,
             "used": False, "reason": f"route failed safely: {type(e).__name__}: {e}"}
 
 
+    # Run after publication selection, on isolated inputs. Observability cannot
+    # change the selected source, final decision, retention, or recovery behavior.
+    try:
+        from app.scan_evidence import record_summary
+        from app.rhythm_diagnostics import compare_sources
+        record_summary(doc, "rhythm_comparison", compare_sources, doc, det, raw, SHENAI_ROUTE_ON)
+    except Exception as error:
+        doc.setdefault("debug", {})["rhythm_comparison"] = {
+            "version": 1, "mode": "diagnostic_only", "state": "assessment_failed",
+            "contributes_to_published_result": False, "error_type": type(error).__name__}
+
+
 # ------------------------------------------------------------ transport
 def _parse_envelope(body: bytes, ctype: str, query: dict) -> tuple:
     """Two accepted shapes.

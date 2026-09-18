@@ -167,6 +167,7 @@ def test_every_route_outcome_gets_assessed_without_changing_the_existing_decisio
     doc["debug"].pop("shenai_input")
     doc["debug"].pop("shenai_assessment")
     assert doc["debug"].pop("client_capture_diagnostics")["state"] == "unavailable"
+    assert doc["debug"].pop("rhythm_comparison")["mode"] == "diagnostic_only"
     baseline.setdefault("rhythm_source", "video")
     assert doc == baseline
 

@@ -254,12 +254,6 @@ def evaluate(doc: dict, det: dict, raw: Optional[dict], *,
 
 
 def _evaluate(doc: dict, det: dict, raw: Optional[dict], rec: dict) -> dict:
-    from beats.ibi import clean_runs, rmssd_from_runs, sdnn_from_runs
-    from features.regularity import regularity_from_runs
-    from inference.confidence_stars import ConfidenceStars
-    from inference.decision_logic import beat_evidence_from_series, decide_with_rationale
-    from inference.evidence import pulse_agreement
-
     rationale = (doc.get("debug") or {}).get("rationale") or det.get("rationale")
     rec["video_gates_failed"] = (list(rationale.get("gates_failed") or [])
                                  if isinstance(rationale, dict) else None)
@@ -267,6 +261,22 @@ def _evaluate(doc: dict, det: dict, raw: Optional[dict], rec: dict) -> dict:
     if not ok:
         rec["reason"] = why
         return rec
+    return _evaluate_train(doc, det, raw, rec)
+
+
+def _evaluate_train(doc: dict, det: dict, raw: Optional[dict], rec: dict) -> dict:
+    """Shared train assessment. Publication eligibility is enforced by _evaluate.
+
+    Diagnostic callers must supply isolated documents and never publish this output.
+    All physiological checks remain here, shared by both callers.
+    """
+    from beats.ibi import clean_runs, rmssd_from_runs, sdnn_from_runs
+    from features.regularity import regularity_from_runs
+    from inference.confidence_stars import ConfidenceStars
+    from inference.decision_logic import beat_evidence_from_series, decide_with_rationale
+    from inference.evidence import pulse_agreement
+
+    rationale = (doc.get("debug") or {}).get("rationale") or det.get("rationale")
     if not isinstance(raw, dict):
         rec["reason"] = ("no ShenAI sidecar arrived for this scan"
                          + (f" (waited {rec['waited_s']:.1f} s)" if rec["waited_s"] else ""))

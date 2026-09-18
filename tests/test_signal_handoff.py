@@ -147,6 +147,9 @@ def test_both_video_transports_use_the_same_route_and_cleanup(monkeypatch, tmp_p
     path = tmp_path / UID / 'scan.webm'; path.parent.mkdir(); path.write_bytes(b'video')
     doc_parts = api.MeasureHandler._run_assembled(str(path), header)
     assert received == [SIGNALS, SIGNALS]
+    # Wall-clock telemetry differs; source evidence and decisions must match.
+    for doc in (doc_parts, doc_single):
+        assert doc['debug']['rhythm_comparison'].pop('elapsed_ms') >= 0
     assert doc_parts['debug'] == doc_single['debug']
     assert not list(api.WORK_DIR.rglob('scan.*'))
     assert not api.CLIPS_DIR.exists()

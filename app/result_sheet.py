@@ -123,6 +123,10 @@ COLUMNS = [
     "AFib Result", "Capture Diagnostics", "SDK Version", "Capture Scope",
     "Client Adjacent Frame p99 ms", "Client Callback p99 ms", "Client Unobserved Frames",
     "Client Clock Reversals", "Client Hidden s", "SDK Live Quality Mean", "SDK Live Quality Min",
+    "Rhythm Comparison State", "Video Diagnostic Result", "Video Diagnostic Gates",
+    "SDK Diagnostic State", "SDK Diagnostic Result", "SDK Diagnostic Gates", "SDK Diagnostic Reason",
+    "SDK Policy Eligible", "SDK Publication Blocker", "Source Decision Agreement",
+    "Source Window Alignment", "Rhythm Diagnostic ms",
 ]
 
 _POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sheet")
@@ -274,6 +278,7 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
     vd = _g(doc, "debug", "video_duration", default={}) or {}
     saudit = _g(doc, "debug", "shenai_assessment", default={}) or {}
     cd = _g(doc, "debug", "client_capture_diagnostics", default={}) or {}
+    comparison = _g(doc, "debug", "rhythm_comparison", default={}) or {}
     items = {i.get("key"): i for i in _g(doc, "biomarkers", "items", default=[]) or []
              if isinstance(i, dict)}
     pulse = ""
@@ -315,6 +320,18 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
         "Client Hidden s": _num(cd.get("hidden_ms") / 1000 if isinstance(cd.get("hidden_ms"), (int, float)) else None, 2),
         "SDK Live Quality Mean": _num(_g(cd, "quality", "mean"), 3),
         "SDK Live Quality Min": _num(_g(cd, "quality", "min"), 3),
+        "Rhythm Comparison State": comparison.get("state", ""),
+        "Video Diagnostic Result": _g(comparison, "video", "result", default=""),
+        "Video Diagnostic Gates": " | ".join(_g(comparison, "video", "gates_failed", default=[]) or [])[:500],
+        "SDK Diagnostic State": _g(comparison, "shenai_train", "state", default=""),
+        "SDK Diagnostic Result": _g(comparison, "shenai_train", "result", default=""),
+        "SDK Diagnostic Gates": " | ".join(_g(comparison, "shenai_train", "gates_failed", default=[]) or [])[:500],
+        "SDK Diagnostic Reason": str(_g(comparison, "shenai_train", "reason", default="") or "")[:500],
+        "SDK Policy Eligible": _g(comparison, "shenai_train", "publication_policy_eligible", default=""),
+        "SDK Publication Blocker": str(_g(comparison, "shenai_train", "publication_blocker", default="") or "")[:500],
+        "Source Decision Agreement": comparison.get("decision_agreement", ""),
+        "Source Window Alignment": comparison.get("window_alignment", ""),
+        "Rhythm Diagnostic ms": _num(comparison.get("elapsed_ms"), 3),
         "Timestamp (UTC)": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
         "Session": doc.get("session") or "",
         "Build": ex.get("build") or "",
