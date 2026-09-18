@@ -236,3 +236,49 @@ def test_a_clipped_region_keeps_the_frames_and_still_reads_the_pulse():
         doc3["traces"][r] = [None] * n
     bad = ti.ingest_traces(doc3, upload_id="clip3")
     assert not bad.ok  # 1 region present per frame -> no usable frames, fails closed
+
+
+def test_a_bursty_thermal_frame_clock_is_resampled_and_still_reads_the_pulse():
+    """Mobile 2026-09-18: a phone landmarking on the GPU delivers frames in
+    bursts — a run near 30 fps, then a ~220 ms stall as it thermally throttles
+    ("can't hold the frame rate, let it cool"). Each stall exceeds
+    capture_segments' 1.5x-median split, so the RAW clock shattered a scan into
+    sub-3 s pieces: 0 usable segments, coverage 0, 0 beats, coherence 0 (the
+    exact mobile signature). Resampling the kept frames onto a uniform grid
+    must recover the pulse, while the raw burstiness stays visible."""
+    from configs import load_config
+    rng = np.random.default_rng(11)
+    t, cur, nxt = [], 0.0, 1.0
+    while cur < 50.0:                                    # 30 fps, ~220 ms stall each second
+        t.append(cur); cur += 1.0 / 30.0
+        if cur >= nxt:
+            cur += 0.22 + rng.uniform(0, 0.06); nxt += 1.0
+    t = np.array(t)
+    phase = np.mod((72.0 / 60.0) * t, 1.0)              # same physiological shape as _doc
+    pulse = (np.exp(-((phase - 0.25) ** 2) / (2 * 0.06 ** 2))
+             + 0.12 * np.exp(-((phase - 0.62) ** 2) / (2 * 0.12 ** 2)))
+    traces = {}
+    for k, r in enumerate(("forehead", "cheek_l", "cheek_r", "nose")):
+        base = np.array([160.0, 140.0, 125.0]) + 8 * k
+        g = base[1] - 1.2 * pulse + rng.normal(0, 0.3, t.size)
+        rr = base[0] - 0.6 * pulse + rng.normal(0, 0.3, t.size)
+        b = base[2] - 0.36 * pulse + rng.normal(0, 0.3, t.size)
+        traces[r] = np.stack([rr, g, b], axis=1).tolist()
+    doc = {"schema_version": 1, "t_s": t.tolist(), "traces": traces,
+           "width": 640, "height": 480, "fps_nominal": 30.0}
+    assert np.max(np.diff(t)) > 0.2                     # the raw clock really is bursty
+
+    ing = ti.ingest_traces(doc, upload_id="burst1")
+    assert ing.ok, ing.reasons
+    # resampled: no gap exceeds ~2 frames, yet the raw burstiness is reported
+    assert np.max(np.diff(ing.timestamps_s)) < 2.0 / ing.meta.measured_fps_mean + 1e-3
+    assert (ing.meta.measured_fps_jitter_ms or 0) > 20.0
+    assert any("bursty frame clock" in c for c in ing.capture_caveats)
+
+    res, det = ti.run_on_traces(doc, manifest={"capture_profile": "consumer"},
+                                config=load_config(), upload_id="burst1")
+    ev = det.get("evidence") or {}
+    assert res.outcome.value != "NO_RESULT"             # a real gradeable result, not nothing
+    assert ev.get("n_beats", 0) >= 30                   # beats recovered from the bursts
+    assert ev.get("cross_roi_coherence", 0) > 0.0       # off the structural zero
+    assert abs(ev.get("pulse_spectral_bpm", 0) - 72.0) <= 4.0

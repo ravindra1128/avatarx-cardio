@@ -291,10 +291,19 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
         ti = _g(doc, "trace_ingest") or {}
         ev = _g(doc, "debug", "evidence") or {}
         _rg = ti.get("roi_green") or {}
-        _src = ((ti.get("sampler") or {}).get("source")) or "?"
-        _green = (f"src={_src}; green mean/std " + ", ".join(
+        _smp = ti.get("sampler") or {}
+        _src = _smp.get("source") or "?"
+        # head names the frontend build (sampler version) and the RAW frame clock
+        # (fps + jitter): a large jitter is the bursty/thermal clock trace_ingest
+        # resamples, so a row that once read coherence 0 is diagnosable at a glance.
+        _head = f"src={_src} v={_smp.get('version') or '?'}"
+        if ti.get("fps"):
+            _head += f" fps={round(float(ti['fps']), 1)}"
+        if ti.get("jitter_ms") is not None:
+            _head += f" jit={round(float(ti['jitter_ms']))}ms"
+        _green = (_head + "; green mean/std " + ", ".join(
             f"{r[:2]}={_rg[r]['mean']}/{_rg[r]['std']}" for r in
-            ("forehead", "cheek_l", "cheek_r", "nose") if r in _rg)) if _rg else ""
+            ("forehead", "cheek_l", "cheek_r", "nose") if r in _rg)) if _rg else _head
         tp = {"ran": True, "outcome": doc.get("outcome"),
               "afib_result": doc.get("afib_result"), "afib_probability": doc.get("afib_probability"),
               "sqi": doc.get("signal_quality_index"),

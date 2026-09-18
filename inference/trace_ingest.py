@@ -53,6 +53,7 @@ MIN_SECONDS = 3.0
 MAX_FRAMES = 5000                 # ~166 s at 30 fps; the recorder keeps 48 s
 MIN_PRESENT_ROIS = 2              # a frame counts if >= this many regions are present
 GOOD_ROI_FRACTION = 0.5           # a region present less than this is flat-filled, not trusted
+MAX_BRIDGE_S = 0.75               # bridge frame-clock hitches up to this; longer gaps stay real breaks
 
 _REGISTRY: dict = {}
 _LOCK = threading.Lock()
@@ -182,6 +183,48 @@ def _ingest(payload, profile, exposure_locked, awb_locked, rig, upload_id):
             med = np.nanmedian(a) if np.any(np.isfinite(a)) else 128.0
             a[~np.isfinite(a)] = med
         traces[r] = a
+
+    # Uniform-resample the extraction clock. A phone whose GPU is busy with
+    # landmarking delivers frames in bursts — a run near 30 fps, then a
+    # 200-300 ms stall as it thermally throttles ("can't hold the frame rate,
+    # let it cool"). Every such stall exceeds capture_segments' 1.5x-median
+    # split, so a 60 s scan shatters into ~1 s pieces, all under the 3 s
+    # extraction floor: 0 usable segments -> coverage 0, 0 beats, coherence 0,
+    # the exact mobile signature (2026-09-18). The frames themselves carry the
+    # pulse — resampling a synthetic bursty clock recovers 88 beats where the
+    # raw clock yields 0 — so resample the kept frames onto a uniform grid at
+    # the median rate, bridging sub-second hitches and preserving only real
+    # gaps (face lost) as breaks. The raw clock's burstiness is still reported:
+    # meta's jitter and collapsed fraction below are measured before this.
+    raw_jitter_ms = float(np.std(dt) * 1000.0) if dt.size else None
+    raw_collapsed = float(np.mean(dt < 0.5 * period)) if dt.size else 0.0
+    raw_max_gap_s = float(np.max(dt)) if dt.size else 0.0
+    resampled_fps = None
+    if dt.size and period > 0:
+        grid_fps = min(1.0 / period, 30.0)
+        breaks = np.flatnonzero(dt > MAX_BRIDGE_S)
+        bounds = [0, *(breaks + 1).tolist(), n_kept]
+        new_ts, new_tr = [], {r: [] for r in ROI_NAMES}
+        for a0, b0 in zip(bounds[:-1], bounds[1:]):
+            seg = ts[a0:b0]
+            if seg.size < 2 or (seg[-1] - seg[0]) < 1e-6:
+                continue
+            grid = np.arange(seg[0], seg[-1], 1.0 / grid_fps)
+            if grid.size < 2:
+                continue
+            new_ts.append(grid)
+            for r in ROI_NAMES:
+                col = traces[r][a0:b0]
+                new_tr[r].append(np.stack([np.interp(grid, seg, col[:, c])
+                                           for c in range(3)], axis=1))
+        if new_ts:
+            ts = np.concatenate(new_ts)
+            traces = {r: np.concatenate(new_tr[r]) for r in ROI_NAMES}
+            n_kept = int(ts.size)
+            dt = np.diff(ts)
+            period = 1.0 / grid_fps
+            fps = grid_fps
+            resampled_fps = float(grid_fps)
     if n_kept < 2 or (ts[-1] - ts[0]) < MIN_SECONDS:
         return IngestResult(ok=False,
                             reasons=[f"only {n_kept} usable frames "
@@ -200,18 +243,22 @@ def _ingest(payload, profile, exposure_locked, awb_locked, rig, upload_id):
         dup = int(same.sum())
     meta = VideoMeta(path=f"{SCHEME}{upload_id or 'unknown'}", width=width, height=height,
                      n_frames=n, nominal_fps=fps_nom, measured_fps_mean=float(fps),
-                     measured_fps_jitter_ms=float(np.std(dt) * 1000.0) if dt.size else None,
+                     measured_fps_jitter_ms=raw_jitter_ms,
                      duration_s=float(ts[-1] - ts[0]), codec_fourcc="none",
                      file_bitrate_mbps=None, mean_luma=face_luma, lux_proxy=float(face_lux),
                      duplicate_frame_fraction=float(dup / max(n_kept - 1, 1)),
                      max_duplicate_run=0,
-                     collapsed_interval_fraction=float(np.mean(dt < 0.5 * period)) if dt.size else 0.0)
+                     collapsed_interval_fraction=raw_collapsed)
     capture = build_capture_config(meta, illuminance_lux=face_lux, assume_rig_locks=rig,
                                    exposure_locked=exposure_locked, awb_locked=awb_locked,
                                    phone_model="client-live-frames", mount="handheld")
     ok, why, caveats = apply_capture_gate(capture, profile)
     caveats = list(caveats) + ["regions sampled on the device from the live camera frames "
                                "(no video codec in the path)"]
+    if resampled_fps is not None and raw_max_gap_s > 2.0 * (1.0 / resampled_fps):
+        caveats.append(f"bursty frame clock (max gap {raw_max_gap_s * 1000:.0f} ms, "
+                       f"jitter {raw_jitter_ms or 0:.0f} ms); resampled to "
+                       f"{resampled_fps:.0f} fps for extraction")
     if not ok:
         return IngestResult(ok=False, reasons=list(why), meta=meta, capture=capture,
                             track=track, capture_caveats=caveats, capture_profile=profile)

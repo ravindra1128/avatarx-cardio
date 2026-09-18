@@ -803,6 +803,7 @@ def measure_traces(payload: dict, *, manifest=None, config_overrides=None) -> tu
         "roi_green": roi_green,
         "ingest_ok": bool(getattr(ing, "ok", False)),
         "fps": getattr(meta, "measured_fps_mean", None),
+        "jitter_ms": getattr(meta, "measured_fps_jitter_ms", None),   # raw clock; high => bursty, resampled
         "n_frames": getattr(meta, "n_frames", None),
         "duration_s": getattr(meta, "duration_s", None),
         "tracking_stability": getattr(getattr(ing, "track", None), "stability", None),
