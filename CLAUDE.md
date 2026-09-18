@@ -323,6 +323,28 @@ spectral_entropy are NaN on most 45 s windows and are median-imputed (near-inert
 The 3-star floor and the AF-call verification gates are unchanged: an AFIB_DETECTED still
 needs coherence >= 0.35 or a two-region timing match, >= 20 intervals, and 3 stars.
 
+**Standalone AFib scan `/beta/cardio-afib` (2026-09-18, owner: "try option B").** The
+2026-09-17 trace path (recorded, piggybacked on a ShenAI scan) underperformed on 3 live
+scans: landmark-less regions from ShenAI's box gave WORSE timing than the compressed clip
+(44 ms vs 26 on 10:19), and the sampler starved the SDK to 15 fps once. Both are artefacts
+of running inside a live ShenAI session. Option B removes both: a standalone browser scan
+with its own camera and its own landmarks, no ShenAI, no clip.
+- Frontend (webapp, new route, a sibling of cardio-staging; codex flow untouched):
+  `Pages/CardioAfib/CardioAfibScan.jsx` opens the front camera (`getUserMedia`), places the
+  four regions from MediaPipe FaceLandmarker via `lib/scan/afib/afibRegions.js` (mirrors
+  `preprocessing/roi.py::_landmark_rects` verbatim), samples region means every frame
+  (detection ~15 Hz held between frames so sampling stays at camera rate), posts to
+  `/api/measure-traces`. Landmarker load failure falls back to a centred oval, flagged.
+- Backend (this repo): `app/measure_api.measure_traces` + `POST /api/measure-traces` runs
+  THE pipeline on the trace document via `inference/trace_ingest.py`, honoring
+  `AFIB_CONFIG_OVERRIDES`, and returns the same response shape as a video scan
+  (afib_result, biomarkers, user_facing_text); synchronous, takes a worker slot, writes a
+  sheet row. `rhythm_source="client_traces"`.
+- WHY it should beat both: uncompressed frames (no codec floor) AND landmark-precise
+  regions (unlike the box+oval traces) AND no SDK contention (ShenAI absent). Untested on a
+  phone yet: the first live scans tell whether MediaPipe on the device holds >= 30 fps and
+  whether coherence/timing clear the gates the compressed clip could not.
+
 **On-device traces, BUILT as a recorded path (2026-09-17, iteration 34):**
 `inference/trace_ingest.py` turns the client's per-frame ROI means (webapp
 `lib/scan/staging/traceCapture.js`: the service's own oval geometry and robust mean on a
