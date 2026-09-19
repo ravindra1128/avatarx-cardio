@@ -164,6 +164,64 @@ def _peak_diagnostics(f, p):
         return {"state": "assessment_failed", "error_type": type(error).__name__}
 
 
+class SegmentedWaveforms(dict):
+    """Legacy concatenated ROI arrays plus their exact capture-part lengths.
+
+    SQI and other existing mapping consumers remain unchanged. Spectral analysis
+    uses the boundaries so its Welch windows never cross an extraction restart.
+    """
+    def __init__(self, values, segment_lengths):
+        super().__init__(values)
+        self.segment_lengths = tuple(segment_lengths)
+
+
+def _segmented_psd(x, fps, lengths):
+    """Pool within-part Welch estimates on a common, unpadded frequency grid.
+
+    Each continuous finite part must independently meet the existing duration
+    floor. Weight by the number of Welch windows, not by ROI pulse agreement.
+    No SDK rate, previous scan, gap interpolation or concatenated fallback.
+    """
+    from scipy.signal import welch
+
+    x = np.asarray(x, float)
+    info = {"state": "insufficient_continuous_samples", "capture_parts": len(lengths),
+            "eligible_parts": 0, "excluded_samples": int(x.size),
+            "welch_windows": 0, "nperseg": None}
+    if (x.ndim != 1 or not np.isfinite(fps) or fps <= 0
+            or any(not isinstance(n, (int, np.integer)) or n <= 0 for n in lengths)
+            or sum(lengths) != len(x)):
+        info["state"] = "invalid_segment_layout"
+        return None, None, info
+    minimum = int(SPECTRAL_MIN_SECONDS * fps)
+    parts, offset = [], 0
+    for n in lengths:
+        part = x[offset:offset + n]
+        offset += n
+        # Non-finite samples are holes, never a reason to close up the clock.
+        mask = np.isfinite(part)
+        edges = np.flatnonzero(np.diff(np.r_[False, mask, False]))
+        for a, b in zip(edges[::2], edges[1::2]):
+            if b - a >= minimum:
+                parts.append(part[a:b])
+    info["eligible_parts"] = len(parts)
+    info["excluded_samples"] = int(x.size - sum(len(p) for p in parts))
+    if not parts:
+        return None, None, info
+    nper = int(min(SPECTRAL_SEGMENT_S * fps, min(len(p) for p in parts)))
+    step = nper - nper // 2
+    spectra, weights, freq = [], [], None
+    for part in parts:
+        f, p = welch(part - np.mean(part), fs=fps, nperseg=nper)
+        spectra.append(p)
+        weights.append(1 + (len(part) - nper) // step)
+        freq = f
+    # Preserve the exact single-part result, including floating point behavior.
+    pooled = spectra[0] if len(spectra) == 1 else np.average(spectra, axis=0, weights=weights)
+    info.update(state="assessed", welch_windows=int(sum(weights)), nperseg=nper)
+    return freq, pooled, info
+
+
 def spectral_pulse(raw_waveforms: dict, fps: float) -> dict:
     """Dominant pulse rate (bpm) of the raw per-ROI waveforms: per ROI, and
     fused as the mean of the per-ROI spectra each normalised to unit in-band
@@ -176,24 +234,34 @@ def spectral_pulse(raw_waveforms: dict, fps: float) -> dict:
                    "clock": "nominal_fps_after_finite_sample_filter", "fps": float(fps),
                    "limitation": "spectral peaks are not verified beat timing"}
     out["spectral_diagnostics"] = diagnostics
+    lengths = getattr(raw_waveforms, "segment_lengths", None)
+    if lengths is not None:
+        diagnostics["clock"] = "within_capture_segments_nominal_fps"
+        diagnostics["pooling"] = "welch_window_count_common_grid"
     psds, f_ref = [], None
     lo, hi = SPECTRAL_BAND_HZ
     for roi in ROI_NAMES:
         x = (raw_waveforms or {}).get(roi)
-        f, p = _welch_psd(x, fps) if x is not None else (None, None)
+        segment_info = None
+        if x is not None and lengths is not None:
+            f, p, segment_info = _segmented_psd(x, fps, lengths)
+        else:
+            f, p = _welch_psd(x, fps) if x is not None else (None, None)
         if f is None:
-            diagnostics["regions"][roi] = {"state": "insufficient_samples"}
+            diagnostics["regions"][roi] = segment_info or {"state": "insufficient_samples"}
             out["pulse_spectral_roi_bpm"][roi] = None
             continue
         f0, _ = _fundamental(f, p)
         diagnostics["regions"][roi] = _peak_diagnostics(f, p)
+        if segment_info is not None:
+            diagnostics["regions"][roi]["segments"] = segment_info
         diagnostics["regions"][roi].update(input_samples=int(np.size(x)),
                                             finite_samples=int(np.sum(np.isfinite(np.asarray(x, float)))))
         out["pulse_spectral_roi_bpm"][roi] = (None if f0 is None
                                               else round(f0 * 60.0, 1))
         band = (f >= lo) & (f <= hi)
         tot = float(np.sum(p[band]))
-        if tot > 0 and (f_ref is None or f.shape == f_ref.shape):
+        if tot > 0 and (f_ref is None or np.array_equal(f, f_ref)):
             f_ref = f
             psds.append(p / tot)
     if not psds:
@@ -315,8 +383,10 @@ def extract_and_detect(traces: dict, ts: np.ndarray, fps: float, cfg: dict,
                 beat.t_s = float(np.interp(idx, np.arange(b - a), ts[a:b]))
                 beat.segment = seg_i            # audit #4c: runs never span a gap
                 per_roi_beats[roi].append(beat)
-    raw = {r: (np.concatenate(raw_parts[r]) if raw_parts[r]
-               else np.array([], dtype=float)) for r in ROI_NAMES}
+    raw = SegmentedWaveforms(
+        {r: (np.concatenate(raw_parts[r]) if raw_parts[r]
+             else np.array([], dtype=float)) for r in ROI_NAMES},
+        [b - a for a, b in segments])
     return raw, per_roi_beats, segments
 
 
