@@ -127,6 +127,8 @@ COLUMNS = [
     "SDK Diagnostic State", "SDK Diagnostic Result", "SDK Diagnostic Gates", "SDK Diagnostic Reason",
     "SDK Policy Eligible", "SDK Publication Blocker", "Source Decision Agreement",
     "Source Window Alignment", "Rhythm Diagnostic ms",
+    "Spectral Strongest bpm", "Spectral Selection", "Spectral Peak Audit",
+    "Video Interval Rejections", "Video SQI Exact",
 ]
 
 _POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sheet")
@@ -279,6 +281,8 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
     saudit = _g(doc, "debug", "shenai_assessment", default={}) or {}
     cd = _g(doc, "debug", "client_capture_diagnostics", default={}) or {}
     comparison = _g(doc, "debug", "rhythm_comparison", default={}) or {}
+    # Always original video evidence, including when SDK supplied the final rhythm.
+    spectral = _g(doc, "debug", "evidence", "spectral_diagnostics", default={}) or {}
     items = {i.get("key"): i for i in _g(doc, "biomarkers", "items", default=[]) or []
              if isinstance(i, dict)}
     pulse = ""
@@ -332,6 +336,11 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
         "Source Decision Agreement": comparison.get("decision_agreement", ""),
         "Source Window Alignment": comparison.get("window_alignment", ""),
         "Rhythm Diagnostic ms": _num(comparison.get("elapsed_ms"), 3),
+        "Spectral Strongest bpm": _num(_g(spectral, "fused", "strongest_peak_bpm"), 3),
+        "Spectral Selection": _g(spectral, "fused", "selection", default=""),
+        "Spectral Peak Audit": json.dumps(spectral, separators=(",", ":"), allow_nan=False) if spectral else "",
+        "Video Interval Rejections": json.dumps(vd.get("interval_rejections"), separators=(",", ":"), allow_nan=False) if vd.get("interval_rejections") else "",
+        "Video SQI Exact": _num(doc.get("signal_quality_index"), 8),
         "Timestamp (UTC)": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
         "Session": doc.get("session") or "",
         "Build": ex.get("build") or "",

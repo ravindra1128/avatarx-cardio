@@ -60,6 +60,7 @@ def video_duration_summary(doc, det, client_duration_ms=None):
            "clean_interval_s": None, "clean_fraction_retained": None,
            "clean_fraction_processed": None}
     ing = det.get("ingest")
+    out["interval_rejections"] = dict(getattr(det.get("runset"), "rejection_audit", {}) or {})
     clock = doc.get("clock") or {}
     first, last = _number(clock.get("first_frame_s")), _number(clock.get("last_frame_s"))
     span = last - first if first is not None and last is not None and last >= first else None

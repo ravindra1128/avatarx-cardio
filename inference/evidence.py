@@ -132,6 +132,38 @@ def _fundamental(f, p):
     return f1, float(p1 / (float(np.median(pb[1:-1])) + 1e-12))
 
 
+def _peak_diagnostics(f, p):
+    """Bounded scalar evidence from the exact PSD used for rate selection."""
+    try:
+        from scipy.signal import find_peaks
+        lo, hi = SPECTRAL_BAND_HZ
+        band = (f >= lo) & (f <= hi)
+        fb, pb = f[band], p[band]
+        if len(fb) < 3 or not np.all(np.isfinite(pb)) or np.any(pb < 0):
+            return {"state": "invalid_spectrum"}
+        peaks, _ = find_peaks(pb)
+        ranked = sorted(peaks.tolist(), key=lambda i: (-float(pb[i]), i))
+        selected, snr = _fundamental(f, p)
+        strongest = ranked[0] if ranked else None
+        total = float(np.sum(pb))
+        def entry(i):
+            return {"bpm": round(float(fb[i]) * 60, 3),
+                    "relative_to_strongest": float(pb[i] / pb[strongest]) if strongest is not None and pb[strongest] > 0 else None,
+                    "band_power_fraction": float(pb[i] / total) if total > 0 else None}
+        # Include the selected half-rate peak even if outside the top five.
+        chosen = next((i for i in ranked if selected is not None and float(fb[i]) == selected), None)
+        return {"state": "assessed", "bin_spacing_bpm": round(float(fb[1] - fb[0]) * 60, 3),
+                "strongest_peak_bpm": entry(strongest)["bpm"] if strongest is not None else None,
+                "selected_peak": entry(chosen) if chosen is not None else None,
+                "selection": "no_peak" if selected is None else
+                    ("subharmonic" if chosen != strongest else "strongest_peak"),
+                "peak_count": len(ranked), "top_peaks": [entry(i) for i in ranked[:5]],
+                "band_max_bpm": round(float(fb[int(np.argmax(pb))]) * 60, 3),
+                "selected_snr": snr}
+    except Exception as error:
+        return {"state": "assessment_failed", "error_type": type(error).__name__}
+
+
 def spectral_pulse(raw_waveforms: dict, fps: float) -> dict:
     """Dominant pulse rate (bpm) of the raw per-ROI waveforms: per ROI, and
     fused as the mean of the per-ROI spectra each normalised to unit in-band
@@ -139,15 +171,24 @@ def spectral_pulse(raw_waveforms: dict, fps: float) -> dict:
     waveforms are too short."""
     out = {"pulse_spectral_bpm": None, "pulse_spectral_snr": None,
            "pulse_spectral_roi_bpm": {}, "pulse_spectral_roi_agree": 0}
+    diagnostics = {"version": 1, "mode": "diagnostic_only", "regions": {},
+                   "fused": {"state": "unavailable"},
+                   "clock": "nominal_fps_after_finite_sample_filter", "fps": float(fps),
+                   "limitation": "spectral peaks are not verified beat timing"}
+    out["spectral_diagnostics"] = diagnostics
     psds, f_ref = [], None
     lo, hi = SPECTRAL_BAND_HZ
     for roi in ROI_NAMES:
         x = (raw_waveforms or {}).get(roi)
         f, p = _welch_psd(x, fps) if x is not None else (None, None)
         if f is None:
+            diagnostics["regions"][roi] = {"state": "insufficient_samples"}
             out["pulse_spectral_roi_bpm"][roi] = None
             continue
         f0, _ = _fundamental(f, p)
+        diagnostics["regions"][roi] = _peak_diagnostics(f, p)
+        diagnostics["regions"][roi].update(input_samples=int(np.size(x)),
+                                            finite_samples=int(np.sum(np.isfinite(np.asarray(x, float)))))
         out["pulse_spectral_roi_bpm"][roi] = (None if f0 is None
                                               else round(f0 * 60.0, 1))
         band = (f >= lo) & (f <= hi)
@@ -157,7 +198,10 @@ def spectral_pulse(raw_waveforms: dict, fps: float) -> dict:
             psds.append(p / tot)
     if not psds:
         return out
-    f0, snr = _fundamental(f_ref, np.mean(psds, axis=0))
+    fused_psd = np.mean(psds, axis=0)
+    f0, snr = _fundamental(f_ref, fused_psd)
+    diagnostics["fused"] = _peak_diagnostics(f_ref, fused_psd)
+    diagnostics["fused"]["contributing_regions"] = len(psds)
     if f0 is None:
         return out
     bpm = f0 * 60.0
