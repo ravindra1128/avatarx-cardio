@@ -596,21 +596,52 @@ def _protect_input(video_path: str, protected_root: pathlib.Path = _REPO_DATA) -
     return dst
 
 
+# The user-entered profile behind the fitness card's VO2max estimate
+# (features/vo2max.py). It travels in a request BODY - the /api/start JSON, the
+# measure envelope's header, the trace document - and never in a query string:
+# age, sex, height and weight are personal data, and URLs are what proxies and
+# platform logs keep. Only the keys the equation reads survive, as plain
+# scalars, so nothing else a client sends can ride along into the response or
+# the sheet.
+PARTICIPANT_KEYS = ("age", "age_years", "sex", "height_cm", "weight_kg",
+                    "measured_weight_kg", "activity_level")
+MAX_START_BODY_BYTES = 16 * 1024
+
+
+def _participant_block(doc):
+    raw = doc.get("participant") if isinstance(doc, dict) else None
+    if not isinstance(raw, dict):
+        return None
+    out = {}
+    for k in PARTICIPANT_KEYS:
+        v = raw.get(k)
+        if isinstance(v, bool) or v is None:
+            continue
+        if isinstance(v, (int, float)):
+            out[k] = v
+        elif isinstance(v, str) and len(v) <= 16:
+            out[k] = v.strip()
+    return out or None
+
+
 def measure_video(video_path: str, *, manifest=None,
                   client_timestamps_s=None, duration_ms=None,
-                  config_overrides=None, window_s=None, scale=None) -> dict:
+                  config_overrides=None, window_s=None, scale=None,
+                  participant=None, reference=None) -> dict:
     """Run THE production path and return a JSON-ready ScanResult."""
     doc, _ = measure_video_details(
         video_path, manifest=manifest, client_timestamps_s=client_timestamps_s,
         duration_ms=duration_ms, config_overrides=config_overrides,
-        window_s=window_s, scale=scale)
+        window_s=window_s, scale=scale, participant=participant,
+        reference=reference)
     return doc
 
 
 def measure_video_details(video_path: str, *, manifest=None,
                           client_timestamps_s=None, duration_ms=None,
                           config_overrides=None, window_s=None,
-                          scale=None) -> tuple:
+                          scale=None, participant=None,
+                          reference=None) -> tuple:
     """measure_video, plus the pipeline's own details dict (`det`: config,
     evidence, sqi, runset, min_conf ...) for a caller that runs a second
     interval source through the same decision (inference/shenai_route.py)
@@ -708,8 +739,13 @@ def measure_video_details(video_path: str, *, manifest=None,
         # whole block is fail-soft, so a NameError here would silently
         # replace every card with an error dict; tests/test_biomarker_wiring.py
         # pins it.
+        # `participant` (the user-entered profile) and `reference` (the
+        # live-frame rate of the same scan) reach the FITNESS card only, and
+        # never the pipeline above: the rhythm decision, the pulse and the
+        # other two cards are computed exactly as they were without them.
         doc["biomarkers"] = report_biomarkers(
-            result, det, capture=manifest or {})
+            result, det, capture=manifest or {}, participant=participant,
+            reference=reference)
     except Exception as e:                       # noqa: BLE001
         doc["biomarkers"] = {"error": f"{type(e).__name__}: {e}"}
     # The five gated research tracks are OFF by default here. They cost a
@@ -770,7 +806,8 @@ def measure_traces(payload: dict, *, manifest=None, config_overrides=None) -> tu
     doc["timing"] = {"analysis_s": analysis_s, "server_total_s": analysis_s}
     try:
         from app.report_data import report_biomarkers
-        doc["biomarkers"] = report_biomarkers(result, det, capture=m)
+        doc["biomarkers"] = report_biomarkers(
+            result, det, capture=m, participant=_participant_block(payload))
     except Exception as e:                       # noqa: BLE001
         doc["biomarkers"] = {"error": f"{type(e).__name__}: {e}"}
     doc["research_tracks"] = None
@@ -1764,12 +1801,39 @@ class MeasureHandler(BaseHTTPRequestHandler):
         self._json(200, {"ok": True, "upload_id": d.name, "bytes": len(body),
                          "frames": n, "held": held})
 
+    def _read_small_json(self, limit: int):
+        """The request body as a JSON object, or None. Never raises."""
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            return None
+        if length <= 0:
+            return None
+        if length > limit:
+            # Too large to be a profile: not read, so the socket cannot be reused.
+            self.close_connection = True
+            return None
+        try:
+            raw = self.rfile.read(length)
+            doc = json.loads(raw.decode("utf-8")) if len(raw) == length else None
+        except (OSError, ValueError, UnicodeDecodeError):
+            return None
+        return doc if isinstance(doc, dict) else None
+
     def _start_job(self, q: dict):
         """Assemble the slices and detach the analysis. Returns immediately:
         the client polls GET /api/result, so no connection is held through the
         job and a dropped link costs nothing."""
         _sweep_parts()
         _, header = _parse_envelope(b"", "video/webm", q)
+        # Optional JSON body: {"participant": {...}} - the user-entered profile
+        # for the fitness card. Read BEFORE anything can answer, so the bytes
+        # never desync this keep-alive socket; a missing, oversized or
+        # malformed body is simply no profile, never a failed scan.
+        body_doc = self._read_small_json(MAX_START_BODY_BYTES)
+        part = _participant_block(body_doc)
+        if part:
+            header["participant"] = part
         upload_id = str((q.get("upload_id") or [""])[0])
         ext = str(header.get("ext") or (q.get("ext") or ["webm"])[0]).lstrip(".")
         # Take the worker slot BEFORE assembling: _assemble_parts deletes the
@@ -1871,7 +1935,9 @@ class MeasureHandler(BaseHTTPRequestHandler):
             client_timestamps_s=header.get("timestamps_s"),
             duration_ms=header.get("duration_ms"),
             config_overrides=header.get("config_overrides"),
-            window_s=header.get("window_s"), scale=header.get("scale"))
+            window_s=header.get("window_s"), scale=header.get("scale"),
+            participant=_participant_block(header),
+            reference=header.get("reference"))
         doc["session"] = header.get("session") or ""
         # ShenAI route (2026-09-16): the sidecar posted after /api/start was
         # accepted is held in memory under the part dir's name; the route runs
@@ -1918,7 +1984,9 @@ class MeasureHandler(BaseHTTPRequestHandler):
                 duration_ms=header.get("duration_ms"),
                 config_overrides=header.get("config_overrides"),
                 window_s=header.get("window_s"),
-                scale=header.get("scale"))
+                scale=header.get("scale"),
+                participant=_participant_block(header),
+                reference=header.get("reference"))
             doc["session"] = sid
             doc["size_bytes"] = len(video_bytes)
             if header.get("reference"):

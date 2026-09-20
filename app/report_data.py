@@ -54,7 +54,8 @@ def _failure_reason(endpoint: dict, hemo: dict) -> str:
 
 def report_biomarkers(scan_result, det: dict, *, capture: dict = None,
                       participant: dict = None,
-                      hemodynamics: dict = None) -> dict:
+                      hemodynamics: dict = None,
+                      reference: dict = None) -> dict:
     """Build the one canonical API/report payload for resting biomarkers.
 
     The calculation remains in ``features.hemodynamics``.  This function
@@ -69,7 +70,7 @@ def report_biomarkers(scan_result, det: dict, *, capture: dict = None,
             from features.hemodynamics import resting_hemodynamics
             hemodynamics = resting_hemodynamics(
                 det or {}, outcome=outcome, participant=participant,
-                capture=capture or {})
+                capture=capture or {}, reference=reference)
         except Exception as exc:                         # fail visibly
             hemodynamics = {
                 "available": False, "outcome": outcome,
@@ -136,8 +137,14 @@ def report_biomarkers(scan_result, det: dict, *, capture: dict = None,
         if key == "cardiorespiratory_fitness":
             row["oxygen_uptake_ml_kg_min"] = endpoint.get(
                 "oxygen_uptake_estimate")
-            row["limitation"] = endpoint.get(
-                "why_no_oxygen_uptake_value")
+            row["limitation"] = (endpoint.get("limitation") or endpoint.get(
+                "why_no_oxygen_uptake_value"))
+            # Profile basis (features/vo2max.py): which estimator produced the
+            # value and the equation's own +/- 1 SEE band around it.
+            row["estimator"] = endpoint.get("estimator")
+            row["likely_range"] = endpoint.get("likely_range") if computed else None
+            row["typical_range_label"] = (endpoint.get("typical_range_label")
+                                          if computed else None)
         elif key == "arterial_stiffness":
             row["limitation"] = endpoint.get("not_a_velocity")
         elif key == "vascular_tone":

@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from features import vo2max as _vo2
 from features.rate_guard import guard_resting_pulse, MIN_ROI_AGREE_FOR_RATE, FOLD_MIN_HARMONIC_FRACTION
 
 # Vasomotion / low-frequency band of the amplitude envelope (Hz): the
@@ -415,10 +416,14 @@ def segment_amplitudes(waves: dict, seg_ts: np.ndarray,
     out: dict = {}
     for roi, wave in waves.items():
         amps = []
-        for f1, f2 in windows.get(roi, []):
+        for window in windows.get(roi, []):
+            f1, f2 = window[:2]
             seg = np.asarray(wave[f1:f2], float)
             if seg.size >= 4 and np.all(np.isfinite(seg)):
-                amps.append((float(seg_ts[f1]),
+                # Preserve the shared lattice beat identity when available.
+                # Regional foot jitter must not change which amplitudes pool.
+                beat_time = float(window[2]) if len(window) > 2 else float(seg_ts[f1])
+                amps.append((beat_time,
                              float(np.max(seg) - np.min(seg))))
         if len(amps) < MIN_SEGMENT_BEATS:
             continue
@@ -597,23 +602,143 @@ def resting_rate_index(hr_bpm):
     return round(float(1.0 / (1.0 + np.exp(-z))), 5)
 
 
+VO2MAX_UNIT = "mL/kg/min"
+
+
+def _vo2max_card(profile, *, hr, rate_source, tier, tier_reasons, reason,
+                 reason_code, ref_bpm, reference_source, rmssd, sdnn, rate_guard,
+                 legacy_proxy, legacy_index, demographics) -> dict:
+    """The fitness card on the PROFILE basis: a published non-exercise VO2max
+    estimate fed the scan's resting rate (features/vo2max.py).
+
+    `hr`/`tier`/`tier_reasons` are what the rate logic above resolved from the
+    recorded clip - untouched, so the two bases can never disagree about the
+    clip's own rate. The live-frame rate of the same scan (`ref_bpm`) is the
+    estimate's rate when the client sent one, and the clip's rate corroborates
+    it or is recorded as disagreeing (vo2max.select_resting_rate has the
+    measured reason). A card on this basis
+    is an estimate in mL/kg/min or an abstention; it never falls back to the
+    0-100 proxy, which would flip one person between two scales."""
+    choice = _vo2.select_resting_rate(hr, rate_source, ref_bpm, reference_source)
+    est = _vo2.estimate_vo2max(profile, choice["bpm"])
+    if choice["reference_bpm"] is None:
+        card_tier, reasons = tier, list(tier_reasons)         # the clip's rate, as it stands
+    elif choice["corroborated"]:
+        # Two readings of one scan agree. "measured" still asks that OURS held
+        # every floor; a thin count that happens to agree stays provisional,
+        # with its own reasons.
+        card_tier, reasons = ("measured" if tier == "measured" else "provisional"), list(tier_reasons)
+    else:
+        # The live-frame rate stands alone: this scan's signal, but nothing in
+        # the recorded-clip pipeline verified it.
+        card_tier, reasons = "provisional", ([choice["reason"]] if choice["reason"] else [])
+    if not est["available"]:
+        card_tier = None
+        if choice["bpm"] is None:
+            card_reason = reason or "no resting pulse rate could be measured from this scan"
+            card_code = reason_code or "no_resting_rate"
+        else:
+            card_reason, card_code = est["reason"], "outside_equation_range"
+    else:
+        card_reason = card_code = None
+    value = est.get("vo2max_ml_kg_min")
+    ref = est.get("reference") if est.get("available") else None
+    eq = _vo2.JURCA_2005
+    method = (
+        "non-exercise VO2max estimate (Jurca et al. 2005): age, sex, body-mass "
+        "index and activity level from the profile the user entered, plus the "
+        "resting heart rate from this scan, which moves it "
+        f"{abs(eq['resting_hr_mets_per_bpm'] * _vo2.ML_PER_MET):.2f} mL/kg/min per bpm. "
+        f"Standard error against treadmill testing about "
+        f"{eq['see_mets_range'][0] * _vo2.ML_PER_MET:.0f}-"
+        f"{eq['see_mets_range'][1] * _vo2.ML_PER_MET:.0f} mL/kg/min. An estimate, "
+        "not a measurement of oxygen uptake. Interval variability is reported "
+        "beside it and never enters the score."
+    )
+    return {
+        "estimator": est["equation"],
+        "profile": dict(profile),
+        "vo2max": est,
+        "vo2max_unavailable": None if est["available"] else [card_reason],
+        "resting_rate_choice": choice,
+        "available": bool(est["available"]),
+        "calibrated": False,
+        "resting_hr_bpm": (None if choice["bpm"] is None else round(float(choice["bpm"]), 2)),
+        "rmssd_ms": rmssd,
+        "sdnn_ms": sdnn,
+        "autonomic_index": None,
+        # The 0-100 proxy of the CLIP's own rate stays in the payload so rows
+        # on the two bases remain comparable; it is never the card's value here.
+        "resting_rate_index": legacy_index,
+        "fitness_proxy_score": legacy_proxy,
+        "fitness_proxy_basis": "vo2max_nonexercise" if est["available"] else None,
+        "minimum_clean_intervals": MIN_RATE_INTERVALS,
+        "reason": card_reason,
+        "reason_code": card_code,
+        "tier": card_tier,
+        "tier_reasons": reasons,
+        "score": value,
+        # Typical range: the middle half of MEASURED VO2max in adults of this
+        # sex and age decade (FRIEND registry) - context, never an input. The
+        # equation's own +/- 1 SEE band is a different thing (how far a
+        # treadmill test could sit from THIS number) and keeps its own key.
+        "score_typical_range": ([ref["p25"], ref["p75"]] if ref else None),
+        "typical_range_label": (f"{'men' if ref['sex'] == 'male' else 'women'} aged "
+                                f"{ref['age_band']}, measured on a treadmill" if ref else None),
+        "likely_range": est.get("likely_range_ml_kg_min"),
+        "raw_value": (None if choice["bpm"] is None else round(float(choice["bpm"]), 1)),
+        "raw_unit": "bpm",
+        "raw_name": "resting_heart_rate",
+        "rate_guard": rate_guard,
+        "resting_rate_source": choice["source"],
+        "estimate": (None if value is None else {
+            "label": RESEARCH_ESTIMATE_LABEL,
+            "name": f"vo2max_nonexercise_{est['equation']}",
+            "value": value,
+            "unit": VO2MAX_UNIT,
+            "method": method,
+        }),
+        "oxygen_uptake_estimate": value,
+        "model_artifact": {"kind": "published_nonexercise_equation", "id": est["equation"],
+                           "citation": est["citation"], "doi": est["doi"]},
+        "demographics_present": demographics,
+        "missing_for_a_fitted_model": [],
+        "why_no_oxygen_uptake_value": None,
+        "limitation": (
+            "a non-exercise estimate: most of it comes from the profile entered "
+            "(age, sex, height, weight, activity); the scan contributes the "
+            "resting heart rate. Equations of this kind are typically within "
+            "about 5-7 mL/kg/min of a treadmill test, read low for very fit "
+            "people and high for unfit people, cannot show the effect of "
+            "training from one scan to the next, and have not been validated "
+            "with a camera-measured heart rate."),
+    }
+
+
 def cardiorespiratory_indices(regularity, hr_bpm, participant=None, *,
                               rate_method=None, rate_intervals=None,
                               spectral_hr_bpm=None, pulse_verdict=None,
                               harmonic_fraction=None, spectral_snr=None,
-                              spectral_roi_agree=None, ref_bpm=None) -> dict:
-    """Resting cardiorespiratory values, and an explicit account of why
-    an oxygen-uptake number is not among them.
+                              spectral_roi_agree=None, ref_bpm=None,
+                              reference_source=None) -> dict:
+    """Resting cardiorespiratory values and the fitness card's estimate.
 
-    What a resting scan gives is resting heart rate and interval
-    dispersion, plus the bounded autonomic index built from them. Every
-    published non-exercise oxygen-uptake equation is dominated by age,
-    sex and body composition, which no camera measures; emitting one
-    here would report demographics as a camera measurement. The honest
-    routes are the three-phase recovery session, which measures
-    heart-rate recovery and is already built, or a model fitted on
-    captured scans against a reference, which is what `model_artifact`
-    is reserved for."""
+    TWO bases, chosen by what the client sent, never by what the scan
+    happened to yield (one person must not flip scales between scans - the
+    27.1-then-50.1 lesson of 2026-09-09):
+
+      a user-entered profile   -> a published non-exercise VO2max estimate in
+        (age, sex, height,        mL/kg/min (features/vo2max.py). The scan
+        weight, activity)         contributes the resting heart rate; every
+                                  other input is labelled user-entered, so
+                                  demographics are never presented as a
+                                  camera measurement. `ref_bpm` - the
+                                  live-frame rate of the same scan - may stand
+                                  in when the recorded clip's rate is missing
+                                  or contradicted (vo2max.select_resting_rate).
+      no profile               -> the 0-100 resting-rate proxy, exactly as
+                                  before, and no oxygen-uptake number: a pulse
+                                  alone does not support one."""
     disp = (getattr(regularity, "dispersion", None) or {}) if regularity \
         else {}
     pc = participant or {}
@@ -759,14 +884,32 @@ def cardiorespiratory_indices(regularity, hr_bpm, participant=None, *,
     proxy = None if idx is None else round(100.0 * float(idx), 1)
     estimate_name = "resting_rate_cardiorespiratory_proxy"
     estimate_method = (
-        "heart-rate-only logistic research transform: (60-HR)/12, over a "
+        f"heart-rate-only logistic research transform: ({HR_REF_BPM:.0f}-HR)/"
+        f"{HR_SPREAD_BPM:.0f}, over a "
         f"resting rate taken from at least {MIN_RATE_INTERVALS} clean beat "
         "intervals. Interval variability is reported beside it and never "
         "enters the score: on camera captures it is dominated by beat-timing "
         "noise, so including it would change the scale rather than the meaning."
     )
     basis = "resting_hr_only"
+    profile, profile_problems = _vo2.normalize_profile(participant)
+    if profile is not None:
+        return _vo2max_card(
+            profile, hr=hr, rate_source=rate_source, tier=tier,
+            tier_reasons=tier_reasons, reason=reason, reason_code=reason_code,
+            ref_bpm=ref_bpm, reference_source=reference_source, rmssd=rmssd,
+            sdnn=disp.get("sdnn_ms"), rate_guard=rate_guard, legacy_proxy=proxy,
+            legacy_index=rate_only, demographics=demographics)
     return {
+        "estimator": "resting_rate_logistic",
+        # Why the card is on the proxy basis: nothing was sent, or what was sent
+        # cannot feed the equation (each phrase names a field, never a value).
+        # The key names matter: this payload is FENCED (tests/test_hemodynamics.
+        # VO2_RE) - without a profile no oxygen-uptake token may appear in it
+        # anywhere, as a value or as a key.
+        "profile_estimate": None,
+        "profile_estimate_unavailable": (profile_problems if participant else
+                                         ["no profile was provided"]),
         "available": idx is not None,
         "calibrated": False,
         "resting_hr_bpm": (None if hr is None else round(float(hr), 2)),
@@ -865,14 +1008,50 @@ def _evidence_quality(det: dict, *, fps: float, n_beats: int,
     }
 
 
+def _reference_rate(reference) -> tuple:
+    """(bpm, source) of the client's live-frame rate for this scan, or (None,
+    None). `reference` is the request's reference block (ref_hr, ref_source)."""
+    if not isinstance(reference, dict):
+        return None, None
+    try:
+        bpm = float(reference.get("ref_hr"))
+    except (TypeError, ValueError):
+        return None, None
+    if not np.isfinite(bpm):
+        return None, None
+    return bpm, str(reference.get("ref_source") or "client_reference")
+
+
+def _fitness_without_beats(participant, reference):
+    """The fitness card for a scan whose recorded clip yielded no beat lattice.
+
+    Only the PROFILE basis can answer here, and only from the live-frame rate
+    of the same scan: on the production sheet every one of the 11 scans that
+    ended without a fitness value had completed on the SDK's side (reference
+    rate 55-89 bpm) while the clip failed a capture gate or kept < 5 beats.
+    None when there is no profile or no reference - the proxy basis has
+    nothing to compute from, exactly as before."""
+    ref_bpm, ref_src = _reference_rate(reference)
+    profile, _ = _vo2.normalize_profile(participant)
+    if profile is None or ref_bpm is None:
+        return None
+    card = cardiorespiratory_indices(None, None, participant, ref_bpm=ref_bpm,
+                                     reference_source=ref_src)
+    return card if card.get("available") else None
+
+
 def resting_hemodynamics(det, *, outcome, participant=None, capture=None,
-                         min_conf=None) -> dict:
+                         min_conf=None, reference=None) -> dict:
     """Compute each resting family from its own surviving scan evidence.
 
     The overall rhythm verdict is carried into confidence but is not an
     endpoint input.  This is important for research collection: morphology
     can remain measurable even when rhythm-specific interval gates abstain.
     Missing waveform/lattice evidence still fails visibly.
+
+    `reference` is the request's reference block (the live-frame rate of the
+    same scan). It reaches the fitness card only, and only on the profile
+    basis (see cardiorespiratory_indices); no other endpoint reads it.
     """
     from features.pulse_morphology import (FEATURE_NAMES,
                                            MIN_BEATS_FOR_SESSION,
@@ -886,9 +1065,13 @@ def resting_hemodynamics(det, *, outcome, participant=None, capture=None,
 
     ing, lattice = det.get("ingest"), det.get("lattice")
     if ing is None or lattice is None:
-        return {"available": False, "outcome": str(outcome),
-                "reasons": ["the scan produced no waveform or beat "
-                            "lattice"]}
+        out = {"available": False, "outcome": str(outcome),
+               "reasons": ["the scan produced no waveform or beat "
+                           "lattice"]}
+        fit = _fitness_without_beats(participant, reference)
+        if fit is not None:
+            out["cardiorespiratory_fitness"] = fit
+        return out
     # Endpoint availability is independent of the rhythm *classification*,
     # but never independent of measurement quality.  Morphology from one ROI
     # or from incoherent/noisy beats is not a real prototype estimate.  Apply
@@ -978,10 +1161,10 @@ def resting_hemodynamics(det, *, outcome, participant=None, capture=None,
                           band=(MORPH_BAND_HZ[0], hi)) for r in ROI_NAMES})
         in_seg = [(t0, t1) for t0, t1 in pairs
                   if t0 >= seg_ts[0] and t1 <= seg_ts[-1]]
-        windows = {r: _beat_windows(waves[r], seg_ts, in_seg)
+        windows = {r: _beat_windows(waves[r], seg_ts, in_seg, with_beat_time=True)
                    for r in ROI_NAMES}
         for roi in ROI_NAMES:
-            for f1, f2 in windows[roi]:
+            for f1, f2, _ in windows[roi]:
                 roi_segments[roi].append(waves[roi][f1:f2])
                 per_beat.append(beat_morphology(waves[roi][f1:f2], fps,
                                                 native_fs=fps))
@@ -1002,11 +1185,15 @@ def resting_hemodynamics(det, *, outcome, participant=None, capture=None,
                      if roi_segments else 0)
     if not roi_feats or beats_per_roi < MIN_PROVISIONAL_BEATS:
         # Nothing to compute a contour from: the one case that stays blank.
-        return {"available": False, "outcome": str(outcome),
-                "reasons": [f"only {beats_per_roi} morphology-usable "
-                            f"beats across {len(roi_feats)} readable ROIs "
-                            f"(a provisional value needs at least "
-                            f"{MIN_PROVISIONAL_BEATS} beats in one region)"]}
+        out = {"available": False, "outcome": str(outcome),
+               "reasons": [f"only {beats_per_roi} morphology-usable "
+                           f"beats across {len(roi_feats)} readable ROIs "
+                           f"(a provisional value needs at least "
+                           f"{MIN_PROVISIONAL_BEATS} beats in one region)"]}
+        fit = _fitness_without_beats(participant, reference)
+        if fit is not None:
+            out["cardiorespiratory_fitness"] = fit
+        return out
     if len(roi_feats) < 2 or beats_per_roi < MIN_BEATS_FOR_SESSION:
         scan_tier_reasons.append(
             f"only {beats_per_roi} morphology-usable beats across "
@@ -1076,6 +1263,7 @@ def resting_hemodynamics(det, *, outcome, participant=None, capture=None,
     tone["confidence"] = dict(
         quality, optics_locked=bool(locked),
         amplitude_beats=int(tone.get("n_beats") or 0))
+    ref_bpm, ref_src = _reference_rate(reference)
     fitness = cardiorespiratory_indices(
         reg, hr, participant, rate_method=rate_method,
         rate_intervals=rate_intervals,
@@ -1083,7 +1271,8 @@ def resting_hemodynamics(det, *, outcome, participant=None, capture=None,
         harmonic_fraction=ev.get("harmonic_fraction"),
         spectral_snr=ev.get("pulse_spectral_snr"),
         spectral_roi_agree=ev.get("pulse_spectral_roi_agree"),
-        pulse_verdict=pulse_gate.get("verdict"))
+        pulse_verdict=pulse_gate.get("verdict"),
+        ref_bpm=ref_bpm, reference_source=ref_src)
     # The scan-level tier reasons apply to every card: a card is "measured"
     # only when both the scan and its own floors held.
     for card in (stiffness, tone, fitness):

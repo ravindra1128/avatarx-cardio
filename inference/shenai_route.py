@@ -509,6 +509,72 @@ def wait_for(getter: Callable[[], Optional[dict]], budget_s: float,
 FITNESS_RATE_TOL = 0.15
 
 
+def _reconcile_vo2max(doc: dict, rec: dict, card: dict, details: dict,
+                      train_bpm: float, out: dict, items: list) -> dict:
+    """The profile basis (features/vo2max.py) of reconcile_fitness_rate.
+
+    Same one-rate rule, different consequence. On the 0-100 proxy a wrong rate
+    IS the value (2.4/100 at 124 bpm against 21.2 at 90), so a sound train that
+    contradicts the clip blanks the card. The VO2max estimate moves about
+    0.1 mL/kg/min per bpm, and a sound live-frame train is the better-evidenced
+    rate of the two, so the estimate is RECOMPUTED on it instead of withheld:
+      route used       -> the rate the rhythm result carries (one rate per
+                          scan, owner 2026-09-17)
+      train sound      -> the train's rate, unless the card already stands on
+                          the request's own live-frame rate (the same SDK)."""
+    from features import vo2max
+    choice = details.get("resting_rate_choice") if isinstance(details.get("resting_rate_choice"), dict) else {}
+    own = _f(choice.get("own_bpm"))
+    pulse = _f(doc.get("mean_pulse_rate_bpm"))
+    current = _f((card.get("raw") or {}).get("value")) if isinstance(card.get("raw"), dict) else None
+    computed = card.get("status") == "computed" and current is not None
+    route_pulse = pulse if rec.get("used") else None
+    if route_pulse is None and computed and str(details.get("resting_rate_source") or "").startswith("live_frame"):
+        # Already on the request's live-frame rate (the SDK's heart rate); the
+        # train is the same SDK's second account of the same beats.
+        out.update(action="agree", card_bpm=current, train_bpm=train_bpm)
+        return out
+    target, name = (route_pulse, "shenai_train_via_resolver") if route_pulse is not None \
+        else (train_bpm, "shenai_train")
+    pick = vo2max.select_resting_rate(own, choice.get("own_source"), target, name)
+    if pick["bpm"] is None or (computed and abs(current - pick["bpm"]) < 0.05):
+        out.update(action="agree", card_bpm=current, train_bpm=train_bpm)
+        return out
+    est = vo2max.estimate_vo2max(details["profile"], pick["bpm"])
+    if not est["available"]:
+        out.update(action="agree", card_bpm=current, train_bpm=train_bpm, note=est.get("reason"))
+        return out
+    old = card.get("value")
+    # Two readings agreeing keeps whatever tier the clip's own rate earned;
+    # a live-frame rate standing alone is provisional, with the reason.
+    used_own = bool(pick["corroborated"]) and card.get("tier") is not None
+    card.update(status="computed", value=est["vo2max_ml_kg_min"], unit="mL/kg/min",
+                metric=f"vo2max_nonexercise_{est['equation']}",
+                likely_range=est.get("likely_range_ml_kg_min"),
+                raw={"name": "resting_heart_rate", "value": round(pick["bpm"], 1), "unit": "bpm"})
+    if not used_own:
+        card["tier"] = "provisional"
+        keep = [r for r in (card.get("tier_reasons") or [])
+                if "live-frame" not in r and "resting rate" not in r and "beat count" not in r
+                and "clean beat intervals" not in r and "unverified" not in r]
+        card["tier_reasons"] = keep + ([pick["reason"]] if pick["reason"] else [])
+    elif card.get("tier") is None:
+        card["tier"] = "provisional"
+    card.pop("reason", None)
+    details.update(vo2max=est, resting_rate_choice=pick, available=True,
+                   resting_hr_bpm=round(pick["bpm"], 2), resting_rate_source=pick["source"],
+                   oxygen_uptake_estimate=est["vo2max_ml_kg_min"], score=est["vo2max_ml_kg_min"],
+                   likely_range=est.get("likely_range_ml_kg_min"), reason=None, reason_code=None,
+                   raw_value=round(pick["bpm"], 1), vo2max_unavailable=None,
+                   fitness_proxy_basis="vo2max_nonexercise")
+    card["oxygen_uptake_ml_kg_min"] = est["vo2max_ml_kg_min"]
+    b = doc.get("biomarkers") or {}
+    b["complete"] = all(x.get("status") == "computed" for x in items)
+    out.update(applied=True, action="recomputed", from_bpm=current, to_bpm=round(pick["bpm"], 1),
+               from_value=old, to_value=card["value"], basis="vo2max_nonexercise")
+    return out
+
+
 def reconcile_fitness_rate(doc: dict, rec: dict) -> dict:
     """One rate per scan (owner, 2026-09-17). The fitness card is a map of
     the resting rate, and the resting rate it used came from the video path's
@@ -534,6 +600,9 @@ def reconcile_fitness_rate(doc: dict, rec: dict) -> dict:
             return out
         raw = card.get("raw") if isinstance(card.get("raw"), dict) else {}
         card_bpm = _f(raw.get("value"))
+        details = card.get("details") if isinstance(card.get("details"), dict) else {}
+        if isinstance(details.get("profile"), dict):
+            return _reconcile_vo2max(doc, rec, card, details, train_bpm, out, items)
         if rec.get("used") and _f(doc.get("mean_pulse_rate_bpm")) is not None:
             from features.hemodynamics import resting_rate_index
             hr = float(doc["mean_pulse_rate_bpm"])

@@ -373,6 +373,88 @@ even at today's yield; (c) the corroboration rule for the train, revisited with 
 sheet's `ShenAI Route` reasons once ~30 scans exist; (d) real-AF validation through the
 route: the MIMIC PERform PPG channel run through OUR beat detector end to end.
 
+## Fitness ("VO2 Max") card: profile basis (2026-09-20) - IN THE WORKING TREE, NOT DEPLOYED, owner to confirm
+
+**Goal (owner):** a VO2 Max on every usable completed scan; repeat scans 10-20 min apart
+within +/-8 units; stability from the pipeline, never from smoothing/caching/clipping.
+
+**Measured baseline (`scripts/fitness_repeatability.py`; repeat pair = same phone, <= 20 min):**
+
+| data | coverage | pairs within +/-8 | mean abs diff | max |
+|---|---|---|---|---|
+| production sheet, 67 real scans | 56/67 | 22/54 = 41 % | 20.5 | 85.3 |
+| staging sheet, 125 real scans | 106/125 | 91/170 = 54 % | 12.1 | 81.8 |
+| 16 retained clips, production code (`main` c956a45) | 16/16 | 4/17 = 24 % | 36.4 | 87.2 |
+| 16 retained clips, staging code (71a17bf) | 8/16 | 0/5 | 29.0 | 58.0 |
+
+**Two root causes, separated by a counterfactual.** The card was 100*logistic((72-HR)/14):
+one input, ~1.8 points per bpm. (1) Our clip rate: MAE 14.5 bpm against the SDK's on the
+production sheet, > 15 bpm off on 12 of 43 scans, and its SOURCE flips between four
+estimators from scan to scan (one 16-minute group read 87.3, 87.3, 0.1, 55.3 while the SDK
+read 85/90/84/84). (2) The estimator itself: fed the SDK's rate instead of ours - a perfect
+rate chain - the same formula still reaches only 54 % (production) / 62 % (staging), because
+a seated person's pulse really moves ~5 bpm between scans (max 24) and the formula turns
+every beat into "fitness". VO2max is a trait; no published method derives it from a resting
+pulse alone. So no amount of signal work could have met the target with that card.
+
+**Change.** With a user-entered profile (age, sex, height, weight, activity level 1-5) the
+card is the Jurca 2005 non-exercise VO2max equation in mL/kg/min (`features/vo2max.py`;
+coefficients checked against the paper's Table 5 AND its Figure 1 worksheet; independent
+validation Peterman 2020, n=808: no mean bias, SEE 4.7, ICC 0.80, best of 27 equations).
+The scan contributes the resting rate at its validated weight, -0.105 mL/kg/min per bpm;
+everything else is labelled user-entered. Rate for the estimate: the request's live-frame
+rate (`ref_hr`, the SDK's - the heart rate the results page already shows) when present,
+with our clip rate recorded as corroborating or disagreeing; our clip rate alone otherwise;
+when the ShenAI route is used the card follows the published pulse (one rate per scan).
+A scan whose clip yields no beats still estimates from the live-frame rate (every one of
+production's 11 valueless scans had completed on the SDK's side). WITHOUT a profile the
+card is the old 0-100 proxy, byte-identical - so production's webapp is unaffected.
+The profile travels in the BODY of `/api/start` (never a query string). Sheet: `Fit
+Estimator`, `Fit HR Source`, `Fit HR Own`, `Fit HR Ref`, `Fit Proxy`, `Fit Profile`.
+Webapp: `/beta/cardio-staging` only (profile gate before the scan, card prints the
+equation's +/- band as "Estimate range" and FRIEND 2015 quartiles as "Typical range").
+
+**After, same 16 clips, same job path (nominal profile; repeatability does not depend on it):**
+
+| experiment | coverage | pairs within +/-8 | mean abs diff | max | within-subject SD |
+|---|---|---|---|---|---|
+| E3 new estimator, OUR clip rate only (no ref, no route) | 13/16 | 12/12 | 1.33 | 3.1 | 1.24 |
+| E2 new estimator + live-frame rate (final) | 16/16 | 17/17 | 0.49 | 1.2 | 0.42 |
+
+Units changed (0-100 -> mL/kg/min), so +/-8 is not the same yardstick. Scale-free: the
+old card's within-subject SD on the production sheet (20.2) was as large as the score's
+spread ACROSS people (~19 = 1.8 points/bpm x the ~10.7 bpm SD of resting HR in Jurca's
+cohorts); the new one's is 0.42 against 8.1 (Peterman's SD of this estimate across 808
+people) - a noise-to-spread ratio of ~1.0 before, ~0.05 after. Sheet counterfactual for E2:
+68/68 production and 116/116 staging repeat pairs within +/-8, max 2.6.
+
+**What this is not.** Not a measurement (that is CPET); individual error ~ +/-5 (1 SD),
++/-10-13 at 95 %; cannot track training (direction of change right in ~56 % of people);
+cohorts were US/UK, mostly white; never validated with a camera-measured pulse; no
+peer-reviewed face-video VO2max validation exists anywhere. The card shows a number with
+its band and never a fitness category. Rejected on evidence: Uth 15.3*HRmax/HRrest (5x more
+rate-sensitive, LoA ~+/-17), HUNT/Nes (needs waist; ~+6 outside Norway), any camera-HRV term.
+
+**Guard/gate, honestly:** no protected threshold or frozen config moved; the guard still
+FAILS on scope (`app/measure_api.py`, `app/report_data.py`, `app/result_sheet.py` - the
+plumbing a profile needs) and the holdout gate is blind (its replay sends no profile; a
+no-profile replay of all 16 clips is identical to the pre-change baseline on all 12
+compared fields). Same position as the ShenAI route: ships only on the owner's word.
+**The VO2 fence is the owner's call too.** Without a profile the payload stays fenced
+(`tests/test_hemodynamics.py::VO2_RE`: no oxygen-uptake token anywhere, as a value OR a
+key - the first draft broke this with a key name and the suite caught it). WITH a profile
+the card deliberately carries a mL/kg/min number, which the old spec B.18 rule ("an exact
+VO2 max number never renders") forbade; the owner's 2026-09-03 "it's imperative we offer
+values" and the 2026-09-20 mission are read as lifting it for this card only.
+Tests: `tests/test_vo2max.py` (35). Pre-existing and NOT from this change - it fails on a
+clean export of 71a17bf too: `test_scan_engine::test_low_signal_scan_completes_but_never_
+forces_a_result` (`biomarkers.complete` is True on a low-signal scan); add it to the known
+failures or fix it separately. **Deploy order matters:**
+service first, webapp second - the old service does not read `/api/start`'s body.
+**Still to do:** phone scans on `/beta/cardio-staging` (two per session, 10-20 min apart,
+different people) read off the new sheet columns; then PORT the gate + processor hook to
+`/beta/cardio`; a CPET/wearable-paired comparison is the only route to an accuracy claim.
+
 ## Owner decisions on record
 
 | date | decision | evidence |

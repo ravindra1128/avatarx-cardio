@@ -124,6 +124,14 @@ COLUMNS = [
     "Trace Ran", "Trace Outcome", "Trace Result", "Trace p", "Trace SQI",
     "Trace Coherence", "Trace Timing ms", "Trace Intervals", "Trace Coverage",
     "Trace Pulse", "Trace FPS", "Trace Note",
+    # 2026-09-20: the fitness card's second basis (features/vo2max.py). "Fitness"
+    # above holds what the user saw - mL/kg/min on the profile basis, the 0-100
+    # proxy otherwise, and "Fit Unit" says which. These say where the estimate's
+    # rate came from (the clip, or the live-frame rate of the same scan) and keep
+    # the clip's own 0-100 proxy beside it so the two bases stay comparable.
+    # "Fit Profile" is the equation's user-entered inputs (sex/age/BMI/activity),
+    # which a later treadmill comparison needs; there is no name or id in it.
+    "Fit Estimator", "Fit HR Source", "Fit HR Own", "Fit HR Ref", "Fit Proxy", "Fit Profile",
 ]
 
 _POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sheet")
@@ -263,6 +271,15 @@ def _shenai_route_cell(r) -> str:
     if r.get("used"):
         return (why if why.startswith("used") else f"used: {why}")[:300]
     return (f"not used: {why}" if why else "not used")[:300]
+
+
+def _fit_profile(fit_d: dict) -> str:
+    """The equation's inputs as one compact cell, e.g. "male/35y/BMI 24.0/PA 3"."""
+    i = _g(fit_d, "vo2max", "inputs") or {}
+    if not i:
+        return ""
+    return (f"{i.get('sex')}/{_num(i.get('age_years'), 0)}y/BMI {_num(i.get('bmi'), 1)}"
+            f"/PA {i.get('activity_level')}")
 
 
 def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
@@ -465,6 +482,12 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
         "Trace FPS": _num(tp.get("fps"), 1) if tp else "",
         "Trace Note": ((" | ".join(tp.get("no_read_reasons") or tp.get("ingest_reasons") or [])
                         or str(tp.get("reason") or ""))[:300] if tp else ""),
+        "Fit Estimator": str(fit_d.get("estimator") or ""),
+        "Fit HR Source": str(fit_d.get("resting_rate_source") or ""),
+        "Fit HR Own": _num(_g(fit_d, "resting_rate_choice", "own_bpm"), 1),
+        "Fit HR Ref": _num(_g(fit_d, "resting_rate_choice", "reference_bpm"), 1),
+        "Fit Proxy": _num(fit_d.get("fitness_proxy_score"), 1),
+        "Fit Profile": _fit_profile(fit_d),
         "AFib Result": str(doc.get("afib_result") or ""),
         "AFib p": _num(doc.get("afib_probability"), 3),
         "AFib Basis": (lambda b: (f"{b.get('category')}: {b.get('why')}" if b.get("category")
