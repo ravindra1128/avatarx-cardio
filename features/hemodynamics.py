@@ -416,14 +416,10 @@ def segment_amplitudes(waves: dict, seg_ts: np.ndarray,
     out: dict = {}
     for roi, wave in waves.items():
         amps = []
-        for window in windows.get(roi, []):
-            f1, f2 = window[:2]
+        for f1, f2 in windows.get(roi, []):
             seg = np.asarray(wave[f1:f2], float)
             if seg.size >= 4 and np.all(np.isfinite(seg)):
-                # Preserve the shared lattice beat identity when available.
-                # Regional foot jitter must not change which amplitudes pool.
-                beat_time = float(window[2]) if len(window) > 2 else float(seg_ts[f1])
-                amps.append((beat_time,
+                amps.append((float(seg_ts[f1]),
                              float(np.max(seg) - np.min(seg))))
         if len(amps) < MIN_SEGMENT_BEATS:
             continue
@@ -900,8 +896,29 @@ def cardiorespiratory_indices(regularity, hr_bpm, participant=None, *,
             ref_bpm=ref_bpm, reference_source=reference_source, rmssd=rmssd,
             sdnn=disp.get("sdnn_ms"), rate_guard=rate_guard, legacy_proxy=proxy,
             legacy_index=rate_only, demographics=demographics)
+    # Option A (owner, 2026-09-20: no profile form): the proxy takes the SAME
+    # one-rate choice as the profile basis - the request's live-frame rate when
+    # the client sent one, our clip rate corroborating it or recorded as
+    # disagreeing; our clip rate alone otherwise. Measured on the production
+    # sheet: our clip rate was > 15 bpm off the SDK's on 12 of 43 scans (folds to
+    # 45-48, split counts over 100), which is what read 87 then 0.1 on one person.
+    # This does NOT make the proxy meet +/-8 (54-62 % of repeat pairs even on the
+    # SDK's rate: a resting pulse really moves); it removes the rate errors and
+    # the abstentions, nothing else. Without a reference nothing changes.
+    choice = _vo2.select_resting_rate(hr, rate_source, ref_bpm, reference_source)
+    if choice["reference_bpm"] is not None:
+        if choice["corroborated"]:
+            tier = "measured" if tier == "measured" else "provisional"
+        else:
+            tier, tier_reasons = "provisional", ([choice["reason"]] if choice["reason"] else [])
+        hr, rate_source = choice["bpm"], choice["source"]
+        rate_only = idx = resting_rate_index(hr)
+        proxy = None if idx is None else round(100.0 * float(idx), 1)
+        if idx is not None:
+            reason = reason_code = None
     return {
         "estimator": "resting_rate_logistic",
+        "resting_rate_choice": choice,
         # Why the card is on the proxy basis: nothing was sent, or what was sent
         # cannot feed the equation (each phrase names a field, never a value).
         # The key names matter: this payload is FENCED (tests/test_hemodynamics.
@@ -1032,8 +1049,7 @@ def _fitness_without_beats(participant, reference):
     None when there is no profile or no reference - the proxy basis has
     nothing to compute from, exactly as before."""
     ref_bpm, ref_src = _reference_rate(reference)
-    profile, _ = _vo2.normalize_profile(participant)
-    if profile is None or ref_bpm is None:
+    if ref_bpm is None:
         return None
     card = cardiorespiratory_indices(None, None, participant, ref_bpm=ref_bpm,
                                      reference_source=ref_src)
@@ -1161,10 +1177,10 @@ def resting_hemodynamics(det, *, outcome, participant=None, capture=None,
                           band=(MORPH_BAND_HZ[0], hi)) for r in ROI_NAMES})
         in_seg = [(t0, t1) for t0, t1 in pairs
                   if t0 >= seg_ts[0] and t1 <= seg_ts[-1]]
-        windows = {r: _beat_windows(waves[r], seg_ts, in_seg, with_beat_time=True)
+        windows = {r: _beat_windows(waves[r], seg_ts, in_seg)
                    for r in ROI_NAMES}
         for roi in ROI_NAMES:
-            for f1, f2, _ in windows[roi]:
+            for f1, f2 in windows[roi]:
                 roi_segments[roi].append(waves[roi][f1:f2])
                 per_beat.append(beat_morphology(waves[roi][f1:f2], fps,
                                                 native_fs=fps))

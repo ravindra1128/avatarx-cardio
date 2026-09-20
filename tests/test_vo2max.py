@@ -152,7 +152,7 @@ def test_rate_choice_ranks_two_readings_of_the_same_scan():
 
 # ------------------------------------------------------------------ the card
 def test_without_a_profile_the_card_is_the_proxy_it_always_was():
-    out = cardiorespiratory_indices(_Reg(), 70.0, None, ref_bpm=90.0, **CLEAN)
+    out = cardiorespiratory_indices(_Reg(), 70.0, None, **CLEAN)
     assert out["estimate"]["unit"] == "/100"
     assert out["estimate"]["value"] == round(100 * resting_rate_index(70.0), 1)
     assert out["oxygen_uptake_estimate"] is None and out["tier"] == "measured"
@@ -216,8 +216,12 @@ def test_a_scan_whose_clip_abstained_still_estimates_from_the_live_frame_rate():
     # the doubling signature with no backing: the proxy basis abstains ...
     kw = dict(rate_method="clean_interval_median", rate_intervals=20, spectral_hr_bpm=50.0,
               harmonic_fraction=0.05, spectral_snr=3.0, spectral_roi_agree=1)
-    proxy = cardiorespiratory_indices(_Reg(), 100.0, None, ref_bpm=74.0, **kw)
+    proxy = cardiorespiratory_indices(_Reg(), 100.0, None, **kw)
     assert proxy["available"] is False and proxy["reason_code"] == "resting_rate_unverified"
+    # Option A: with the request's live-frame rate the proxy answers too
+    a = cardiorespiratory_indices(_Reg(), 100.0, None, ref_bpm=74.0, reference_source="shenai", **kw)
+    assert a["available"] and a["raw_value"] == 74.0 and a["tier"] == "provisional"
+    assert a["estimate"]["value"] == round(100 * resting_rate_index(74.0), 1) and a["reason"] is None
     # ... the profile basis answers from the other reading of the same scan
     out = cardiorespiratory_indices(_Reg(), 100.0, PROFILE, ref_bpm=74.0,
                                     reference_source="shenai", **kw)
@@ -234,11 +238,23 @@ def test_no_beat_lattice_at_all_is_still_a_completed_scan_on_the_profile_basis()
     assert hemo["available"] is False                       # the other cards stay blank
     fit = hemo["cardiorespiratory_fitness"]
     assert fit["available"] and fit["raw_value"] == 63.5 and fit["tier"] == "provisional"
-    # neither input alone is enough
     assert "cardiorespiratory_fitness" not in resting_hemodynamics(
         {}, outcome="NO_RESULT", participant=PROFILE)
-    assert "cardiorespiratory_fitness" not in resting_hemodynamics(
-        {}, outcome="NO_RESULT", reference=ref)
+    # Option A: the proxy basis answers from the live-frame rate as well
+    px = resting_hemodynamics({}, outcome="NO_RESULT", reference=ref)["cardiorespiratory_fitness"]
+    assert px["estimate"]["unit"] == "/100" and px["raw_value"] == 63.5 and px["tier"] == "provisional"
+
+
+def test_option_a_the_proxy_follows_the_live_frame_rate_and_stays_fenced():
+    import re
+    fold = cardiorespiratory_indices(_Reg(), 48.0, None, ref_bpm=84.0, reference_source="shenai", **CLEAN)
+    assert fold["estimate"]["value"] == round(100 * resting_rate_index(84.0), 1)
+    assert fold["tier"] == "provisional" and "48" in fold["tier_reasons"][0]
+    ok = cardiorespiratory_indices(_Reg(), 74.0, None, ref_bpm=72.0, reference_source="shenai", **CLEAN)
+    assert ok["tier"] == "measured" and ok["raw_value"] == 72.0
+    assert ok["resting_rate_choice"]["own_bpm"] == 74.0
+    fence = re.compile(r"m[lL]\s*/\s*kg\s*/\s*min|vo2|vo₂", re.IGNORECASE)
+    assert not fence.search(json.dumps(fold)) and not fence.search(json.dumps(ok))
 
 
 # ------------------------------------------------------------------- payload

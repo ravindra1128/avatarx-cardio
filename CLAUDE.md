@@ -428,6 +428,18 @@ cohorts); the new one's is 0.42 against 8.1 (Peterman's SD of this estimate acro
 people) - a noise-to-spread ratio of ~1.0 before, ~0.05 after. Sheet counterfactual for E2:
 68/68 production and 116/116 staging repeat pairs within +/-8, max 2.6.
 
+**Owner decision 2026-09-20 (later the same day): NO profile form - Option A.** The form
+was removed from `/beta/cardio-staging`; the profile basis above stays in the service,
+dormant (nothing sends a profile). Instead the 0-100 proxy takes the same one-rate choice:
+the request's live-frame rate (`ref_hr`) when present, our clip rate recorded as
+corroborating/disagreeing, and a scan with no beat lattice still answers from it. Same 16
+clips (`fit_option_a.json`): coverage 8/16 -> 16/16, pairs within +/-8 0/5 (24 % on
+production code) -> 9/17 = 53 %, mean |d| 29-36 -> 7.8, max 87 -> 18.8, card HR vs SDK MAE
+16-22 -> 0.03 bpm. It does NOT meet +/-8 and cannot: what is left is the person's real
+pulse moving 5-10 bpm between scans (g3: 77->68 bpm in 17 min = 17 points). Only a lower-gain
+estimator with stable inputs closes that; Option B (the SDK's face-estimated age/sex/BMI in
+the same equation, no form) is untested - those fields are not in the retained sidecars.
+
 **What this is not.** Not a measurement (that is CPET); individual error ~ +/-5 (1 SD),
 +/-10-13 at 95 %; cannot track training (direction of change right in ~56 % of people);
 cohorts were US/UK, mostly white; never validated with a camera-measured pulse; no
