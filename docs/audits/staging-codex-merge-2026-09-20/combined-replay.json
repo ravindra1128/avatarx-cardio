@@ -1,0 +1,762 @@
+{
+  "label": "staging-codex-merged",
+  "split": "holdout",
+  "repeat": 2,
+  "rows": [
+    {
+      "outcome": "REPEAT_SCAN",
+      "no_read_reasons": [
+        "only 58% of the scan yielded clean intervals (< 60%)",
+        "beat timing too imprecise for any rhythm statement (regions disagree by 45 ms per beat > 40 ms)"
+      ],
+      "sqi": 0.30321163480976177,
+      "stars": 2,
+      "coherence": 0.3064516129032258,
+      "timing_ms": 44.513407911342284,
+      "n_intervals": 17,
+      "n_beats": 31,
+      "dropout_rate": 0.32258064516129037,
+      "coverage": 0.5834232817873712,
+      "gates_failed": [
+        "coverage_any_class",
+        "timing_precision_any_class"
+      ],
+      "cards": {
+        "arterial_stiffness": {
+          "status": "computed",
+          "value": 17.1,
+          "unit": "/100",
+          "reason": null
+        },
+        "vascular_tone": {
+          "status": "computed",
+          "value": 35.3,
+          "unit": "/100",
+          "reason": null
+        },
+        "cardiorespiratory_fitness": {
+          "status": "not_computed",
+          "value": null,
+          "unit": null,
+          "reason": "the resting rate could not be verified across facial regions, so no rate is reported"
+        }
+      },
+      "timing": {
+        "trim_s": 0.08,
+        "downscale_s": 1.61,
+        "analysis_s": 6.66,
+        "server_total_s": 8.35
+      },
+      "prep": {
+        "trim": {
+          "applied": true,
+          "window_s": 40.0,
+          "reason": null,
+          "duration_probe": "packets",
+          "source_duration_s": 85.9,
+          "tail_start_s": 40.63,
+          "discontinuities": 2,
+          "head_dropped_s": 3.393,
+          "gap_s": 37.237,
+          "spanned_gaps": [],
+          "trimmed_from_s": 44.16,
+          "cut_method": "keyframe-seek",
+          "kept_s": 41.765,
+          "note": "kept the last 41.8s from keyframe 44.16s; dropped 3.4s head + 37.2s hole (2 discontinuities); keyframe-seek"
+        },
+        "downscale": {
+          "applied": true,
+          "scale": "480x360",
+          "reason": null,
+          "vp9_cpu_used": "2",
+          "source": "480x720",
+          "target": "240x~360",
+          "attempt": "fit",
+          "path": "/var/folders/mw/c0dwh50d15q638c0thg88jmm0000gn/T/cardio-replay-rzybi7ks/20260916T081255Z-1234567890-mu3tp.webm.scaled.avi",
+          "scaled_to": "240x(auto, AR preserved)"
+        },
+        "clock": {
+          "source": "container_clock",
+          "n_frames": 1245,
+          "repaired": 1,
+          "median_dt_ms": 33.0,
+          "implied_fps": 30.3,
+          "warnings": [
+            "repaired 1 non-increasing timestamps (0.08% of steps)"
+          ],
+          "first_frame_s": 0.0,
+          "last_frame_s": 41.741,
+          "span_s": 41.741,
+          "frame_step_p99_ms": 51.00000000000193,
+          "frame_step_max_ms": 130.0000000000008
+        }
+      },
+      "wall_s": 10.12,
+      "returned": true,
+      "id": "20260916T081255Z-1234567890-mu3tp",
+      "split": "holdout",
+      "source": "webapp",
+      "deterministic": true,
+      "repeat_n": 2
+    },
+    {
+      "outcome": "REPEAT_SCAN",
+      "no_read_reasons": [
+        "irregular intervals seen, but cross-ROI coherence 0.27 < 0.35: the beats behind the irregularity are not verified",
+        "irregularity carried by half/double intervals (22% harmonic): detection-error signature, not rhythm evidence",
+        "irregular intervals seen, but beat timing is not precise enough to call them (regions disagree by 33 ms per beat > 30 ms): timing jitter alone can look like irregularity",
+        "irregular intervals seen, but only 66% of beats were placed consistently by two regions"
+      ],
+      "sqi": 0.38776353215183973,
+      "stars": 2,
+      "coherence": 0.2727272727272727,
+      "timing_ms": 33.26310898638596,
+      "n_intervals": 24,
+      "n_beats": 33,
+      "dropout_rate": 0.06060606060606055,
+      "coverage": 0.6937254436054399,
+      "gates_failed": [
+        "afib_coherence",
+        "afib_harmonic_fraction",
+        "afib_timing_precision",
+        "afib_timing_matched"
+      ],
+      "cards": {
+        "arterial_stiffness": {
+          "status": "computed",
+          "value": 69.2,
+          "unit": "/100",
+          "reason": null
+        },
+        "vascular_tone": {
+          "status": "computed",
+          "value": 72.3,
+          "unit": "/100",
+          "reason": null
+        },
+        "cardiorespiratory_fitness": {
+          "status": "not_computed",
+          "value": null,
+          "unit": null,
+          "reason": "the resting rate could not be verified across facial regions, so no rate is reported"
+        }
+      },
+      "timing": {
+        "trim_s": 0.09,
+        "downscale_s": 1.99,
+        "analysis_s": 8.31,
+        "server_total_s": 10.39
+      },
+      "prep": {
+        "trim": {
+          "applied": true,
+          "window_s": 40.0,
+          "reason": null,
+          "duration_probe": "packets",
+          "source_duration_s": 83.73,
+          "tail_start_s": 37.127,
+          "discontinuities": 2,
+          "head_dropped_s": 3.338,
+          "gap_s": 33.789,
+          "spanned_gaps": [],
+          "trimmed_from_s": 40.5,
+          "cut_method": "keyframe-seek",
+          "kept_s": 43.263,
+          "note": "kept the last 43.3s from keyframe 40.50s; dropped 3.3s head + 33.8s hole (2 discontinuities); keyframe-seek"
+        },
+        "downscale": {
+          "applied": true,
+          "scale": "480x360",
+          "reason": null,
+          "vp9_cpu_used": "2",
+          "source": "480x720",
+          "target": "240x~360",
+          "attempt": "fit",
+          "path": "/var/folders/mw/c0dwh50d15q638c0thg88jmm0000gn/T/cardio-replay-b4lv_zq3/20260916T101245Z-1234567890-mu3xz.webm.scaled.avi",
+          "scaled_to": "240x(auto, AR preserved)"
+        },
+        "clock": {
+          "source": "container_clock",
+          "n_frames": 1279,
+          "repaired": 1,
+          "median_dt_ms": 33.0,
+          "implied_fps": 30.3,
+          "warnings": [
+            "repaired 1 non-increasing timestamps (0.08% of steps)"
+          ],
+          "first_frame_s": 0.0,
+          "last_frame_s": 43.229,
+          "span_s": 43.229,
+          "frame_step_p99_ms": 51.9999999999996,
+          "frame_step_max_ms": 617.0000000000009
+        }
+      },
+      "wall_s": 11.78,
+      "returned": true,
+      "id": "20260916T101245Z-1234567890-mu3xz",
+      "split": "holdout",
+      "source": "webapp",
+      "deterministic": true,
+      "repeat_n": 2
+    },
+    {
+      "outcome": "REPEAT_SCAN",
+      "no_read_reasons": [
+        "clean-interval coverage 0.49 below floor 0.5",
+        "only 49% of the scan yielded clean intervals (< 60%)",
+        "only 12 clean intervals \u2014 too few to assess rhythm (< 15)"
+      ],
+      "sqi": 0.4720925530193446,
+      "stars": 2,
+      "coherence": 0.425,
+      "timing_ms": 16.01798727929271,
+      "n_intervals": 12,
+      "n_beats": 20,
+      "dropout_rate": 0.19999999999999996,
+      "coverage": 0.49388159694198436,
+      "gates_failed": [
+        "coverage",
+        "coverage_any_class",
+        "n_intervals_any_class"
+      ],
+      "cards": {
+        "arterial_stiffness": {
+          "status": "computed",
+          "value": 70.4,
+          "unit": "/100",
+          "reason": null
+        },
+        "vascular_tone": {
+          "status": "computed",
+          "value": 40.0,
+          "unit": "/100",
+          "reason": null
+        },
+        "cardiorespiratory_fitness": {
+          "status": "not_computed",
+          "value": null,
+          "unit": null,
+          "reason": "the resting rate could not be verified across facial regions, so no rate is reported"
+        }
+      },
+      "timing": {
+        "trim_s": 0.1,
+        "downscale_s": 1.96,
+        "analysis_s": 9.24,
+        "server_total_s": 11.3
+      },
+      "prep": {
+        "trim": {
+          "applied": true,
+          "window_s": 40.0,
+          "reason": null,
+          "duration_probe": "packets",
+          "source_duration_s": 93.49,
+          "tail_start_s": 48.565,
+          "discontinuities": 2,
+          "head_dropped_s": 3.41,
+          "gap_s": 45.155,
+          "spanned_gaps": [],
+          "trimmed_from_s": 52.03,
+          "cut_method": "keyframe-seek",
+          "kept_s": 41.483,
+          "note": "kept the last 41.5s from keyframe 52.03s; dropped 3.4s head + 45.2s hole (2 discontinuities); keyframe-seek"
+        },
+        "downscale": {
+          "applied": true,
+          "scale": "480x360",
+          "reason": null,
+          "vp9_cpu_used": "2",
+          "source": "480x720",
+          "target": "240x~360",
+          "attempt": "fit",
+          "path": "/var/folders/mw/c0dwh50d15q638c0thg88jmm0000gn/T/cardio-replay-rpdn7i8m/20260917T061917Z-0d8c2c7a-6179-42.webm.scaled.avi",
+          "scaled_to": "240x(auto, AR preserved)"
+        },
+        "clock": {
+          "source": "container_clock",
+          "n_frames": 1239,
+          "repaired": 1,
+          "median_dt_ms": 33.0,
+          "implied_fps": 30.3,
+          "warnings": [
+            "repaired 1 non-increasing timestamps (0.08% of steps)"
+          ],
+          "first_frame_s": 0.0,
+          "last_frame_s": 41.461,
+          "span_s": 41.461,
+          "frame_step_p99_ms": 51.9999999999996,
+          "frame_step_max_ms": 104.99999999999955
+        }
+      },
+      "wall_s": 12.68,
+      "returned": true,
+      "id": "20260917T061917Z-0d8c2c7a-6179-42",
+      "split": "holdout",
+      "source": "webapp",
+      "deterministic": true,
+      "repeat_n": 2
+    },
+    {
+      "outcome": "ACCEPT",
+      "no_read_reasons": [],
+      "sqi": 0.5870702977017398,
+      "stars": 5,
+      "coherence": 0.484375,
+      "timing_ms": 19.342857910460864,
+      "n_intervals": 24,
+      "n_beats": 32,
+      "dropout_rate": 0.09375,
+      "coverage": 0.6506411285637574,
+      "gates_failed": [],
+      "cards": {
+        "arterial_stiffness": {
+          "status": "computed",
+          "value": 27.8,
+          "unit": "/100",
+          "reason": null
+        },
+        "vascular_tone": {
+          "status": "computed",
+          "value": 43.6,
+          "unit": "/100",
+          "reason": null
+        },
+        "cardiorespiratory_fitness": {
+          "status": "not_computed",
+          "value": null,
+          "unit": null,
+          "reason": "the resting rate could not be verified across facial regions, so no rate is reported"
+        }
+      },
+      "timing": {
+        "trim_s": 0.15,
+        "downscale_s": 2.4,
+        "analysis_s": 9.46,
+        "server_total_s": 12.01
+      },
+      "prep": {
+        "trim": {
+          "applied": true,
+          "window_s": 40.0,
+          "reason": null,
+          "duration_probe": "packets",
+          "source_duration_s": 110.57,
+          "tail_start_s": 65.283,
+          "discontinuities": 2,
+          "head_dropped_s": 3.498,
+          "gap_s": 61.785,
+          "spanned_gaps": [],
+          "trimmed_from_s": 68.84,
+          "cut_method": "keyframe-seek",
+          "kept_s": 41.772,
+          "note": "kept the last 41.8s from keyframe 68.84s; dropped 3.5s head + 61.8s hole (2 discontinuities); keyframe-seek"
+        },
+        "downscale": {
+          "applied": true,
+          "scale": "480x360",
+          "reason": null,
+          "vp9_cpu_used": "2",
+          "source": "480x720",
+          "target": "240x~360",
+          "attempt": "fit",
+          "path": "/var/folders/mw/c0dwh50d15q638c0thg88jmm0000gn/T/cardio-replay-d8f_jzr1/20260917T062614Z-91bef2a7-f208-4b.webm.scaled.avi",
+          "scaled_to": "240x(auto, AR preserved)"
+        },
+        "clock": {
+          "source": "container_clock",
+          "n_frames": 1241,
+          "repaired": 1,
+          "median_dt_ms": 33.0,
+          "implied_fps": 30.3,
+          "warnings": [
+            "repaired 1 non-increasing timestamps (0.08% of steps)"
+          ],
+          "first_frame_s": 0.0,
+          "last_frame_s": 41.731,
+          "span_s": 41.731,
+          "frame_step_p99_ms": 51.00000000000193,
+          "frame_step_max_ms": 172.00000000000014
+        }
+      },
+      "wall_s": 13.75,
+      "returned": true,
+      "id": "20260917T062614Z-91bef2a7-f208-4b",
+      "split": "holdout",
+      "source": "webapp",
+      "deterministic": true,
+      "repeat_n": 2
+    },
+    {
+      "outcome": "REPEAT_SCAN",
+      "no_read_reasons": [
+        "irregular intervals seen, but cross-ROI coherence 0.22 < 0.35: the beats behind the irregularity are not verified",
+        "irregular intervals seen, but beat timing is not precise enough to call them (regions disagree by 33 ms per beat > 30 ms): timing jitter alone can look like irregularity",
+        "irregular intervals seen, but only 48% of beats were placed consistently by two regions"
+      ],
+      "sqi": 0.4090511438106482,
+      "stars": 2,
+      "coherence": 0.2222222222222222,
+      "timing_ms": 33.2839309316566,
+      "n_intervals": 28,
+      "n_beats": 36,
+      "dropout_rate": 0.08333333333333337,
+      "coverage": 0.7810314710871255,
+      "gates_failed": [
+        "afib_coherence",
+        "afib_timing_precision",
+        "afib_timing_matched"
+      ],
+      "cards": {
+        "arterial_stiffness": {
+          "status": "computed",
+          "value": 45.9,
+          "unit": "/100",
+          "reason": null
+        },
+        "vascular_tone": {
+          "status": "computed",
+          "value": 80.8,
+          "unit": "/100",
+          "reason": null
+        },
+        "cardiorespiratory_fitness": {
+          "status": "computed",
+          "value": 63.7,
+          "unit": "/100",
+          "reason": null
+        }
+      },
+      "timing": {
+        "trim_s": 0.12,
+        "downscale_s": 0.01,
+        "analysis_s": 13.06,
+        "server_total_s": 13.19
+      },
+      "prep": {
+        "trim": {
+          "applied": false,
+          "window_s": 40.0,
+          "reason": "clip is 30.5s \u2014 already within the window",
+          "duration_probe": "packets",
+          "source_duration_s": 30.47,
+          "tail_start_s": 0.0,
+          "discontinuities": 0,
+          "head_dropped_s": 0.0,
+          "gap_s": 0.0,
+          "spanned_gaps": [],
+          "note": "clip is 30.5s \u2014 already within the window"
+        },
+        "downscale": {
+          "applied": false,
+          "scale": "480x360",
+          "reason": "source 480x360 already within 480x360",
+          "vp9_cpu_used": "2",
+          "source": "480x360"
+        },
+        "clock": {
+          "source": "container_clock",
+          "n_frames": 916,
+          "repaired": 1,
+          "median_dt_ms": 33.333,
+          "implied_fps": 30.0,
+          "warnings": [
+            "repaired 1 non-increasing timestamps (0.11% of steps)"
+          ],
+          "first_frame_s": 0.0,
+          "last_frame_s": 30.466666666666665,
+          "span_s": 30.466666666666665,
+          "frame_step_p99_ms": 33.33333333333499,
+          "frame_step_max_ms": 33.33333333333499
+        }
+      },
+      "wall_s": 17.06,
+      "returned": true,
+      "id": "demo_93407fcd7873",
+      "split": "holdout",
+      "source": "demo",
+      "deterministic": true,
+      "repeat_n": 2
+    },
+    {
+      "outcome": "NO_RESULT",
+      "no_read_reasons": [
+        "no face detected for more than 2 s"
+      ],
+      "sqi": null,
+      "stars": 1,
+      "coherence": null,
+      "timing_ms": null,
+      "n_intervals": null,
+      "n_beats": null,
+      "dropout_rate": null,
+      "coverage": null,
+      "gates_failed": [],
+      "cards": {
+        "arterial_stiffness": {
+          "status": "not_computed",
+          "value": null,
+          "unit": null,
+          "reason": "the scan produced no waveform or beat lattice"
+        },
+        "vascular_tone": {
+          "status": "not_computed",
+          "value": null,
+          "unit": null,
+          "reason": "the scan produced no waveform or beat lattice"
+        },
+        "cardiorespiratory_fitness": {
+          "status": "not_computed",
+          "value": null,
+          "unit": null,
+          "reason": "the scan produced no waveform or beat lattice"
+        }
+      },
+      "timing": {
+        "trim_s": 0.12,
+        "downscale_s": 0.01,
+        "analysis_s": 9.67,
+        "server_total_s": 9.8
+      },
+      "prep": {
+        "trim": {
+          "applied": false,
+          "window_s": 40.0,
+          "reason": "clip is 40.3s \u2014 already within the window",
+          "duration_probe": "packets",
+          "source_duration_s": 40.3,
+          "tail_start_s": 0.0,
+          "discontinuities": 0,
+          "head_dropped_s": 0.0,
+          "gap_s": 0.0,
+          "spanned_gaps": [],
+          "note": "clip is 40.3s \u2014 already within the window"
+        },
+        "downscale": {
+          "applied": false,
+          "scale": "480x360",
+          "reason": "source 480x320 already within 480x360",
+          "vp9_cpu_used": "2",
+          "source": "480x320"
+        },
+        "clock": {
+          "source": "container_clock",
+          "n_frames": 1203,
+          "repaired": 1,
+          "median_dt_ms": 33.333,
+          "implied_fps": 30.0,
+          "warnings": [
+            "repaired 1 non-increasing timestamps (0.08% of steps)"
+          ],
+          "first_frame_s": 0.0,
+          "last_frame_s": 40.3,
+          "span_s": 40.3,
+          "frame_step_p99_ms": 33.333333333338544,
+          "frame_step_max_ms": 66.66666666666643
+        }
+      },
+      "wall_s": 11.79,
+      "returned": true,
+      "id": "webapp_1234567890-0ff908.webm.scaled",
+      "split": "holdout",
+      "source": "webapp",
+      "deterministic": true,
+      "repeat_n": 2
+    },
+    {
+      "outcome": "REPEAT_SCAN",
+      "no_read_reasons": [
+        "clean-interval coverage 0.38 below floor 0.5",
+        "pulse not seen consistently across the face (cross-ROI coherence 0.18 < 0.2): beats are not verified",
+        "only 38% of the scan yielded clean intervals (< 60%)",
+        "beat timing too imprecise for any rhythm statement (regions disagree by 49 ms per beat > 40 ms)"
+      ],
+      "sqi": 0.504724239643667,
+      "stars": 2,
+      "coherence": 0.18181818181818182,
+      "timing_ms": 48.647225720241494,
+      "n_intervals": 20,
+      "n_beats": 55,
+      "dropout_rate": 0.5454545454545454,
+      "coverage": 0.37985511739943595,
+      "gates_failed": [
+        "coverage",
+        "cross_roi_coherence",
+        "coverage_any_class",
+        "timing_precision_any_class"
+      ],
+      "cards": {
+        "arterial_stiffness": {
+          "status": "computed",
+          "value": 70.4,
+          "unit": "/100",
+          "reason": null
+        },
+        "vascular_tone": {
+          "status": "computed",
+          "value": 53.5,
+          "unit": "/100",
+          "reason": null
+        },
+        "cardiorespiratory_fitness": {
+          "status": "computed",
+          "value": 45.5,
+          "unit": "/100",
+          "reason": null
+        }
+      },
+      "timing": {
+        "trim_s": 0.14,
+        "downscale_s": 0.01,
+        "analysis_s": 12.64,
+        "server_total_s": 12.79
+      },
+      "prep": {
+        "trim": {
+          "applied": false,
+          "window_s": 40.0,
+          "reason": "clip is 40.3s \u2014 already within the window",
+          "duration_probe": "packets",
+          "source_duration_s": 40.24,
+          "tail_start_s": 0.0,
+          "discontinuities": 0,
+          "head_dropped_s": 0.0,
+          "gap_s": 0.0,
+          "spanned_gaps": [],
+          "note": "clip is 40.3s \u2014 already within the window"
+        },
+        "downscale": {
+          "applied": false,
+          "scale": "480x360",
+          "reason": "source 480x320 already within 480x360",
+          "vp9_cpu_used": "2",
+          "source": "480x320"
+        },
+        "clock": {
+          "source": "container_clock",
+          "n_frames": 1189,
+          "repaired": 1,
+          "median_dt_ms": 33.367,
+          "implied_fps": 29.97,
+          "warnings": [
+            "repaired 1 non-increasing timestamps (0.08% of steps)"
+          ],
+          "first_frame_s": 0.0,
+          "last_frame_s": 40.2402,
+          "span_s": 40.2402,
+          "frame_step_p99_ms": 66.73333333333176,
+          "frame_step_max_ms": 133.4666666666635
+        }
+      },
+      "wall_s": 15.02,
+      "returned": true,
+      "id": "webapp_1234567890-9b3023.webm.scaled",
+      "split": "holdout",
+      "source": "webapp",
+      "deterministic": true,
+      "repeat_n": 2
+    },
+    {
+      "outcome": "REPEAT_SCAN",
+      "no_read_reasons": [
+        "clean-interval coverage 0.26 below floor 0.5",
+        "pulse not seen consistently across the face (cross-ROI coherence 0.16 < 0.2): beats are not verified",
+        "only 26% of the scan yielded clean intervals (< 60%)",
+        "32% of intervals were broken by missed/false-beat detection: the beat sequence is not trustworthy enough for any rhythm statement",
+        "beat timing too imprecise for any rhythm statement (regions disagree by 55 ms per beat > 40 ms)"
+      ],
+      "sqi": 0.446524636534758,
+      "stars": 2,
+      "coherence": 0.16304347826086957,
+      "timing_ms": 54.59100444601361,
+      "n_intervals": 17,
+      "n_beats": 46,
+      "dropout_rate": 0.5652173913043479,
+      "coverage": 0.2632272715234055,
+      "gates_failed": [
+        "coverage",
+        "cross_roi_coherence",
+        "coverage_any_class",
+        "split_fraction_any_class",
+        "timing_precision_any_class"
+      ],
+      "cards": {
+        "arterial_stiffness": {
+          "status": "computed",
+          "value": 58.1,
+          "unit": "/100",
+          "reason": null
+        },
+        "vascular_tone": {
+          "status": "computed",
+          "value": 55.2,
+          "unit": "/100",
+          "reason": null
+        },
+        "cardiorespiratory_fitness": {
+          "status": "computed",
+          "value": 79.2,
+          "unit": "/100",
+          "reason": null
+        }
+      },
+      "timing": {
+        "trim_s": 0.12,
+        "downscale_s": 3.18,
+        "analysis_s": 12.15,
+        "server_total_s": 15.45
+      },
+      "prep": {
+        "trim": {
+          "applied": true,
+          "window_s": 40.0,
+          "reason": null,
+          "duration_probe": "packets",
+          "source_duration_s": 209.85,
+          "tail_start_s": 138.08,
+          "discontinuities": 2,
+          "head_dropped_s": 3.335,
+          "gap_s": 134.745,
+          "spanned_gaps": [],
+          "trimmed_from_s": 168.38,
+          "cut_method": "keyframe-seek",
+          "kept_s": 41.505,
+          "note": "kept the last 41.5s from keyframe 168.38s; dropped 3.3s head + 134.7s hole (2 discontinuities); keyframe-seek"
+        },
+        "downscale": {
+          "applied": true,
+          "scale": "480x360",
+          "reason": null,
+          "vp9_cpu_used": "2",
+          "source": "640x480",
+          "target": "480x~360",
+          "attempt": "fit",
+          "path": "/var/folders/mw/c0dwh50d15q638c0thg88jmm0000gn/T/cardio-replay-pjpb80tz/webapp_1234567890-ebe749.webm.scaled.avi",
+          "scaled_to": "480x(auto, AR preserved)"
+        },
+        "clock": {
+          "source": "container_clock",
+          "n_frames": 1240,
+          "repaired": 1,
+          "median_dt_ms": 33.426,
+          "implied_fps": 29.92,
+          "warnings": [
+            "repaired 1 non-increasing timestamps (0.08% of steps)"
+          ],
+          "first_frame_s": 0.0,
+          "last_frame_s": 41.515320334261844,
+          "span_s": 41.515320334261844,
+          "frame_step_p99_ms": 33.42618384401419,
+          "frame_step_max_ms": 100.27855153203546
+        }
+      },
+      "wall_s": 17.85,
+      "returned": true,
+      "id": "webapp_1234567890-ebe749",
+      "split": "holdout",
+      "source": "webapp",
+      "deterministic": true,
+      "repeat_n": 2
+    }
+  ]
+}

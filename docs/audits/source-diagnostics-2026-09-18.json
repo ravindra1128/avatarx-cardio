@@ -1,0 +1,17 @@
+{
+  "baseline_commit": "d6e7fe0167c75b3045c2d3b274284fe20b299250",
+  "scope": "diagnostic_only",
+  "tests_passed": 157,
+  "baseline_published_cases_identical": 20,
+  "shared_train_body_ast_identical": true,
+  "repeats_identical_excluding_elapsed_ms": 100,
+  "diagnostic_runtime_local_ms": {
+    "median": 1.5665,
+    "max": 679.682
+  },
+  "protected_threshold_changes": false,
+  "signal_optimizer_verdict": "not_applicable_to_requested_app_telemetry; structural guard rejected out-of-scope app/test files",
+  "corpus_replayed": false,
+  "clinical_accuracy_validated": false,
+  "deployment_verified": false
+}

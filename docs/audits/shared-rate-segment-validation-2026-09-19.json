@@ -1,0 +1,194 @@
+{
+  "baseline_build": "77bc9b0e6365",
+  "gate": {
+    "decision": "accept",
+    "delta_total": 0.0181,
+    "conditions": {
+      "guard": true,
+      "every_scan_returned": true,
+      "improved": true,
+      "no_regression": true,
+      "not_fluke": true
+    },
+    "reasons": [
+      "consistency 0.562 -> 0.640 (>= +0.05) with signal held"
+    ],
+    "improved_records": [],
+    "baseline_metrics": {
+      "returned": 1.0,
+      "signal": 0.6864,
+      "cards": 0.75,
+      "determinism": 1.0,
+      "consistency": 0.5617,
+      "latency": 0.9493,
+      "mean_job_s": 11.3175,
+      "card_cvs": [
+        0.1718,
+        0.2219,
+        0.2638
+      ]
+    },
+    "candidate_metrics": {
+      "returned": 1.0,
+      "signal": 0.6864,
+      "cards": 0.75,
+      "determinism": 1.0,
+      "consistency": 0.6404,
+      "latency": 0.9218,
+      "mean_job_s": 13.655,
+      "card_cvs": [
+        0.1718,
+        0.2219,
+        0.1459
+      ]
+    }
+  },
+  "all_records": {
+    "returned": 1.0,
+    "signal": 0.8156,
+    "cards": 0.8235,
+    "determinism": 1.0,
+    "consistency": 0.4183,
+    "latency": 0.9242,
+    "mean_job_s": 12.9882,
+    "card_cvs": [
+      0.3386,
+      0.339,
+      0.1951
+    ]
+  },
+  "subsets": {
+    "all": {
+      "n": 17,
+      "before": [
+        0.3838,
+        [
+          0.3386,
+          0.339,
+          0.2468
+        ]
+      ],
+      "after": [
+        0.4183,
+        [
+          0.3386,
+          0.339,
+          0.1951
+        ]
+      ],
+      "same_availability_n": 14,
+      "paired_before": [
+        0.3254,
+        [
+          0.3744,
+          0.3649,
+          0.2726
+        ]
+      ],
+      "paired_after": [
+        0.3771,
+        [
+          0.3744,
+          0.3649,
+          0.1951
+        ]
+      ]
+    },
+    "demo": {
+      "n": 9,
+      "before": [
+        0.2662,
+        [
+          0.4369,
+          0.4044,
+          0.2594
+        ]
+      ],
+      "after": [
+        0.3138,
+        [
+          0.4369,
+          0.4044,
+          0.188
+        ]
+      ],
+      "same_availability_n": 8,
+      "paired_before": [
+        0.2235,
+        [
+          0.4659,
+          0.4257,
+          0.2731
+        ]
+      ],
+      "paired_after": [
+        0.2802,
+        [
+          0.4659,
+          0.4257,
+          0.188
+        ]
+      ]
+    },
+    "webapp": {
+      "n": 8,
+      "before": [
+        0.7285,
+        [
+          0.0478,
+          0.1454,
+          0.214
+        ]
+      ],
+      "after": [
+        0.7401,
+        [
+          0.0478,
+          0.1454,
+          0.1966
+        ]
+      ],
+      "same_availability_n": 6,
+      "paired_before": [
+        0.722,
+        [
+          0.0463,
+          0.143,
+          0.2277
+        ]
+      ],
+      "paired_after": [
+        0.7427,
+        [
+          0.0463,
+          0.143,
+          0.1966
+        ]
+      ]
+    }
+  },
+  "qualification": {
+    "modules": 105,
+    "passed_after_targeted_fix": 1132,
+    "skipped": 3,
+    "unresolved_new_failures": 0,
+    "initial_failures": 1,
+    "resolved_failure": "Exact audit budget registration for one Boolean finite-mask diff; audit plus spectrum controls 22 passed on rerun. Production algorithm unchanged.",
+    "selection": [
+      "--ignore=tests/test_findings_only.py",
+      "--ignore=tests/test_report_forbidden.py",
+      "--ignore=tests/test_flutter_forbidden.py",
+      "--ignore=tests/test_vascular_forbidden.py",
+      "--ignore=tests/test_vasotone_forbidden.py",
+      "--deselect=tests/test_false_positive_guards.py::test_existing_af_preservation_test_still_green",
+      "--deselect=tests/test_fitness_harness.py::test_transition_sensitivity_shrinks_hrr60",
+      "--deselect=tests/test_flutter_harness.py::test_combined_referral_is_a_pure_fusion_that_names_nothing",
+      "--deselect=tests/test_regularity_equivalence.py::test_afib_and_flutter_are_bit_identical_to_the_golden",
+      "--deselect=tests/test_scan_engine.py::test_low_signal_scan_completes_but_never_forces_a_result"
+    ]
+  },
+  "source_sha256": {
+    "features/hemodynamics.py": "eb236ac2319ae62d0b471c20622b505e4108b637908ed86998eef4f8ac2c22d1",
+    "inference/evidence.py": "cfd37e2ec497ffc927dbfe5ef7175c979ed44696a52d2f6d9a71ebe6bc619b2a"
+  }
+}

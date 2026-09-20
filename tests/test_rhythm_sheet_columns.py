@@ -39,3 +39,9 @@ def test_classifier_inputs_reach_the_sheet():
 def test_classifier_inputs_blank_when_no_rationale():
     row = row_from_doc({"outcome": "NO_RESULT"})
     assert row["MAD ms"] == "" and row["pNN50"] == "" and row["Rate N"] == ""
+
+
+def test_combined_columns_are_unique_and_keep_both_feature_sets():
+    assert len(COLUMNS) == len(set(COLUMNS))
+    assert {'Fit Estimator', 'Fit HR Source', 'Fit Profile', 'Trace Ran',
+            'Signals Received', 'Capture Diagnostics', 'Spectral Selection'} <= set(COLUMNS)

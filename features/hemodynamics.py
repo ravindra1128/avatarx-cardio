@@ -716,7 +716,7 @@ def cardiorespiratory_indices(regularity, hr_bpm, participant=None, *,
                               spectral_hr_bpm=None, pulse_verdict=None,
                               harmonic_fraction=None, spectral_snr=None,
                               spectral_roi_agree=None, ref_bpm=None,
-                              reference_source=None) -> dict:
+                              reference_source=None, rate_resolution=None) -> dict:
     """Resting cardiorespiratory values and the fitness card's estimate.
 
     TWO bases, chosen by what the client sent, never by what the scan
@@ -762,100 +762,131 @@ def cardiorespiratory_indices(regularity, hr_bpm, participant=None, *,
     hr = hr_bpm
     n_int = None if rate_intervals is None else int(rate_intervals)
     clean = (rate_method == "clean_interval_median" and hr is not None)
-    # The waveform's dominant rhythm may only OVERRIDE the beat count when
-    # enough facial regions independently back it (2026-09-15). Without this,
-    # a 2-of-4 subharmonic spectral (e.g. 54 bpm against a true ~67) replaced a
-    # good count and inflated the fitness score, while the reported-pulse head
-    # correctly abstained on the same scan — the two disagreed on one card set.
-    # Same MIN_ROI_AGREE_FOR_RATE the rate head uses (features/rate_guard.py).
-    spectral_backed = (
-        spectral_hr_bpm is not None and spectral_roi_agree is not None
-        and int(spectral_roi_agree) >= MIN_ROI_AGREE_FOR_RATE)
-    # Doubling guard (2026-09-14): the interval median above inflates toward 2x
-    # when the detector splits beats. The spectral rate is subharmonic-
-    # protected, so when the interval rate shows a doubling signature against a
-    # trustworthy spectral anchor, take the spectral rate. This is a strict
-    # superset of the pulse_verdict=="disagree" fallback below — it also catches
-    # PARTIAL split-inflation (ratio ~1.5 with many half-length intervals), the
-    # 101-vs-65 case the disagree rule caught only because the disagreement was
-    # large. No-op on clean scans; the clinical rhythm head is untouched.
-    rate_guard = guard_resting_pulse(
-        hr, spectral_hr_bpm, harmonic_fraction=harmonic_fraction,
-        spectral_snr=spectral_snr, ref_bpm=ref_bpm)
-    # Audit 2026-09-17 #7 (CALC-4): the guard ran BEFORE the >= 3-region bar
-    # above and could replace the count with a spectral peak that 0-2 regions
-    # backed - exactly what the rate head refuses. It now overrides only when
-    # backed; a doubling signature without backing abstains (fail-closed).
-    # A CLEAN double/half (count within 15% of 2x or 0.5x the spectral rate) is
-    # two independent estimators agreeing on the halved rate; that is evidence
-    # in itself and needs no region quota (on the holdout it is what keeps
-    # 9b3023/ebe749 at ~55 bpm instead of a doubled ~110). Split-inflation
-    # (ratio ~1.5 with many half-length intervals) has no such agreement and
-    # keeps the >= 3-region bar - the 2026-09-15 subharmonic case (54 vs 67,
-    # ratio 1.24) never reaches this branch at all.
-    try:
-        _hf = float(harmonic_fraction or 0.0)
-    except (TypeError, ValueError):
-        _hf = 0.0
-    clean_fold = (rate_guard.get("signature") in ("double", "half")
-                  and _hf >= FOLD_MIN_HARMONIC_FRACTION)
-    rate_guard["applied"] = bool(rate_guard.get("guarded") and (spectral_backed or clean_fold))
-    if rate_guard.get("guarded") and not rate_guard["applied"]:
-        # Card robustness (owner, 2026-09-16): a count that carries a
-        # doubling/split signature and has NO backing for the fold is not a
-        # resting rate, it is a detector artefact - on two staging scans that
-        # day (counts 109 and 114 against a 78 bpm waveform rhythm and a 72-74
-        # reference) this branch published fitness 6.5/100 "provisional" while
-        # the pulse head on the same scan reported 78. One resolver, one
-        # number: the card now abstains exactly where features/rate_guard.
-        # resolve_resting_rate says 'uncertain', and names both estimates.
-        # (Blanking used to cost 2 of 3 holdout phone clips their card; those
-        # clips are CLEAN doubles, which the clean-fold rule above now applies.)
-        tier = None
-        tier_reasons.append("the beat count shows a doubling/halving signature and "
-                            "too few facial regions back the waveform rhythm to "
-                            "replace it; no resting rate is reported")
-        hr, rate_source = None, None
-    elif rate_guard["applied"]:
-        hr, rate_source = rate_guard["reported_bpm"], "spectral_doubling_guard"
-        tier = "provisional"
-        tier_reasons.append(rate_guard["reason"])
-    elif clean and (n_int is None or n_int >= MIN_RATE_INTERVALS) and pulse_verdict != "disagree":
-        tier = "measured"
+    if rate_resolution is not None:
+        # Production consumes the same resting-rate decision as the rate head.
+        # A missing/unresolved result is explicit and cannot fall back to a
+        # second estimator hidden inside the fitness card.
+        confidence = rate_resolution.get("confidence")
+        resolved_n = rate_resolution.get("n_intervals")
+        resolved_n = int(resolved_n) if resolved_n is not None else n_int
+        hr = rate_resolution.get("bpm")
+        rate_source = rate_resolution.get("source")
+        rate_guard = dict(rate_resolution.get("guard") or {})
+        rate_guard["applied"] = bool(
+            rate_guard.get("guarded") and
+            rate_source == "waveform_rhythm_doubling_guard" and hr is not None)
+        tier_reasons.extend(rate_resolution.get("reasons") or [])
+        if hr is None or confidence == "uncertain":
+            hr, rate_source, tier = None, None, None
+            if not tier_reasons:
+                tier_reasons.append("the shared resting-rate decision is unresolved")
+        else:
+            tier = "measured" if (confidence == "verified" and clean and
+                                   resolved_n is not None and resolved_n >= MIN_RATE_INTERVALS) else "provisional"
+            if tier == "provisional" and not tier_reasons:
+                tier_reasons.append(
+                    "the shared resting-rate estimate is unverified" if confidence == "unverified"
+                    else f"only {resolved_n or 0} clean intervals support the rate; a measured score needs {MIN_RATE_INTERVALS}")
     else:
-        tier = "provisional"
-        if pulse_verdict == "disagree" and spectral_backed:
-            hr, rate_source = float(spectral_hr_bpm), "waveform_rhythm"
-            tier_reasons.append("the beat count disagreed with the waveform's "
-                                "dominant rhythm, so the rate is taken from the "
-                                "waveform")
-        elif pulse_verdict == "disagree":
-            # Count and spectrum disagree, but too few regions back the spectrum
-            # to override the count with a possible subharmonic — keep the count,
-            # unverified. (Doubling is already handled by the rate guard above.)
-            tier_reasons.append("the beat count and the waveform's dominant "
-                                "rhythm disagree, but too few facial regions back "
-                                "the waveform to override the count, so the rate "
-                                "is unverified")
-        elif clean and n_int is not None and n_int >= MIN_PROVISIONAL_RATE_INTERVALS:
-            tier_reasons.append(f"only {n_int} clean beat intervals (a measured "
-                                f"value needs {MIN_RATE_INTERVALS})")
-        elif spectral_backed:
-            hr, rate_source = float(spectral_hr_bpm), "waveform_rhythm"
-            tier_reasons.append("too few clean beat intervals, so the rate is "
-                                "taken from the waveform's dominant rhythm")
-        elif hr is not None and rate_method is not None and rate_method != "clean_interval_median":
-            # Adjacent lattice pairs inside the 250-2200 ms window, never seen
-            # by the missed/false-beat splitter: the weakest admissible rate.
-            tier_reasons.append("the rate comes from unverified beat intervals")
-        elif clean and n_int is not None:
-            tier_reasons.append(f"only {n_int} clean beat intervals (a measured "
-                                f"value needs {MIN_RATE_INTERVALS})")
+        # Backward-compatible standalone callers without a full scan's rate
+        # evidence retain the documented provisional display behavior.
+        # The waveform's dominant rhythm may only OVERRIDE the beat count when
+        # enough facial regions independently back it (2026-09-15). Without this,
+        # a 2-of-4 subharmonic spectral (e.g. 54 bpm against a true ~67) replaced a
+        # good count and inflated the fitness score, while the reported-pulse head
+        # correctly abstained on the same scan — the two disagreed on one card set.
+        # Same MIN_ROI_AGREE_FOR_RATE the rate head uses (features/rate_guard.py).
+        spectral_backed = (
+            spectral_hr_bpm is not None and spectral_roi_agree is not None
+            and int(spectral_roi_agree) >= MIN_ROI_AGREE_FOR_RATE)
+        # Doubling guard (2026-09-14): the interval median above inflates toward 2x
+        # when the detector splits beats. The spectral rate is subharmonic-
+        # protected, so when the interval rate shows a doubling signature against a
+        # trustworthy spectral anchor, take the spectral rate. This is a strict
+        # superset of the pulse_verdict=="disagree" fallback below — it also catches
+        # PARTIAL split-inflation (ratio ~1.5 with many half-length intervals), the
+        # 101-vs-65 case the disagree rule caught only because the disagreement was
+        # large. No-op on clean scans; the clinical rhythm head is untouched.
+        rate_guard = guard_resting_pulse(
+            hr, spectral_hr_bpm, harmonic_fraction=harmonic_fraction,
+            spectral_snr=spectral_snr, ref_bpm=ref_bpm)
+        # Audit 2026-09-17 #7 (CALC-4): the guard ran BEFORE the >= 3-region bar
+        # above and could replace the count with a spectral peak that 0-2 regions
+        # backed - exactly what the rate head refuses. It now overrides only when
+        # backed; a doubling signature without backing abstains (fail-closed).
+        # A CLEAN double/half (count within 15% of 2x or 0.5x the spectral rate) is
+        # two independent estimators agreeing on the halved rate; that is evidence
+        # in itself and needs no region quota (on the holdout it is what keeps
+        # 9b3023/ebe749 at ~55 bpm instead of a doubled ~110). Split-inflation
+        # (ratio ~1.5 with many half-length intervals) has no such agreement and
+        # keeps the >= 3-region bar - the 2026-09-15 subharmonic case (54 vs 67,
+        # ratio 1.24) never reaches this branch at all.
+        try:
+            _hf = float(harmonic_fraction or 0.0)
+        except (TypeError, ValueError):
+            _hf = 0.0
+        clean_fold = (rate_guard.get("signature") in ("double", "half")
+                      and _hf >= FOLD_MIN_HARMONIC_FRACTION)
+        rate_guard["applied"] = bool(rate_guard.get("guarded") and (spectral_backed or clean_fold))
+        if rate_guard.get("guarded") and not rate_guard["applied"]:
+            # Card robustness (owner, 2026-09-16): a count that carries a
+            # doubling/split signature and has NO backing for the fold is not a
+            # resting rate, it is a detector artefact - on two staging scans that
+            # day (counts 109 and 114 against a 78 bpm waveform rhythm and a 72-74
+            # reference) this branch published fitness 6.5/100 "provisional" while
+            # the pulse head on the same scan reported 78. One resolver, one
+            # number: the card now abstains exactly where features/rate_guard.
+            # resolve_resting_rate says 'uncertain', and names both estimates.
+            # (Blanking used to cost 2 of 3 holdout phone clips their card; those
+            # clips are CLEAN doubles, which the clean-fold rule above now applies.)
+            tier = None
+            tier_reasons.append("the beat count shows a doubling/halving signature and "
+                                "too few facial regions back the waveform rhythm to "
+                                "replace it; no resting rate is reported")
+            hr, rate_source = None, None
+        elif rate_guard["applied"]:
+            hr, rate_source = rate_guard["reported_bpm"], "spectral_doubling_guard"
+            tier = "provisional"
+            tier_reasons.append(rate_guard["reason"])
+        elif clean and (n_int is None or n_int >= MIN_RATE_INTERVALS) and pulse_verdict != "disagree":
+            tier = "measured"
+        else:
+            tier = "provisional"
+            if pulse_verdict == "disagree" and spectral_backed:
+                hr, rate_source = float(spectral_hr_bpm), "waveform_rhythm"
+                tier_reasons.append("the beat count disagreed with the waveform's "
+                                    "dominant rhythm, so the rate is taken from the "
+                                    "waveform")
+            elif pulse_verdict == "disagree":
+                # Count and spectrum disagree, but too few regions back the spectrum
+                # to override the count with a possible subharmonic — keep the count,
+                # unverified. (Doubling is already handled by the rate guard above.)
+                tier_reasons.append("the beat count and the waveform's dominant "
+                                    "rhythm disagree, but too few facial regions back "
+                                    "the waveform to override the count, so the rate "
+                                    "is unverified")
+            elif clean and n_int is not None and n_int >= MIN_PROVISIONAL_RATE_INTERVALS:
+                tier_reasons.append(f"only {n_int} clean beat intervals (a measured "
+                                    f"value needs {MIN_RATE_INTERVALS})")
+            elif spectral_backed:
+                hr, rate_source = float(spectral_hr_bpm), "waveform_rhythm"
+                tier_reasons.append("too few clean beat intervals, so the rate is "
+                                    "taken from the waveform's dominant rhythm")
+            elif hr is not None and rate_method is not None and rate_method != "clean_interval_median":
+                # Adjacent lattice pairs inside the 250-2200 ms window, never seen
+                # by the missed/false-beat splitter: the weakest admissible rate.
+                tier_reasons.append("the rate comes from unverified beat intervals")
+            elif clean and n_int is not None:
+                tier_reasons.append(f"only {n_int} clean beat intervals (a measured "
+                                    f"value needs {MIN_RATE_INTERVALS})")
     rate_only = resting_rate_index(hr)
     idx = rate_only
     reason = reason_code = None
     if idx is None:
-        if rate_guard.get("guarded") and not rate_guard.get("applied"):
+        if rate_resolution is not None:
+            reason_code = "resting_rate_unverified"
+            reason = "; ".join(tier_reasons) or "the shared resting-rate decision is unresolved"
+        elif rate_guard.get("guarded") and not rate_guard.get("applied"):
             reason_code = "resting_rate_unverified"
             _c = rate_guard.get("count_bpm") or hr_bpm
             _s = rate_guard.get("spectral_bpm") or spectral_hr_bpm
@@ -948,6 +979,7 @@ def cardiorespiratory_indices(regularity, hr_bpm, participant=None, *,
         "raw_name": "resting_heart_rate",
         "rate_guard": rate_guard,
         "resting_rate_source": rate_source,
+        "rate_resolution": rate_resolution,
         "estimate": (None if proxy is None else {
             "label": RESEARCH_ESTIMATE_LABEL,
             "name": estimate_name,
@@ -1280,6 +1312,16 @@ def resting_hemodynamics(det, *, outcome, participant=None, capture=None,
         quality, optics_locked=bool(locked),
         amplitude_beats=int(tone.get("n_beats") or 0))
     ref_bpm, ref_src = _reference_rate(reference)
+    from features.rate_guard import resolve_resting_rate
+    # Use the same clean-interval statistic and count floor as the rate
+    # head, including its distinction between a thin count and no count.
+    rate_runs = getattr(reg, "runs", None) or []
+    rate_ibi = np.concatenate(rate_runs) if rate_runs else np.array([])
+    rate_ibi = rate_ibi[np.isfinite(rate_ibi) & (rate_ibi > 0)]
+    rate_count = int(rate_ibi.size)
+    rate_bpm = float(np.median(60000.0 / rate_ibi)) if rate_count >= MIN_RATE_INTERVALS else None
+    rate_resolution = resolve_resting_rate(rate_bpm, rate_count, ev,
+                                           min_intervals=MIN_RATE_INTERVALS)
     fitness = cardiorespiratory_indices(
         reg, hr, participant, rate_method=rate_method,
         rate_intervals=rate_intervals,
@@ -1287,7 +1329,7 @@ def resting_hemodynamics(det, *, outcome, participant=None, capture=None,
         harmonic_fraction=ev.get("harmonic_fraction"),
         spectral_snr=ev.get("pulse_spectral_snr"),
         spectral_roi_agree=ev.get("pulse_spectral_roi_agree"),
-        pulse_verdict=pulse_gate.get("verdict"),
+        pulse_verdict=pulse_gate.get("verdict"), rate_resolution=rate_resolution,
         ref_bpm=ref_bpm, reference_source=ref_src)
     # The scan-level tier reasons apply to every card: a card is "measured"
     # only when both the scan and its own floors held.

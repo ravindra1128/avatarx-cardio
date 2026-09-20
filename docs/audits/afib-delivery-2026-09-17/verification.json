@@ -1,0 +1,77 @@
+{
+  "scope": "First delivery fixes only; no extractor, classifier, source policy or threshold changes.",
+  "service_base_commit": "9b0d05da222777cfb3237a817dc30dcdb991542d",
+  "service_branch": "codex/afib-delivery",
+  "service_tests": {
+    "passed": 54,
+    "failed": 0,
+    "command": "python -m pytest tests/test_result_delivery.py tests/test_start_job_availability.py tests/test_start_idempotency.py tests/test_shenai_route.py tests/test_shenai_sidecar_columns.py -q -p no:cacheprovider"
+  },
+  "webapp_config": {
+    "rootDir": "/Users/ravindrasinghbisht/Downloads/webapp",
+    "testEnvironment": "node",
+    "moduleNameMapper": {
+      "^@/(.*)$": "<rootDir>/src/$1"
+    },
+    "transform": {
+      "^.+\\.(js|jsx|ts|tsx)$": "babel-jest"
+    },
+    "testMatch": [
+      "**/__tests__/**/*.test.[jt]s?(x)"
+    ]
+  },
+  "webapp_source_sha256": {
+    "src/lib/scan/ScanOrchestrator.js": "063fa2b56955d82ee40ebeaddc35753224cb383f063a25962240e7d419cb84e4",
+    "src/lib/scan/processors/MediaRecorderProcessor.js": "8711e3199217cc8da5b2851b0ee889b4d18aea0a1ae3b1467916741436018592",
+    "src/lib/scan/staging/AFibProcessor.js": "aaef74222ad9763cf60168466662c80a52760a45602b832e7123d7d798e756c3",
+    "src/lib/scan/staging/delivery.js": "4528be302c4a2f310e3efc123b89ac14e274bcee7704e297b49697910303c159",
+    "src/lib/scan/staging/__tests__/delivery.test.js": "54cfb4cc2e5e38bb63e8ef1d2a4385a4d90c56ff2bc0fe04d4808bb3bc89a8b7",
+    "src/lib/scan/staging/__tests__/recorderDeadline.test.js": "598fe3b7b7be1b62c1f3f568d63594f10e7865f42be177d6ffa95c5e0b59a7e0",
+    "src/Pages/CardioStaging/CardioStagingScan.jsx": "13d2775915355990ad762dca22dfb05d5c98b0ce90cfc08cbf2a0e7f761acd84",
+    "src/Pages/CardioStaging/AfibRhythmCard.jsx": "1b330f8d93600d928ba7acdbcf7e1b97d3e791f0233be2ba3a998938431dab6e",
+    "src/Pages/CardioStaging/CardioBiomarkers.jsx": "4ed22b39a53e0f89caf36aeb4ac6b22d0fcc1fc1db300061488e45f870e92b5f"
+  },
+  "webapp_working_sources_match_isolated_copy": true,
+  "physiological_replay": {
+    "clips": 11,
+    "runs": 22,
+    "all_decisions_and_features_equal_to_baseline": true,
+    "all_original_inputs_unchanged": true
+  },
+  "deployment": "Not deployed; paired frontend/backend release is required for phone checks.",
+  "limitations": [
+    "No real browser/phone capture test or clinical validation.",
+    "Node-based Jest configuration; installed environment lacks jest-environment-jsdom.",
+    "In-memory backend jobs/results do not survive restart or redeploy.",
+    "Sidecar transaction/source parity and physiological decision defects remain open."
+  ],
+  "webapp_tests": {
+    "passed": 130,
+    "failed": 0,
+    "suites_passed": 13,
+    "duration_s": 14.274,
+    "selection": [
+      "src/lib/scan/staging/__tests__",
+      "src/lib/scan/__tests__/ScanOrchestrator.test.js",
+      "src/lib/scan/__tests__/AFibProcessor.test.js"
+    ]
+  },
+  "webapp_build": {
+    "passed": true,
+    "duration_s": 9.54,
+    "warning": "Existing large bundle warning; no build error."
+  },
+  "webapp_base_commit": "1b772351fd718eeddc0568d9798a1bf6887da3e8",
+  "service_source_sha256": {
+    "app/measure_api.py": "bdc1d307bac596749b9c1f2284cf199f6c9b4e47beb793acd5a443b0ac219d47",
+    "tests/test_start_idempotency.py": "49ef9514f678da01f9387c1b70cc0e8e0afdbfe726d4b760ea5a1070480f8d53",
+    "scripts/audit_afib_webapp.cjs": "62072a0877ba44c646e71f5a7c5e4e57f045bf13a2d2ff3b9026b23263cf2cbd"
+  },
+  "guard": {
+    "protected_thresholds_unchanged": true,
+    "frozen_configs_unchanged": true,
+    "signal_optimizer_acceptance": false,
+    "reason": "The explicitly authorized delivery files are outside the signal-chain allowlist; validated by fault injection and physiological regression replay."
+  },
+  "webapp_commit": "fe7bc1c2a68c10fbfae30cebe83b503d175996bc"
+}

@@ -23,6 +23,15 @@ from app import measure_api  # noqa: E402
 from app.measure_api import MeasureHandler  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def result_store(tmp_path, monkeypatch):
+    from app.result_store import ResultStore
+    store = ResultStore(tmp_path / "results.sqlite", measure_api.RESULT_TTL_S)
+    monkeypatch.setattr(measure_api, "_RESULT_STORE", store)
+    measure_api._RESULTS.clear()
+    return store
+
+
 class _Wire(io.BytesIO):
     """A socket that can be told to break at the Nth write."""
 
@@ -138,18 +147,19 @@ def test_a_finished_result_can_be_collected_after_the_connection_dies():
     assert measure_api._recall_result(None) is None
 
 
-def test_the_cache_is_bounded_and_expires():
+def test_the_cache_is_bounded_and_expires(result_store):
     measure_api._RESULTS.clear()
     for i in range(measure_api.MAX_CACHED_RESULTS + 5):
         measure_api._remember_result(f"s{i}", {"outcome": "ACCEPT", "n": i})
     assert len(measure_api._RESULTS) == measure_api.MAX_CACHED_RESULTS
-    assert measure_api._recall_result("s0") is None            # oldest evicted
+    assert measure_api._recall_result("s0") is not None        # recovered after memory eviction
     assert measure_api._recall_result(f"s{measure_api.MAX_CACHED_RESULTS + 4}")
 
     measure_api._RESULTS.clear()
     measure_api._remember_result("old", {"outcome": "ACCEPT"})
     measure_api._RESULTS["old"] = (time.time() - measure_api.RESULT_TTL_S - 1,
                                    {"outcome": "ACCEPT"})
+    result_store.put("old", {"outcome": "ACCEPT"}, created=time.time() - measure_api.RESULT_TTL_S - 1)
     assert measure_api._recall_result("old") is None
 
 
@@ -215,7 +225,7 @@ def test_an_upload_id_cannot_escape_the_parts_directory(tmp_path, monkeypatch):
         measure_api._part_dir("../..")
 
 
-def test_both_upload_paths_send_the_same_manifest():
+def test_both_upload_paths_send_the_same_manifest(tmp_path, monkeypatch):
     """The detached path once omitted capture_profile, so the pipeline
     defaulted to "research" and the same clip that returned REPEAT_SCAN with
     cards came back NO_RESULT. One builder, used by both."""
@@ -227,8 +237,20 @@ def test_both_upload_paths_send_the_same_manifest():
     m = measure_api.MeasureHandler._build_manifest(h3)
     assert m["exposure_locked"] is True and m["illuminance_lux"] == 120.0
     assert m["capture_profile"] == "consumer"
-    src = inspect.getsource(measure_api.MeasureHandler._run)
-    assert "_build_manifest(header)" in src, "the single-shot path must use it too"
+    manifests = []
+    def measure(path, **kwargs):
+        manifests.append(kwargs["manifest"])
+        return {"outcome": "REPEAT_SCAN"}, {}
+    monkeypatch.setattr(measure_api, "WORK_DIR", tmp_path / "work")
+    monkeypatch.setattr(measure_api, "measure_video_details", measure)
+    monkeypatch.setattr(measure_api, "_apply_shenai_route", lambda *a, **kw: None)
+    monkeypatch.setattr(measure_api, "_pair_shenai", lambda *a, **kw: None)
+    monkeypatch.setattr(measure_api, "_retain_clip", lambda *a, **kw: None)
+    monkeypatch.setenv("AFIB_KEEP_UPLOADS", "0")
+    for header in (h, h2, h3):
+        measure_api.MeasureHandler._run(b"video", header)
+        measure_api.MeasureHandler._run_assembled(str(tmp_path / "scan.webm"), header)
+        assert manifests[-2:] == [measure_api.MeasureHandler._build_manifest(header)] * 2
 
 
 def test_slices_may_differ_in_size_and_the_last_total_wins(tmp_path, monkeypatch):

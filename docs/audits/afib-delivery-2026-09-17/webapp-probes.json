@@ -1,0 +1,21 @@
+{
+  "notice": "Software counterexamples using stubbed lifecycle dependencies; not a browser or clinical test.",
+  "explicitNullNumber": 0,
+  "missingNumber": null,
+  "disabledProcessor": {
+    "finishedCalls": 1,
+    "results": {
+      "afib": {
+        "ok": false,
+        "error": "rhythm analysis is disabled",
+        "error_code": "analysis_disabled",
+        "scan_id": "scan-mu506oaj-b7uu1dnd0pp-se7x5b8jik",
+        "analysis_state": "failed"
+      }
+    }
+  },
+  "latePreviousScan": {
+    "before": "new-B",
+    "after": "new-B"
+  }
+}

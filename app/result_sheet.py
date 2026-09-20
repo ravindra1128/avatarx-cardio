@@ -132,6 +132,28 @@ COLUMNS = [
     # "Fit Profile" is the equation's user-entered inputs (sex/age/BMI/activity),
     # which a later treadmill comparison needs; there is no name or id in it.
     "Fit Estimator", "Fit HR Source", "Fit HR Own", "Fit HR Ref", "Fit Proxy", "Fit Profile",
+    # Receipt from the job's memory, independent of retained sidecars.
+    "Scan ID", "Signals State", "Signals Received", "Signals Transport",
+    "Input Beats N", "Input PPG N", "Input PPG Missing N", "Input PPG Clock",
+    "SDK Quality", "SDK Bad Signal s", "SDK HR", "SDK lnRMSSD",
+    # Codex diagnostics: independent of selected rhythm source and retention.
+    "Video Audit", "Video Retained s", "Video Processed s", "Video Short Fragments s",
+    "Video Excluded ROI Steps s", "Video Clean s", "Video Whole Coverage", "Frame Step p99 ms",
+    "SDK Train Audit", "SDK Train Span s", "SDK Invalid Beats", "SDK Order Errors",
+    "SDK Gap Boundaries", "SDK Overlap Boundaries", "SDK Raw RMSSD ms",
+    "SDK Clean Intervals", "SDK Clean s", "SDK Longest Clean Run s", "SDK Clean Coverage",
+    "SDK Clean RMSSD ms", "SDK RMSSD Relative Error", "SDK Video Alignment", "SDK Audit Issues",
+    "SDK Train Checks",
+    "Video ROI Excluded Frames", "Video ROI Edge Loss s", "ROI Step p99 ms",
+    "Capture Diagnostics", "SDK Version", "Capture Scope",
+    "Client Adjacent Frame p99 ms", "Client Callback p99 ms", "Client Unobserved Frames",
+    "Client Clock Reversals", "Client Hidden s", "SDK Live Quality Mean", "SDK Live Quality Min",
+    "Rhythm Comparison State", "Video Diagnostic Result", "Video Diagnostic Gates",
+    "SDK Diagnostic State", "SDK Diagnostic Result", "SDK Diagnostic Gates", "SDK Diagnostic Reason",
+    "SDK Policy Eligible", "SDK Publication Blocker", "Source Decision Agreement",
+    "Source Window Alignment", "Rhythm Diagnostic ms",
+    "Spectral Strongest bpm", "Spectral Selection", "Spectral Peak Audit",
+    "Video Interval Rejections", "Video SQI Exact",
 ]
 
 _POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sheet")
@@ -289,6 +311,12 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
     cm = doc.get("capture_meta") or {}
     tm = doc.get("timing") or {}
     dsc = doc.get("downscale") or {}
+    vd = _g(doc, "debug", "video_duration", default={}) or {}
+    saudit = _g(doc, "debug", "shenai_assessment", default={}) or {}
+    cd = _g(doc, "debug", "client_capture_diagnostics", default={}) or {}
+    comparison = _g(doc, "debug", "rhythm_comparison", default={}) or {}
+    # Always original video evidence, including when SDK supplied the final rhythm.
+    spectral = _g(doc, "debug", "evidence", "spectral_diagnostics", default={}) or {}
     items = {i.get("key"): i for i in _g(doc, "biomarkers", "items", default=[]) or []
              if isinstance(i, dict)}
     pulse = ""
@@ -354,6 +382,33 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
     beats_n = _first(sa.get("beats_n"), _g(sa, "measurement", "beats_n"),
                      len(sa["heartbeats"]) if isinstance(sa.get("heartbeats"), list) else None)
     return {
+        "Capture Diagnostics": cd.get("probe_state") or cd.get("state") or "",
+        "SDK Version": cd.get("sdk_version") or "",
+        "Capture Scope": cd.get("scope") or "",
+        "Client Adjacent Frame p99 ms": _num(_g(cd, "frames", "adjacent_frame_steps", "p99_ms"), 1),
+        "Client Callback p99 ms": _num(_g(cd, "frames", "callback_steps", "p99_ms"), 1),
+        "Client Unobserved Frames": _g(cd, "frames", "unobserved_presented_frames", default=""),
+        "Client Clock Reversals": _g(cd, "frames", "backward_steps", default=""),
+        "Client Hidden s": _num(cd.get("hidden_ms") / 1000 if isinstance(cd.get("hidden_ms"), (int, float)) else None, 2),
+        "SDK Live Quality Mean": _num(_g(cd, "quality", "mean"), 3),
+        "SDK Live Quality Min": _num(_g(cd, "quality", "min"), 3),
+        "Rhythm Comparison State": comparison.get("state", ""),
+        "Video Diagnostic Result": _g(comparison, "video", "result", default=""),
+        "Video Diagnostic Gates": " | ".join(_g(comparison, "video", "gates_failed", default=[]) or [])[:500],
+        "SDK Diagnostic State": _g(comparison, "shenai_train", "state", default=""),
+        "SDK Diagnostic Result": _g(comparison, "shenai_train", "result", default=""),
+        "SDK Diagnostic Gates": " | ".join(_g(comparison, "shenai_train", "gates_failed", default=[]) or [])[:500],
+        "SDK Diagnostic Reason": str(_g(comparison, "shenai_train", "reason", default="") or "")[:500],
+        "SDK Policy Eligible": _g(comparison, "shenai_train", "publication_policy_eligible", default=""),
+        "SDK Publication Blocker": str(_g(comparison, "shenai_train", "publication_blocker", default="") or "")[:500],
+        "Source Decision Agreement": comparison.get("decision_agreement", ""),
+        "Source Window Alignment": comparison.get("window_alignment", ""),
+        "Rhythm Diagnostic ms": _num(comparison.get("elapsed_ms"), 3),
+        "Spectral Strongest bpm": _num(_g(spectral, "fused", "strongest_peak_bpm"), 3),
+        "Spectral Selection": _g(spectral, "fused", "selection", default=""),
+        "Spectral Peak Audit": json.dumps(spectral, separators=(",", ":"), allow_nan=False) if spectral else "",
+        "Video Interval Rejections": json.dumps(vd.get("interval_rejections"), separators=(",", ":"), allow_nan=False) if vd.get("interval_rejections") else "",
+        "Video SQI Exact": _num(doc.get("signal_quality_index"), 8),
         "Timestamp (UTC)": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
         "Session": doc.get("session") or "",
         "Build": ex.get("build") or "",
@@ -493,6 +548,46 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
         "AFib Basis": (lambda b: (f"{b.get('category')}: {b.get('why')}" if b.get("category")
                                   else str(b.get("why") or ""))[:300]
                        if isinstance(b, dict) else "")(doc.get("afib_result_basis")),
+        "Scan ID": str(doc.get("scan_id") or doc.get("upload_id") or "")[:80],
+        "Signals State": str(_g(doc, "debug", "shenai_input", "state") or "")[:80],
+        "Signals Received": ({True: "TRUE", False: "FALSE"}.get(
+            _g(doc, "debug", "shenai_input", "received"), "")),
+        "Signals Transport": str(_g(doc, "debug", "shenai_input", "transport") or "")[:40],
+        "Input Beats N": _g(doc, "debug", "shenai_input", "beats_n", default=""),
+        "Input PPG N": _g(doc, "debug", "shenai_input", "ppg_n", default=""),
+        "Input PPG Missing N": _g(doc, "debug", "shenai_input", "ppg_missing_n", default=""),
+        "Input PPG Clock": str(_g(doc, "debug", "shenai_input", "ppg_fs_source") or "")[:40],
+        "SDK Quality": _num(_g(doc, "debug", "shenai_input", "sdk_quality"), 3),
+        "SDK Bad Signal s": _num(_g(doc, "debug", "shenai_input", "sdk_bad_signal_s"), 2),
+        "SDK HR": _num(_g(doc, "debug", "shenai_input", "sdk_hr_bpm"), 1),
+        "SDK lnRMSSD": _num(_g(doc, "debug", "shenai_input", "sdk_lnrmssd"), 3),
+        "Video Audit": str(vd.get("state") or ""),
+        "Video Retained s": _num(vd.get("retained_span_s"), 3),
+        "Video Processed s": _num(vd.get("processing_segment_s"), 3),
+        "Video Short Fragments s": _num(vd.get("discarded_fragment_s"), 3),
+        "Video Excluded ROI Steps s": _num(vd.get("excluded_roi_step_s"), 3),
+        "Video Clean s": _num(vd.get("clean_interval_s"), 3),
+        "Video Whole Coverage": _num(vd.get("clean_fraction_retained"), 4),
+        "Frame Step p99 ms": _num(vd.get("frame_step_p99_ms"), 3),
+        "SDK Train Audit": str(saudit.get("state") or ""),
+        "SDK Train Span s": _num(_g(saudit, "integrity", "span_s"), 3),
+        "SDK Invalid Beats": _g(saudit, "integrity", "invalid_beats_n", default=""),
+        "SDK Order Errors": _g(saudit, "integrity", "non_increasing_starts_n", default=""),
+        "SDK Gap Boundaries": _g(saudit, "integrity", "gap_boundaries_n", default=""),
+        "SDK Overlap Boundaries": _g(saudit, "integrity", "overlap_boundaries_n", default=""),
+        "SDK Raw RMSSD ms": _num(_g(saudit, "reported_intervals", "rmssd_ms"), 3),
+        "SDK Clean Intervals": _g(saudit, "current_route_train", "intervals_n", default=""),
+        "SDK Clean s": _num(_g(saudit, "current_route_train", "seconds"), 3),
+        "SDK Longest Clean Run s": _num(_g(saudit, "current_route_train", "longest_run_s"), 3),
+        "SDK Clean Coverage": _num(_g(saudit, "current_route_train", "coverage"), 4),
+        "SDK Clean RMSSD ms": _num(_g(saudit, "current_route_train", "rmssd_ms"), 3),
+        "SDK RMSSD Relative Error": _num(_g(saudit, "internal_comparison", "rmssd_relative_error"), 4),
+        "SDK Video Alignment": str(_g(saudit, "timing", "video_alignment") or ""),
+        "SDK Audit Issues": " | ".join(saudit.get("issues") or [])[:500],
+        "SDK Train Checks": " | ".join(_g(saudit, "current_route_train", "checks_failed", default=[]) or [])[:500],
+        "Video ROI Excluded Frames": vd.get("roi_excluded_frames_n") if vd.get("roi_excluded_frames_n") is not None else "",
+        "Video ROI Edge Loss s": _num(vd.get("unobserved_edge_s"), 3),
+        "ROI Step p99 ms": _num(vd.get("roi_step_p99_ms"), 3),
     }
 
 

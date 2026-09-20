@@ -63,6 +63,8 @@ class RunSet:
     n_missed_splits: int = 0          # run breaks at suspected MISSED beats
     n_false_pair_splits: int = 0      # false beats removed by the pair rule
     n_candidate_intervals: int = 0    # intervals examined by the splitters
+    # Observability only; no validity decision reads these counters.
+    rejection_audit: dict = field(default_factory=dict)
 
     @property
     def n_runs(self) -> int:
@@ -195,6 +197,19 @@ def clean_runs(series: BeatSeries, min_conf: float = 0.5,
     """
     beats = series.beats
     out = RunSet(min_conf=min_conf, total_beats=len(beats))
+    audit = out.rejection_audit
+    audit.update(version=1, mode="diagnostic_only", adjacent_intervals=max(0, len(beats) - 1),
+                 confidence_intervals=0, capture_gap_intervals=0, range_intervals=0,
+                 splitter_intervals=0, short_run_intervals=0, kept_intervals=0,
+                 min_conf=float(min_conf), min_run_beats=int(min_run_beats))
+    # Exclusive pass-one categories, in the same order as the cleaner below.
+    for a, b in zip(beats, beats[1:]):
+        if not (a.confidence >= min_conf and b.confidence >= min_conf):
+            audit["confidence_intervals"] += 1
+        elif getattr(a, 'segment', -1) >= 0 and getattr(b, 'segment', -1) >= 0 and a.segment != b.segment:
+            audit["capture_gap_intervals"] += 1
+        elif not min_physiologic_ibi_ms <= (b.t_s - a.t_s) * 1000 <= max_physiologic_ibi_ms:
+            audit["range_intervals"] += 1
     if len(beats) < 2:
         return out
 
@@ -226,6 +241,7 @@ def clean_runs(series: BeatSeries, min_conf: float = 0.5,
     # Pass 2: split each candidate at suspected-missed-beat intervals.
     def emit(chunk: list) -> None:
         if len(chunk) < min_run_beats:
+            audit["short_run_intervals"] += max(0, len(chunk) - 1)
             return
         t = np.array([b.t_s for b in chunk])
         ibi = np.diff(t) * 1000.0
@@ -235,6 +251,7 @@ def clean_runs(series: BeatSeries, min_conf: float = 0.5,
         out.run_confidences.append(np.minimum(c[:-1], c[1:]))
         out.run_amplitudes.append(np.array([b.amplitude for b in chunk]))
         out.kept_beats += len(chunk)
+        audit["kept_intervals"] += int(ibi.size)
 
     for cand in candidates:
         if len(cand) < 2:
@@ -248,6 +265,7 @@ def clean_runs(series: BeatSeries, min_conf: float = 0.5,
         cuts = set(missed)
         for k in pairs:                            # exclude BOTH halves
             cuts.add(k); cuts.add(k + 1)
+        audit["splitter_intervals"] += len(cuts)
         chunk: list = [cand[0]]
         for k in range(1, len(cand)):
             if (k - 1) in cuts:                    # interval k-1 is suspicious:

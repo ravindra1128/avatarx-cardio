@@ -1,0 +1,41 @@
+{
+  "notice": "Software checks only; no clinical validation or candidate pipeline change.",
+  "python": {
+    "interpreter": "/Users/ravindrasinghbisht/miniconda3/bin/python3",
+    "command": "python -m pytest tests/test_result_delivery.py tests/test_shenai_route.py tests/test_shenai_sidecar_columns.py tests/test_noise_aware_irregularity.py tests/test_confidence_stars.py tests/test_false_positive_guards.py -q -p no:cacheprovider",
+    "passed": 78,
+    "skipped": 1,
+    "failed": 1,
+    "duration_s": 124.96,
+    "failure": "test_existing_af_preservation_test_still_green: ModuleNotFoundError: No module named 'tests.test_pressure_fixes'",
+    "direct_check": {
+      "command": "python -m pytest tests/test_pressure_fixes.py::test_clean_runs_do_not_recreate_the_clean_rr_failure -q -p no:cacheprovider",
+      "passed": 1,
+      "duration_s": 0.20
+    }
+  },
+  "webapp": {
+    "root": "/Users/ravindrasinghbisht/Downloads/webapp",
+    "environment": "node",
+    "reason_for_temporary_config": "Installed environment lacks jest-environment-jsdom; these selected tests run without a rendered DOM.",
+    "config": {
+      "rootDir": "/Users/ravindrasinghbisht/Downloads/webapp",
+      "testEnvironment": "node",
+      "moduleNameMapper": {"^@/(.*)$": "<rootDir>/src/$1"},
+      "transform": {"^.+\\.(js|jsx|ts|tsx)$": "babel-jest"},
+      "testMatch": ["**/__tests__/**/*.test.[jt]s?(x)"]
+    },
+    "suites": [
+      "src/lib/scan/__tests__/AFibProcessor.test.js",
+      "src/lib/scan/staging/__tests__/shenaiSidecar.test.js",
+      "src/lib/scan/staging/__tests__/shenaiSnapshotOrder.test.js",
+      "src/lib/scan/staging/__tests__/afibRhythmCard.test.js",
+      "src/lib/scan/staging/__tests__/isolation.test.js"
+    ],
+    "flags": ["--runInBand", "--no-cache", "--cacheDirectory=/private/tmp/afib-phase1-jest-cache"],
+    "suites_passed": 5,
+    "tests_passed": 61,
+    "tests_failed": 0,
+    "duration_s": 14.9
+  }
+}

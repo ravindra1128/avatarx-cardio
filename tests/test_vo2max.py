@@ -416,3 +416,12 @@ def test_reconcile_follows_the_routes_published_pulse_when_the_route_is_used():
     out = reconcile_fitness_rate(_doc_with_card(card, pulse=80.8), rec)
     assert out["action"] == "recomputed" and card["raw"]["value"] == 80.8
     assert card["details"]["resting_rate_source"] == "live_frame:shenai_train_via_resolver"
+
+
+@pytest.fixture(autouse=True)
+def isolated_result_recovery(tmp_path, monkeypatch):
+    from collections import OrderedDict
+    from app.result_store import ResultStore
+    monkeypatch.setattr(api, "_RESULT_STORE", ResultStore(tmp_path / "results.sqlite", api.RESULT_TTL_S))
+    monkeypatch.setattr(api, "_RESULTS", OrderedDict())
+    monkeypatch.setattr(api, "_STARTED", {})

@@ -1,0 +1,118 @@
+{
+  "baseline": "docs/audits/afib-phase1-2026-09-16/replay.json",
+  "candidate": "data/eval_cache/delivery_candidate.json",
+  "records": 11,
+  "replays": 22,
+  "counts": {
+    "NO_RESULT/None": 3,
+    "ACCEPT/SINUS": 4,
+    "REPEAT_SCAN/None": 4
+  },
+  "per_record": [
+    {
+      "clip": "20260916T080712Z-1234567890-mu3th.webm",
+      "all_returned": true,
+      "video_equal": true,
+      "final_equal": true,
+      "deterministic": true,
+      "inputs_unchanged": true,
+      "source_hashes_equal": true
+    },
+    {
+      "clip": "20260916T081255Z-1234567890-mu3tp.webm",
+      "all_returned": true,
+      "video_equal": true,
+      "final_equal": true,
+      "deterministic": true,
+      "inputs_unchanged": true,
+      "source_hashes_equal": true
+    },
+    {
+      "clip": "20260916T085327Z-1234567890-mu3v3.webm",
+      "all_returned": true,
+      "video_equal": true,
+      "final_equal": true,
+      "deterministic": true,
+      "inputs_unchanged": true,
+      "source_hashes_equal": true
+    },
+    {
+      "clip": "20260916T100913Z-1234567890-mu3xu.webm",
+      "all_returned": true,
+      "video_equal": true,
+      "final_equal": true,
+      "deterministic": true,
+      "inputs_unchanged": true,
+      "source_hashes_equal": true
+    },
+    {
+      "clip": "20260916T101245Z-1234567890-mu3xz.webm",
+      "all_returned": true,
+      "video_equal": true,
+      "final_equal": true,
+      "deterministic": true,
+      "inputs_unchanged": true,
+      "source_hashes_equal": true
+    },
+    {
+      "clip": "20260916T113355Z-1234567890-mu40v.webm",
+      "all_returned": true,
+      "video_equal": true,
+      "final_equal": true,
+      "deterministic": true,
+      "inputs_unchanged": true,
+      "source_hashes_equal": true
+    },
+    {
+      "clip": "20260916T114237Z-1234567890-mu416.webm",
+      "all_returned": true,
+      "video_equal": true,
+      "final_equal": true,
+      "deterministic": true,
+      "inputs_unchanged": true,
+      "source_hashes_equal": true
+    },
+    {
+      "clip": "20260916T114555Z-1234567890-mu41b.webm",
+      "all_returned": true,
+      "video_equal": true,
+      "final_equal": true,
+      "deterministic": true,
+      "inputs_unchanged": true,
+      "source_hashes_equal": true
+    },
+    {
+      "clip": "20260916T115045Z-1234567890-mu41h.webm",
+      "all_returned": true,
+      "video_equal": true,
+      "final_equal": true,
+      "deterministic": true,
+      "inputs_unchanged": true,
+      "source_hashes_equal": true
+    },
+    {
+      "clip": "20260916T123737Z-1234567890-mu434.webm",
+      "all_returned": true,
+      "video_equal": true,
+      "final_equal": true,
+      "deterministic": true,
+      "inputs_unchanged": true,
+      "source_hashes_equal": true
+    },
+    {
+      "clip": "20260916T124523Z-1234567890-mu43f.webm",
+      "all_returned": true,
+      "video_equal": true,
+      "final_equal": true,
+      "deterministic": true,
+      "inputs_unchanged": true,
+      "source_hashes_equal": true
+    }
+  ],
+  "passed": true,
+  "limitations": [
+    "Delivery-only change; not clinical validation or a signal optimization.",
+    "Offline replay does not test HTTP, browser delivery, restart durability or human test-retest stability.",
+    "Latency was not an optimization target."
+  ]
+}

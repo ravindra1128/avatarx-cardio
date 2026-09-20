@@ -1,0 +1,22 @@
+{
+  "scope": "diagnostic_only",
+  "baseline_commit": "b8bcb4a7b2cd3e94da8211c6e60ff09c0e4857c4",
+  "tests": {
+    "passed": 286,
+    "skipped": 2,
+    "deselected_known_baseline_failure": 1
+  },
+  "baseline_identical": {
+    "cleaner_cases": 100,
+    "spectral_cases": 20
+  },
+  "spectral_median_runtime_ms": {
+    "baseline": 0.620979000814259,
+    "candidate": 0.8316669845953584
+  },
+  "protected_threshold_changes": false,
+  "corpus_replayed": false,
+  "clinical_validation": false,
+  "optimizer_guard": "app telemetry and test paths outside signal-only allowlist; no threshold violations",
+  "deployment_verified": false
+}

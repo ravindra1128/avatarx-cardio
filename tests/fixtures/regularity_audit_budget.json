@@ -2,6 +2,9 @@
  "inference/decision_logic.py::beat_evidence_from_series": {
   "diff": 1
  },
+ "inference/evidence.py::_segmented_psd": {
+  "diff": 1
+ },
  "inference/evidence.py::capture_segments": {
   "diff": 3
  },

@@ -84,21 +84,35 @@ _INFLIGHT_LOCK = threading.Lock()
 # no bytes move, and a phone on a mobile radio does not always survive that
 # quiet stretch — 2026-09-09 a scan died with ERR_HTTP2_PING_FAILED after the
 # work was done, and the completed analysis was thrown away because the socket
-# it belonged to was gone. Results are held briefly by session id so the
-# client can come back and collect one instead of re-recording and re-uploading
-# 30 MB. In memory only, small and short-lived: this is a delivery retry, not
-# storage, and the tracking sheet remains the durable record.
+# it belonged to was gone. Results are held briefly by unique upload ID so
+# the client can collect its own scan without recording and uploading again.
+# The bounded memory cache is backed by a TTL-limited SQLite result store so
+# eviction does not lose unexpired results. AFIB_RESULT_DB must point
+# to a persistent volume to survive container replacement; uploads stay transient.
 RESULT_TTL_S = float(os.environ.get("AFIB_RESULT_TTL_S", "900"))    # 15 min
 MAX_CACHED_RESULTS = int(os.environ.get("AFIB_MAX_CACHED_RESULTS", "32"))
 _RESULTS: "OrderedDict[str, tuple]" = OrderedDict()
 _RESULTS_LOCK = threading.Lock()
+from app.result_store import ResultStore
+_RESULT_STORE = ResultStore(os.environ.get("AFIB_RESULT_DB") or WORK_DIR / "results.sqlite3", RESULT_TTL_S)
 
 
 def _remember_result(session, doc: dict) -> None:
     if not session or not isinstance(doc, dict):
         return
+    # Delivery identity belongs to this upload, never a previous scan. These
+    # additive fields do not classify a transport/runtime failure as a rhythm.
+    doc["upload_id"] = doc["scan_id"] = str(session)
+    doc["analysis_state"] = "failed" if doc.get("error") else "complete"
+    created = time.time()
+    doc["result_recovery"] = {"persisted": True, "expires_at_unix": created + RESULT_TTL_S,
+                              "scope": "completed_results_on_this_filesystem"}
+    stored = _RESULT_STORE.put(str(session), doc, created=created)
+    doc["result_recovery"]["persisted"] = stored
+    if not stored:
+        print(f"[measure] result recovery storage unavailable: {_RESULT_STORE.last_error}", flush=True)
     with _RESULTS_LOCK:
-        _RESULTS[str(session)] = (time.time(), doc)
+        _RESULTS[str(session)] = (created, doc)
         _RESULTS.move_to_end(str(session))
         while len(_RESULTS) > MAX_CACHED_RESULTS:
             _RESULTS.popitem(last=False)
@@ -424,8 +438,9 @@ def _sweep_parts(max_age_s: float = 3600.0) -> None:
     try:
         now = time.time()
         for d in UPLOAD_DIR.glob("*"):
-            if d.is_dir() and now - d.stat().st_mtime > max_age_s:
-                shutil.rmtree(d, ignore_errors=True)
+            with _STARTED_LOCK:
+                if d.name not in _STARTED and d.is_dir() and now - d.stat().st_mtime > max_age_s:
+                    shutil.rmtree(d, ignore_errors=True)
     except OSError:
         pass
 
@@ -439,7 +454,9 @@ def _recall_result(session):
                   if now - ts > RESULT_TTL_S]:
             _RESULTS.pop(k, None)
         item = _RESULTS.get(str(session or ""))
-    return None if item is None else item[1]
+    if item is not None:
+        return item[1]
+    return _RESULT_STORE.get(str(session)) if session else None
 _STARTED_AT = time.time()
 # Say which way the gate is set, ONCE, in the private service log. A gate that
 # failed silently cost eight real scans of nothing on 2026-09-12. The public
@@ -537,6 +554,13 @@ def build_timestamp_sidecar(video_path: str, *,
             f"({100.0 * repaired / max(ts.size - 1, 1):.2f}% of steps)")
 
     d2 = np.diff(ts)
+    # Scalar provenance for whole-video coverage. Ingest later omits frames
+    # without a usable face, so its ROI timestamps cannot define this span.
+    info["first_frame_s"] = float(ts[0])
+    info["last_frame_s"] = float(ts[-1])
+    info["span_s"] = float(ts[-1] - ts[0])
+    info["frame_step_p99_ms"] = float(np.percentile(d2, 99) * 1000) if d2.size else None
+    info["frame_step_max_ms"] = float(np.max(d2) * 1000) if d2.size else None
     info["median_dt_ms"] = round(float(np.median(d2)) * 1000.0, 3)
     info["implied_fps"] = round(1.0 / float(np.median(d2)), 2)
     with open(video_path + ".timestamps.json", "w") as f:
@@ -768,6 +792,8 @@ def measure_video_details(video_path: str, *, manifest=None,
     doc["launch_overrides"] = LAUNCH_OVERRIDES or None
     doc["debug"] = {"rationale": det.get("rationale"),
                     "evidence": det.get("evidence")}
+    from app.scan_evidence import record_summary, video_duration_summary
+    record_summary(doc, "video_duration", video_duration_summary, doc, det, duration_ms)
     # Every completed scan carries exactly one AFib result. The assembled job
     # recomputes it after the ShenAI route has run; here it is the video
     # path's own answer, so single-shot callers and replays get one too.
@@ -1015,7 +1041,56 @@ def _drop_signals(upload_id: str) -> None:
         _TRACES.pop(upload_id, None)
 
 
-def _apply_shenai_route(doc: dict, det: dict, upload_id: str, part_dir=None) -> None:
+def _validate_signal_attachment(header: dict, upload_id: str) -> dict:
+    """Bounded optional input; its identity must agree with the video job."""
+    delivery = header.get("signal_delivery")
+    raw = header.get("shenai_signals")
+    if delivery is None and raw is None:
+        return {}                           # legacy separate-sidecar client
+    states = {"attached", "empty_snapshot", "missing_snapshot", "snapshot_too_large",
+              "snapshot_serialization_failed"}
+    if not isinstance(delivery, dict) or type(delivery.get("version")) is not int \
+            or delivery.get("version") != 1 or not isinstance(delivery.get("state"), str) \
+            or delivery.get("state") not in states:
+        raise ValueError("invalid signal delivery metadata")
+    if raw is not None and (not isinstance(raw, dict) or not upload_id
+                            or raw.get("upload_id") != upload_id):
+        raise ValueError("ShenAI snapshot upload_id does not match the video")
+    if (delivery["state"] in {"attached", "empty_snapshot"}) != isinstance(raw, dict):
+        raise ValueError("signal delivery state does not match its payload")
+    return {"signal_delivery": {"version": 1, "state": delivery["state"]},
+            "shenai_signals": raw}
+
+
+def _signal_input_summary(raw, delivery, transport: str, waited_s: float) -> dict:
+    """Receipt is independent of retention. No sample arrays leave the job."""
+    received = isinstance(raw, dict)
+    out = {"received": received, "transport": transport,
+           "state": delivery.get("state") if delivery else ("received" if received else "not_received"),
+           "waited_s": round(waited_s, 2)}
+    if not received:
+        return out
+    out.update(_shenai_summary(raw))
+    ppg = raw.get("ppg") if isinstance(raw.get("ppg"), dict) else {}
+    signal = ppg.get("signal")
+    out["ppg_n"] = len(signal) if isinstance(signal, list) else 0
+    out["ppg_missing_n"] = sum(not isinstance(x, (int, float)) or isinstance(x, bool)
+                               or not math.isfinite(x) for x in signal) if isinstance(signal, list) else 0
+    # These are the SDK's reported figures, not an independent validation of
+    # beat timing or an AFib probability. Keep missing quality distinct from 0.
+    ref = raw.get("reference") if isinstance(raw.get("reference"), dict) else {}
+    for dest, src in (("sdk_quality", "average_signal_quality"),
+                      ("sdk_bad_signal_s", "bad_signal_seconds"),
+                      ("sdk_hr_bpm", "heart_rate_bpm"),
+                      ("sdk_lnrmssd", "hrv_lnrmssd_ms")):
+        value = ref.get(src)
+        out[dest] = (float(value) if isinstance(value, (int, float)) and
+                     not isinstance(value, bool) and math.isfinite(value) else None)
+    return out
+
+
+def _apply_shenai_route(doc: dict, det: dict, upload_id: str, part_dir=None,
+                        *, attachment=None) -> None:
     """Wait (bounded) for the sidecar, run the route, record the outcome on
     the doc. Best effort: a scan must return whether or not any of this works."""
     from inference import shenai_route
@@ -1033,12 +1108,31 @@ def _apply_shenai_route(doc: dict, det: dict, upload_id: str, part_dir=None) -> 
                 raw = None
         return raw if isinstance(raw, dict) else None
 
+    delivery = (attachment or {}).get("signal_delivery")
+    raw = (attachment or {}).get("shenai_signals")
+    waited = 0.0
+    transport = "job_request" if delivery else "sidecar"
     try:
+        if not delivery:
+            if SHENAI_ROUTE_ON:
+                raw, waited = shenai_route.wait_for(_get, SHENAI_WAIT_S)
+            else:
+                raw = _get()
+        try:
+            doc.setdefault("debug", {})["shenai_input"] = _signal_input_summary(
+                raw, delivery, transport, waited)
+        except Exception as summary_error:                  # diagnostics cannot change a decision
+            doc.setdefault("debug", {})["shenai_input"] = {
+                "received": isinstance(raw, dict), "transport": transport,
+                "state": "summary_failed", "error_type": type(summary_error).__name__}
+        from app.scan_evidence import record_summary, shenai_evidence_summary
+        from app.afib_response import capture_diagnostic_summary
+        record_summary(doc, "client_capture_diagnostics", capture_diagnostic_summary, raw)
+        record_summary(doc, "shenai_assessment", shenai_evidence_summary, raw, det)
         if not SHENAI_ROUTE_ON:
             rec = {"route": shenai_route.ROUTE_NAME, "attempted": False, "used": False,
                    "reason": "route disabled (AFIB_SHENAI_ROUTE)"}
         else:
-            raw, waited = shenai_route.wait_for(_get, SHENAI_WAIT_S)
             rec = shenai_route.evaluate(doc, det, raw, waited_s=waited)
             # One rate per scan: the fitness card follows the live-frame
             # train's rate when the route is used, and abstains when a sound
@@ -1050,9 +1144,24 @@ def _apply_shenai_route(doc: dict, det: dict, upload_id: str, part_dir=None) -> 
               f"{rec.get('reason')} -> outcome={doc.get('outcome')} "
               f"class={doc.get('predicted_class')}", flush=True)
     except Exception as e:                                     # noqa: BLE001
+        doc.setdefault("debug", {}).setdefault("shenai_input", {
+            "received": isinstance(raw, dict), "transport": transport,
+            "state": "summary_failed", "error_type": type(e).__name__})
         doc.setdefault("rhythm_source", "video")
         doc.setdefault("debug", {})["shenai_route"] = {
             "used": False, "reason": f"route failed safely: {type(e).__name__}: {e}"}
+
+
+    # Run after publication selection, on isolated inputs. Observability cannot
+    # change the selected source, final decision, retention, or recovery behavior.
+    try:
+        from app.scan_evidence import record_summary
+        from app.rhythm_diagnostics import compare_sources
+        record_summary(doc, "rhythm_comparison", compare_sources, doc, det, raw, SHENAI_ROUTE_ON)
+    except Exception as error:
+        doc.setdefault("debug", {})["rhythm_comparison"] = {
+            "version": 1, "mode": "diagnostic_only", "state": "assessment_failed",
+            "contributes_to_published_result": False, "error_type": type(error).__name__}
 
 
 # ------------------------------------------------------------ transport
@@ -1074,9 +1183,20 @@ def _parse_envelope(body: bytes, ctype: str, query: dict) -> tuple:
         if len(body) < 4:
             raise ValueError("envelope shorter than its length prefix")
         (hlen,) = struct.unpack("<I", body[:4])
-        if hlen <= 0 or 4 + hlen > len(body):
+        if hlen <= 0 or hlen > MAX_SIDECAR_BYTES or 4 + hlen > len(body):
             raise ValueError(f"bad envelope header length {hlen}")
         header = json.loads(body[4:4 + hlen].decode())
+        if not isinstance(header, dict):
+            raise ValueError("envelope header is not a JSON object")
+        # The browser keeps video metadata in the query and attaches the
+        # signal in the envelope. Preserve timestamps/metadata from older
+        # envelope clients while retaining the query's scan identity.
+        _, query_header = _parse_envelope(b"", "video/webm", query)
+        if query_header.get("upload_id") and header.get("upload_id") not in (
+                None, query_header["upload_id"]):
+            raise ValueError("envelope upload_id does not match query")
+        header = {**query_header, **header}
+        header.update(_validate_signal_attachment(header, header.get("upload_id")))
         return body[4 + hlen:], header
 
     def _one(k):
@@ -1317,10 +1437,12 @@ class MeasureHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if urlparse(self.path).path in ("/healthz", "/api/healthz"):
+            _RESULT_STORE.purge()
             self._json(200, {"ok": True, "service": "afib-measure",
                              "build": BUILD_SHA,
                              "uptime_s": int(time.time() - _STARTED_AT),
                              "inflight_jobs": _inflight(0),
+                             "result_recovery": _RESULT_STORE.status(),
                              "launch_overrides": LAUNCH_OVERRIDES or None,
                              "sheet": result_sheet.status(),
                              "max_concurrent": MAX_CONCURRENT,
@@ -1824,35 +1946,77 @@ class MeasureHandler(BaseHTTPRequestHandler):
         """Assemble the slices and detach the analysis. Returns immediately:
         the client polls GET /api/result, so no connection is held through the
         job and a dropped link costs nothing."""
+        # Drain the bounded body even on a cached/503 response. Leaving it on
+        # an HTTP/1.1 connection would corrupt the next request's framing.
+        attachment = {}
+        if self.headers.get("Content-Length", "0") != "0":
+            body = self._read_body(MAX_SIDECAR_BYTES)
+            if body is None:
+                self.close_connection = True
+                return
+            if len(body) != int(self.headers["Content-Length"]):
+                self._json(400, {"error": "incomplete start input"})
+                self.close_connection = True
+                return
+            try:
+                attachment = json.loads(body)
+                if not isinstance(attachment, dict):
+                    raise ValueError("start body is not a JSON object")
+            except (ValueError, RecursionError):
+                # Legacy staging profiles were optional: malformed profile-only
+                # bodies do not discard an uploaded video. Valid signal metadata
+                # still passes the strict identity/state validator below.
+                attachment = {}
         _sweep_parts()
-        _, header = _parse_envelope(b"", "video/webm", q)
-        # Optional JSON body: {"participant": {...}} - the user-entered profile
-        # for the fitness card. Read BEFORE anything can answer, so the bytes
-        # never desync this keep-alive socket; a missing, oversized or
-        # malformed body is simply no profile, never a failed scan.
-        body_doc = self._read_small_json(MAX_START_BODY_BYTES)
-        part = _participant_block(body_doc)
-        if part:
-            header["participant"] = part
         upload_id = str((q.get("upload_id") or [""])[0])
-        ext = str(header.get("ext") or (q.get("ext") or ["webm"])[0]).lstrip(".")
+        try:
+            _, header = _parse_envelope(b"", "video/webm", q)
+            header.update(_validate_signal_attachment(attachment, upload_id))
+            part = _participant_block(attachment)
+            if part:
+                header["participant"] = part
+            ext = str(header.get("ext") or "webm").lstrip(".")
+            if _part_dir(upload_id).name != upload_id or not upload_id.isascii():
+                raise ValueError("upload_id must be an ASCII identifier of at most 80 characters")
+            if not ext.isascii() or not ext.isalnum() or len(ext) > 10:
+                raise ValueError("invalid video extension")
+        except ValueError as e:
+            self._json(400, {"error": str(e)})
+            return
+        poll = f"/api/result?upload_id={upload_id}"
+        # Check and reserve atomically. A lost 202 or simultaneous retry must
+        # find the accepted job BEFORE testing capacity or consuming parts.
+        with _STARTED_LOCK:
+            completed = _recall_result(upload_id)
+            if completed is not None:
+                reply = (200, {"status": "complete", "upload_id": upload_id,
+                               "scan_id": upload_id, "poll": poll})
+            elif upload_id in _STARTED:
+                reply = (202, {"status": "processing", "upload_id": upload_id,
+                               "scan_id": upload_id, "poll": poll})
+            elif not _INFLIGHT.acquire(blocking=False):
+                reply = (503, {"error": "measure workers busy — retry",
+                               "max_concurrent": MAX_CONCURRENT})
+            else:
+                _STARTED[upload_id] = True
+                reply = None
+        if reply is not None:
+            self._json(*reply)
+            return
         # Take the worker slot BEFORE assembling: _assemble_parts deletes the
         # slices, so a 503 issued after it left the client's retry with "no
         # parts" -> 400 and the scan was lost (audit 2026-09-17, #6a). Now a
         # busy service answers 503 with the slices intact, and the retry works.
-        if not _INFLIGHT.acquire(blocking=False):
-            self._json(503, {"error": "measure workers busy — retry",
-                             "max_concurrent": MAX_CONCURRENT})
-            return
         try:
             path, upload_s = _assemble_parts(upload_id, ext)
+            size = os.path.getsize(path)
         except (ValueError, OSError) as e:
+            with _STARTED_LOCK:
+                _STARTED.pop(upload_id, None)
             _INFLIGHT.release()
             self._json(400, {"error": str(e), "upload_id": upload_id})
             return
-        size = os.path.getsize(path)
-        with _STARTED_LOCK:
-            _STARTED[upload_id] = True
+        header["upload_id"] = upload_id
         header.setdefault("session", (q.get("session") or [upload_id])[0])
         ua = self.headers.get("User-Agent", "")
 
@@ -1863,9 +2027,13 @@ class MeasureHandler(BaseHTTPRequestHandler):
                   f"({size} B, inflight {n}/{MAX_CONCURRENT})", flush=True)
             try:
                 doc = self._run_assembled(path, header)
+                if not isinstance(doc, dict) or (not doc.get("error") and
+                        doc.get("outcome") not in {"ACCEPT", "REPEAT_SCAN", "NO_RESULT"}):
+                    raise TypeError("analysis did not return a valid result document")
             except Exception as e:                        # noqa: BLE001
                 traceback.print_exc()
-                doc = {"error": f"{type(e).__name__}: {e}"}
+                doc = {"error": f"{type(e).__name__}: {e}",
+                       "error_code": "analysis_failed"}
             try:
                 doc["size_bytes"] = size
                 # Keep the upload columns meaningful on this path too.
@@ -1894,13 +2062,25 @@ class MeasureHandler(BaseHTTPRequestHandler):
                 print(f"[measure] detached job end for {upload_id!r} after "
                       f"{time.perf_counter() - t0:.1f}s", flush=True)
 
-        _POOL.submit(job)
+        try:
+            _POOL.submit(job)
+        except Exception as e:                            # noqa: BLE001
+            doc = {"error": f"Could not schedule analysis: {type(e).__name__}",
+                   "error_code": "job_submission_failed"}
+            _remember_result(upload_id, doc)
+            with _STARTED_LOCK:
+                _STARTED.pop(upload_id, None)
+            _INFLIGHT.release()
+            _discard_part_dir(upload_id)
+            self._json(503, doc)
+            return
         # Tell the client roughly when to bother asking. Measured on Railway:
         # ~1.6 s of work per MB (downscale + analysis), floor 12 s. Without a
         # hint the client polls blindly from t=0 and burns a dozen requests
         # before the answer can possibly exist.
         eta = max(12.0, round(size / (1024 * 1024) * 1.6, 1))
         self._json(202, {"status": "processing", "upload_id": upload_id,
+                         "scan_id": upload_id,
                          "size_bytes": size, "eta_s": eta,
                          "poll": f"/api/result?upload_id={upload_id}"})
 
@@ -1944,7 +2124,7 @@ class MeasureHandler(BaseHTTPRequestHandler):
         # the SAME decision on the train when the video path abstained on
         # interval gates alone. Recorded on the doc used or not.
         _apply_shenai_route(doc, det, os.path.basename(os.path.dirname(path)),
-                            part_dir=os.path.dirname(path))
+                            part_dir=os.path.dirname(path), attachment=header)
         _apply_trace_path(doc, det, os.path.basename(os.path.dirname(path)),
                           MeasureHandler._build_manifest(header))
         _apply_afib_result(doc, det)
@@ -1957,7 +2137,8 @@ class MeasureHandler(BaseHTTPRequestHandler):
         # it has had the whole 20-45 s of this job to land - and _retain_clip,
         # which ran before the job was even queued, will have missed it.
         _pair_shenai(os.path.dirname(path), doc)
-        return doc
+        from app.afib_response import finalize_afib_response
+        return finalize_afib_response(doc)
 
     @staticmethod
     def _run(video_bytes: bytes, header: dict) -> dict:
@@ -1978,15 +2159,8 @@ class MeasureHandler(BaseHTTPRequestHandler):
         retained = _retain_clip(path, sid)
 
         try:
-            doc = measure_video(
-                path, manifest=MeasureHandler._build_manifest(header),
-                client_timestamps_s=header.get("timestamps_s"),
-                duration_ms=header.get("duration_ms"),
-                config_overrides=header.get("config_overrides"),
-                window_s=header.get("window_s"),
-                scale=header.get("scale"),
-                participant=_participant_block(header),
-                reference=header.get("reference"))
+            # Both transports use the same video + optional train route.
+            doc = MeasureHandler._run_assembled(path, header)
             doc["session"] = sid
             doc["size_bytes"] = len(video_bytes)
             if header.get("reference"):

@@ -98,28 +98,128 @@ def _welch_psd(x, fps: float):
 def _fundamental(f, p):
     """Strongest in-band peak with a subharmonic check. Returns (hz, snr):
     snr is the peak's power over the in-band median."""
+    from scipy.signal import find_peaks
+
     lo, hi = SPECTRAL_BAND_HZ
     m = (f >= lo) & (f <= hi)
     if not np.any(m):
         return None, None
     fb, pb = f[m], p[m]
-    # A maximum ON a band edge is the band's edge, not a rhythm: residual
-    # drift piles up in the lowest bin (a "42 bpm" peak on many corpus
-    # regions). Judge strictly inside the band.
-    if fb.size > 2:
-        fb, pb = fb[1:-1], pb[1:-1]
-    k = int(np.argmax(pb))
+    if fb.size < 3 or not np.all(np.isfinite(pb)) or np.any(pb < 0):
+        return None, None
+    # Keep the band-edge bins as neighbours when finding interior peaks.
+    # Removing them before argmax merely moves a declining background's
+    # maximum inward (e.g. from 42 to 45 bpm) without finding a pulse peak.
+    # Flat-topped peaks have a deterministic centre; a flat or monotonic
+    # spectrum has no peak. No power threshold or frequency band is changed.
+    peaks, _ = find_peaks(pb)
+    if not peaks.size:
+        return None, None
+    k = int(peaks[np.argmax(pb[peaks])])
     f1, p1 = float(fb[k]), float(pb[k])
     if not np.isfinite(p1) or p1 <= 0:
         return None, None
     fs = f1 / 2.0
     if fs >= lo:
-        ms = np.abs(fb - fs) <= SUBHARMONIC_TOL_HZ
-        if np.any(ms):
-            j = int(np.argmax(np.where(ms, pb, -np.inf)))
+        # A half-rate alternative must itself be a peak, not the shoulder
+        # of drift or another peak that happens to enter the search window.
+        halves = peaks[np.abs(fb[peaks] - fs) <= SUBHARMONIC_TOL_HZ]
+        if halves.size:
+            j = int(halves[np.argmax(pb[halves])])
             if pb[j] >= SUBHARMONIC_RATIO * p1:
                 f1, p1 = float(fb[j]), float(pb[j])
-    return f1, float(p1 / (float(np.median(pb)) + 1e-12))
+    # Preserve the original interior-band denominator for valid peaks.
+    return f1, float(p1 / (float(np.median(pb[1:-1])) + 1e-12))
+
+
+def _peak_diagnostics(f, p):
+    """Bounded scalar evidence from the exact PSD used for rate selection."""
+    try:
+        from scipy.signal import find_peaks
+        lo, hi = SPECTRAL_BAND_HZ
+        band = (f >= lo) & (f <= hi)
+        fb, pb = f[band], p[band]
+        if len(fb) < 3 or not np.all(np.isfinite(pb)) or np.any(pb < 0):
+            return {"state": "invalid_spectrum"}
+        peaks, _ = find_peaks(pb)
+        ranked = sorted(peaks.tolist(), key=lambda i: (-float(pb[i]), i))
+        selected, snr = _fundamental(f, p)
+        strongest = ranked[0] if ranked else None
+        total = float(np.sum(pb))
+        def entry(i):
+            return {"bpm": round(float(fb[i]) * 60, 3),
+                    "relative_to_strongest": float(pb[i] / pb[strongest]) if strongest is not None and pb[strongest] > 0 else None,
+                    "band_power_fraction": float(pb[i] / total) if total > 0 else None}
+        # Include the selected half-rate peak even if outside the top five.
+        chosen = next((i for i in ranked if selected is not None and float(fb[i]) == selected), None)
+        return {"state": "assessed", "bin_spacing_bpm": round(float(fb[1] - fb[0]) * 60, 3),
+                "strongest_peak_bpm": entry(strongest)["bpm"] if strongest is not None else None,
+                "selected_peak": entry(chosen) if chosen is not None else None,
+                "selection": "no_peak" if selected is None else
+                    ("subharmonic" if chosen != strongest else "strongest_peak"),
+                "peak_count": len(ranked), "top_peaks": [entry(i) for i in ranked[:5]],
+                "band_max_bpm": round(float(fb[int(np.argmax(pb))]) * 60, 3),
+                "selected_snr": snr}
+    except Exception as error:
+        return {"state": "assessment_failed", "error_type": type(error).__name__}
+
+
+class SegmentedWaveforms(dict):
+    """Legacy concatenated ROI arrays plus their exact capture-part lengths.
+
+    SQI and other existing mapping consumers remain unchanged. Spectral analysis
+    uses the boundaries so its Welch windows never cross an extraction restart.
+    """
+    def __init__(self, values, segment_lengths):
+        super().__init__(values)
+        self.segment_lengths = tuple(segment_lengths)
+
+
+def _segmented_psd(x, fps, lengths):
+    """Pool within-part Welch estimates on a common, unpadded frequency grid.
+
+    Each continuous finite part must independently meet the existing duration
+    floor. Weight by the number of Welch windows, not by ROI pulse agreement.
+    No SDK rate, previous scan, gap interpolation or concatenated fallback.
+    """
+    from scipy.signal import welch
+
+    x = np.asarray(x, float)
+    info = {"state": "insufficient_continuous_samples", "capture_parts": len(lengths),
+            "eligible_parts": 0, "excluded_samples": int(x.size),
+            "welch_windows": 0, "nperseg": None}
+    if (x.ndim != 1 or not np.isfinite(fps) or fps <= 0
+            or any(not isinstance(n, (int, np.integer)) or n <= 0 for n in lengths)
+            or sum(lengths) != len(x)):
+        info["state"] = "invalid_segment_layout"
+        return None, None, info
+    minimum = int(SPECTRAL_MIN_SECONDS * fps)
+    parts, offset = [], 0
+    for n in lengths:
+        part = x[offset:offset + n]
+        offset += n
+        # Non-finite samples are holes, never a reason to close up the clock.
+        mask = np.isfinite(part)
+        edges = np.flatnonzero(np.diff(np.r_[False, mask, False]))
+        for a, b in zip(edges[::2], edges[1::2]):
+            if b - a >= minimum:
+                parts.append(part[a:b])
+    info["eligible_parts"] = len(parts)
+    info["excluded_samples"] = int(x.size - sum(len(p) for p in parts))
+    if not parts:
+        return None, None, info
+    nper = int(min(SPECTRAL_SEGMENT_S * fps, min(len(p) for p in parts)))
+    step = nper - nper // 2
+    spectra, weights, freq = [], [], None
+    for part in parts:
+        f, p = welch(part - np.mean(part), fs=fps, nperseg=nper)
+        spectra.append(p)
+        weights.append(1 + (len(part) - nper) // step)
+        freq = f
+    # Preserve the exact single-part result, including floating point behavior.
+    pooled = spectra[0] if len(spectra) == 1 else np.average(spectra, axis=0, weights=weights)
+    info.update(state="assessed", welch_windows=int(sum(weights)), nperseg=nper)
+    return freq, pooled, info
 
 
 def spectral_pulse(raw_waveforms: dict, fps: float) -> dict:
@@ -129,25 +229,47 @@ def spectral_pulse(raw_waveforms: dict, fps: float) -> dict:
     waveforms are too short."""
     out = {"pulse_spectral_bpm": None, "pulse_spectral_snr": None,
            "pulse_spectral_roi_bpm": {}, "pulse_spectral_roi_agree": 0}
+    diagnostics = {"version": 1, "mode": "diagnostic_only", "regions": {},
+                   "fused": {"state": "unavailable"},
+                   "clock": "nominal_fps_after_finite_sample_filter", "fps": float(fps),
+                   "limitation": "spectral peaks are not verified beat timing"}
+    out["spectral_diagnostics"] = diagnostics
+    lengths = getattr(raw_waveforms, "segment_lengths", None)
+    if lengths is not None:
+        diagnostics["clock"] = "within_capture_segments_nominal_fps"
+        diagnostics["pooling"] = "welch_window_count_common_grid"
     psds, f_ref = [], None
     lo, hi = SPECTRAL_BAND_HZ
     for roi in ROI_NAMES:
         x = (raw_waveforms or {}).get(roi)
-        f, p = _welch_psd(x, fps) if x is not None else (None, None)
+        segment_info = None
+        if x is not None and lengths is not None:
+            f, p, segment_info = _segmented_psd(x, fps, lengths)
+        else:
+            f, p = _welch_psd(x, fps) if x is not None else (None, None)
         if f is None:
+            diagnostics["regions"][roi] = segment_info or {"state": "insufficient_samples"}
             out["pulse_spectral_roi_bpm"][roi] = None
             continue
         f0, _ = _fundamental(f, p)
+        diagnostics["regions"][roi] = _peak_diagnostics(f, p)
+        if segment_info is not None:
+            diagnostics["regions"][roi]["segments"] = segment_info
+        diagnostics["regions"][roi].update(input_samples=int(np.size(x)),
+                                            finite_samples=int(np.sum(np.isfinite(np.asarray(x, float)))))
         out["pulse_spectral_roi_bpm"][roi] = (None if f0 is None
                                               else round(f0 * 60.0, 1))
         band = (f >= lo) & (f <= hi)
         tot = float(np.sum(p[band]))
-        if tot > 0 and (f_ref is None or f.shape == f_ref.shape):
+        if tot > 0 and (f_ref is None or np.array_equal(f, f_ref)):
             f_ref = f
             psds.append(p / tot)
     if not psds:
         return out
-    f0, snr = _fundamental(f_ref, np.mean(psds, axis=0))
+    fused_psd = np.mean(psds, axis=0)
+    f0, snr = _fundamental(f_ref, fused_psd)
+    diagnostics["fused"] = _peak_diagnostics(f_ref, fused_psd)
+    diagnostics["fused"]["contributing_regions"] = len(psds)
     if f0 is None:
         return out
     bpm = f0 * 60.0
@@ -261,8 +383,10 @@ def extract_and_detect(traces: dict, ts: np.ndarray, fps: float, cfg: dict,
                 beat.t_s = float(np.interp(idx, np.arange(b - a), ts[a:b]))
                 beat.segment = seg_i            # audit #4c: runs never span a gap
                 per_roi_beats[roi].append(beat)
-    raw = {r: (np.concatenate(raw_parts[r]) if raw_parts[r]
-               else np.array([], dtype=float)) for r in ROI_NAMES}
+    raw = SegmentedWaveforms(
+        {r: (np.concatenate(raw_parts[r]) if raw_parts[r]
+             else np.array([], dtype=float)) for r in ROI_NAMES},
+        [b - a for a, b in segments])
     return raw, per_roi_beats, segments
 
 

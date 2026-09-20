@@ -325,16 +325,28 @@ def evaluate(doc: dict, det: dict, raw: Optional[dict], *,
 
 
 def _evaluate(doc: dict, det: dict, raw: Optional[dict], rec: dict) -> dict:
+    rationale = (doc.get("debug") or {}).get("rationale") or det.get("rationale")
+    rec["video_gates_failed"] = (list(rationale.get("gates_failed") or [])
+                                 if isinstance(rationale, dict) else None)
+    ok, why = video_path_allows_route(rationale, doc.get("outcome"))
+    return _evaluate_train(doc, det, raw, rec, eligibility=(ok, why))
+
+
+def _evaluate_train(doc: dict, det: dict, raw: Optional[dict], rec: dict,
+                    *, eligibility=(True, None)) -> dict:
+    """Assess the train; publication callers supply their existing eligibility.
+
+    Diagnostic callers operate on isolated documents. Staging still assesses
+    train quality when publication is blocked, for fitness reconciliation.
+    """
     from beats.ibi import clean_runs, rmssd_from_runs, sdnn_from_runs
     from features.regularity import regularity_from_runs
     from inference.confidence_stars import ConfidenceStars
     from inference.decision_logic import beat_evidence_from_series, decide_with_rationale
     from inference.evidence import pulse_agreement
 
+    ok, why = eligibility
     rationale = (doc.get("debug") or {}).get("rationale") or det.get("rationale")
-    rec["video_gates_failed"] = (list(rationale.get("gates_failed") or [])
-                                 if isinstance(rationale, dict) else None)
-    ok, why = video_path_allows_route(rationale, doc.get("outcome"))
     if not isinstance(raw, dict):
         rec["reason"] = (why if not ok else
                          "no ShenAI sidecar arrived for this scan"

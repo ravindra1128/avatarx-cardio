@@ -1,0 +1,64 @@
+{
+  "recordings": 8,
+  "merged_all_returned": true,
+  "merged_all_deterministic": true,
+  "per_record": [
+    {
+      "id": "20260916T081255Z-1234567890-mu3tp",
+      "signal_and_outcome_unchanged": true,
+      "cards_match_codex_source": true,
+      "fitness_before": 46.4,
+      "fitness_after": null
+    },
+    {
+      "id": "20260916T101245Z-1234567890-mu3xz",
+      "signal_and_outcome_unchanged": true,
+      "cards_match_codex_source": true,
+      "fitness_before": 9.1,
+      "fitness_after": null
+    },
+    {
+      "id": "20260917T061917Z-0d8c2c7a-6179-42",
+      "signal_and_outcome_unchanged": true,
+      "cards_match_codex_source": true,
+      "fitness_before": 84.8,
+      "fitness_after": null
+    },
+    {
+      "id": "20260917T062614Z-91bef2a7-f208-4b",
+      "signal_and_outcome_unchanged": true,
+      "cards_match_codex_source": true,
+      "fitness_before": 44.7,
+      "fitness_after": null
+    },
+    {
+      "id": "demo_93407fcd7873",
+      "signal_and_outcome_unchanged": true,
+      "cards_match_codex_source": true,
+      "fitness_before": 56.8,
+      "fitness_after": 63.7
+    },
+    {
+      "id": "webapp_1234567890-0ff908.webm.scaled",
+      "signal_and_outcome_unchanged": true,
+      "cards_match_codex_source": true,
+      "fitness_before": null,
+      "fitness_after": null
+    },
+    {
+      "id": "webapp_1234567890-9b3023.webm.scaled",
+      "signal_and_outcome_unchanged": true,
+      "cards_match_codex_source": true,
+      "fitness_before": 81.8,
+      "fitness_after": 45.5
+    },
+    {
+      "id": "webapp_1234567890-ebe749",
+      "signal_and_outcome_unchanged": true,
+      "cards_match_codex_source": true,
+      "fitness_before": 65.5,
+      "fitness_after": 79.2
+    }
+  ],
+  "limitation": "Video-only replay has no SDK reference/profile; live-reference fitness preservation is separately covered by integration tests. No clinical accuracy claim."
+}
