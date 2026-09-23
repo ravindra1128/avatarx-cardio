@@ -124,6 +124,14 @@ COLUMNS = [
     "Trace Ran", "Trace Outcome", "Trace Result", "Trace p", "Trace SQI",
     "Trace Coherence", "Trace Timing ms", "Trace Intervals", "Trace Coverage",
     "Trace Pulse", "Trace FPS", "Trace Note",
+    # 2026-09-23: the Vascular Tone card's measurement, the facial pulsatile
+    # perfusion index from the live-frame traces (features/facial_perfusion.py).
+    # "Vascular Tone" above is its 0-100 score; these are the index itself (%),
+    # its 95 % window-bootstrap interval, the face regions and low-motion
+    # windows it used, why it abstained when it did, and the retired clip-based
+    # CV score of the same scan, so repeat scans can be compared per source.
+    "VT Source", "VT PI %", "VT PI CI", "VT Regions", "VT Windows", "VT Why",
+    "VT Legacy Clip",
     # 2026-09-20: the fitness card's second basis (features/vo2max.py). "Fitness"
     # above holds what the user saw - mL/kg/min on the profile basis, the 0-100
     # proxy otherwise, and "Fit Unit" says which. These say where the estimate's
@@ -328,6 +336,8 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
     fit = _card(items, "cardiorespiratory_fitness")
     fit_d = (items.get("cardiorespiratory_fitness") or {}).get("details") or {}
     tp = _g(doc, "debug", "trace_path") or {}
+    vt = _g(doc, "debug", "vascular_tone") or {}
+    vt = vt if isinstance(vt, dict) else {}
     # Standalone /beta/cardio-afib scan (rhythm_source client_traces): it has no
     # sideband trace_path, but the same Trace* columns should show its capture
     # so a short/weak mobile scan is diagnosable from the row. Map its own
@@ -537,6 +547,15 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
         "Trace FPS": _num(tp.get("fps"), 1) if tp else "",
         "Trace Note": ((" | ".join(tp.get("no_read_reasons") or tp.get("ingest_reasons") or [])
                         or str(tp.get("reason") or ""))[:300] if tp else ""),
+        "VT Source": str(vt.get("source") or ""),
+        "VT PI %": _num(vt.get("pi_percent"), 3),
+        "VT PI CI": ("-".join(f"{x:.3f}" for x in vt["ci95_percent"])
+                     if isinstance(vt.get("ci95_percent"), list) and len(vt["ci95_percent"]) == 2 else ""),
+        "VT Regions": ",".join(vt.get("regions_used") or []),
+        "VT Windows": (f"{_g(vt, 'windows', 'low_motion')}/{_g(vt, 'windows', 'total')}"
+                       if isinstance(vt.get("windows"), dict) else ""),
+        "VT Why": str(vt.get("reason") or "")[:200],
+        "VT Legacy Clip": _num(vt.get("legacy_clip_score"), 1),
         "Fit Estimator": str(fit_d.get("estimator") or ""),
         "Fit HR Source": str(fit_d.get("resting_rate_source") or ""),
         "Fit HR Own": _num(_g(fit_d, "resting_rate_choice", "own_bpm"), 1),

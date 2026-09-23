@@ -78,78 +78,8 @@ def report_biomarkers(scan_result, det: dict, *, capture: dict = None,
                             f"{type(exc).__name__}: {exc}"],
             }
     hemo = hemodynamics or {}
-    items = []
-    for key, title in _BIOMARKERS:
-        endpoint = dict(hemo.get(key) or {})
-        estimate = dict(endpoint.get("estimate") or {})
-        value = estimate.get("value")
-        # A card may report a BAND instead of a number when its marker is not
-        # the one the card normally reports (stiffness without a dicrotic
-        # notch). Both count as a result; only one of them is ever a number.
-        band = estimate.get("band")
-        computed = bool(endpoint.get("available")) and (value is not None or band is not None)
-        confidence = dict(endpoint.get("confidence") or
-                          hemo.get("quality") or
-                          hemo.get("quality_gate") or {})
-        if not computed:
-            confidence.setdefault(
-                "kind", "signal_evidence_not_endpoint_accuracy")
-            confidence.setdefault(
-                "interpretation",
-                "The endpoint abstained because its measured signal "
-                "requirements were not met; no display value was substituted.")
-        row = {
-            "key": key,
-            "title": title,
-            "label": "Research Estimate / Prototype",
-            "status": "computed" if computed else "not_computed",
-            "value": value if computed else None,
-            "band": band if computed else None,
-            "unit": estimate.get("unit") if computed else None,
-            "metric": estimate.get("name") if computed else None,
-            "method": (estimate.get("method") or
-                       endpoint.get("definition") or
-                       _BIOMARKER_METHODS[key]),
-            "calibrated": bool(endpoint.get("calibrated", False)),
-            "confidence": confidence,
-            "details": endpoint,
-            # Display tiers (2026-09-09): "measured" when every floor held,
-            # "provisional" when the value comes from thinner evidence, with
-            # the reasons; the typical range of the 0-100 score; and the raw
-            # marker the score was derived from, so nothing is hidden.
-            "tier": endpoint.get("tier") if computed else None,
-            "tier_reasons": (list(endpoint.get("tier_reasons") or [])
-                             if computed else []),
-            "typical_range": endpoint.get("score_typical_range"),
-            "raw": {"name": endpoint.get("raw_name"),
-                    "value": endpoint.get("raw_value"),
-                    "unit": endpoint.get("raw_unit")},
-        }
-        if not computed:
-            row["reason"] = _failure_reason(endpoint, hemo)
-        elif outcome != "ACCEPT":
-            row["warning"] = (
-                f"Overall scan outcome was {outcome}. This numeric research "
-                "feature survived its endpoint inputs, but the rhythm result "
-                "was rejected; treat the value as low-confidence paired-data "
-                "collection only."
-            )
-        if key == "cardiorespiratory_fitness":
-            row["oxygen_uptake_ml_kg_min"] = endpoint.get(
-                "oxygen_uptake_estimate")
-            row["limitation"] = (endpoint.get("limitation") or endpoint.get(
-                "why_no_oxygen_uptake_value"))
-            # Profile basis (features/vo2max.py): which estimator produced the
-            # value and the equation's own +/- 1 SEE band around it.
-            row["estimator"] = endpoint.get("estimator")
-            row["likely_range"] = endpoint.get("likely_range") if computed else None
-            row["typical_range_label"] = (endpoint.get("typical_range_label")
-                                          if computed else None)
-        elif key == "arterial_stiffness":
-            row["limitation"] = endpoint.get("not_a_velocity")
-        elif key == "vascular_tone":
-            row["limitation"] = endpoint.get("not_reactivity")
-        items.append(row)
+    items = [biomarker_row(key, title, dict(hemo.get(key) or {}), hemo, outcome)
+             for key, title in _BIOMARKERS]
     return {
         "schema_version": 1,
         "label": "Research Estimate / Prototype",
@@ -160,6 +90,98 @@ def report_biomarkers(scan_result, det: dict, *, capture: dict = None,
         "quality": dict(hemo.get("quality") or {}),
         "items": items,
     }
+
+
+def replace_biomarker(biomarkers: dict, key: str, endpoint: dict) -> dict:
+    """The biomarkers payload with ONE card re-serialized from a new endpoint
+    dict (the same row contract), every other card untouched. For a card
+    computed after the video job from another source: the Vascular Tone card
+    from the live-frame traces (features/facial_perfusion.py, 2026-09-23)."""
+    if not isinstance(biomarkers, dict) or not isinstance(biomarkers.get("items"), list):
+        return biomarkers
+    title = dict(_BIOMARKERS).get(key, key)
+    outcome = str(biomarkers.get("outcome") or "NO_RESULT")
+    hemo = {"quality": dict(biomarkers.get("quality") or {})}
+    out = dict(biomarkers)
+    out["items"] = [biomarker_row(key, title, dict(endpoint or {}), hemo, outcome)
+                    if isinstance(it, dict) and it.get("key") == key else it
+                    for it in biomarkers["items"]]
+    out["complete"] = all(isinstance(x, dict) and x.get("status") == "computed"
+                          for x in out["items"])
+    return out
+
+
+def biomarker_row(key: str, title: str, endpoint: dict, hemo: dict, outcome: str) -> dict:
+    """One card's row of the frozen UI contract, from its endpoint dict."""
+    estimate = dict(endpoint.get("estimate") or {})
+    value = estimate.get("value")
+    # A card may report a BAND instead of a number when its marker is not
+    # the one the card normally reports (stiffness without a dicrotic
+    # notch). Both count as a result; only one of them is ever a number.
+    band = estimate.get("band")
+    computed = bool(endpoint.get("available")) and (value is not None or band is not None)
+    confidence = dict(endpoint.get("confidence") or
+                      hemo.get("quality") or
+                      hemo.get("quality_gate") or {})
+    if not computed:
+        confidence.setdefault(
+            "kind", "signal_evidence_not_endpoint_accuracy")
+        confidence.setdefault(
+            "interpretation",
+            "The endpoint abstained because its measured signal "
+            "requirements were not met; no display value was substituted.")
+    row = {
+        "key": key,
+        "title": title,
+        "label": "Research Estimate / Prototype",
+        "status": "computed" if computed else "not_computed",
+        "value": value if computed else None,
+        "band": band if computed else None,
+        "unit": estimate.get("unit") if computed else None,
+        "metric": estimate.get("name") if computed else None,
+        "method": (estimate.get("method") or
+                   endpoint.get("definition") or
+                   _BIOMARKER_METHODS[key]),
+        "calibrated": bool(endpoint.get("calibrated", False)),
+        "confidence": confidence,
+        "details": endpoint,
+        # Display tiers (2026-09-09): "measured" when every floor held,
+        # "provisional" when the value comes from thinner evidence, with
+        # the reasons; the typical range of the 0-100 score; and the raw
+        # marker the score was derived from, so nothing is hidden.
+        "tier": endpoint.get("tier") if computed else None,
+        "tier_reasons": (list(endpoint.get("tier_reasons") or [])
+                         if computed else []),
+        "typical_range": endpoint.get("score_typical_range"),
+        "raw": {"name": endpoint.get("raw_name"),
+                "value": endpoint.get("raw_value"),
+                "unit": endpoint.get("raw_unit")},
+    }
+    if not computed:
+        row["reason"] = _failure_reason(endpoint, hemo)
+    elif outcome != "ACCEPT":
+        row["warning"] = (
+            f"Overall scan outcome was {outcome}. This numeric research "
+            "feature survived its endpoint inputs, but the rhythm result "
+            "was rejected; treat the value as low-confidence paired-data "
+            "collection only."
+        )
+    if key == "cardiorespiratory_fitness":
+        row["oxygen_uptake_ml_kg_min"] = endpoint.get(
+            "oxygen_uptake_estimate")
+        row["limitation"] = (endpoint.get("limitation") or endpoint.get(
+            "why_no_oxygen_uptake_value"))
+        # Profile basis (features/vo2max.py): which estimator produced the
+        # value and the equation's own +/- 1 SEE band around it.
+        row["estimator"] = endpoint.get("estimator")
+        row["likely_range"] = endpoint.get("likely_range") if computed else None
+        row["typical_range_label"] = (endpoint.get("typical_range_label")
+                                      if computed else None)
+    elif key == "arterial_stiffness":
+        row["limitation"] = endpoint.get("not_a_velocity")
+    elif key == "vascular_tone":
+        row["limitation"] = endpoint.get("not_reactivity")
+    return row
 
 
 def report_signal(det: dict, cfg: dict) -> dict:

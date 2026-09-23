@@ -841,6 +841,7 @@ def measure_traces(payload: dict, *, manifest=None, config_overrides=None) -> tu
     doc["launch_overrides"] = LAUNCH_OVERRIDES or None
     doc["debug"] = {"rationale": det.get("rationale"),
                     "evidence": det.get("evidence")}
+    _apply_vascular_tone(doc, payload, payload if isinstance(payload, dict) else {})
     ing = (det or {}).get("ingest")
     meta = getattr(ing, "meta", None)
     # Per-region signal diagnostic (2026-09-18): the std and peak-to-peak of
@@ -1021,6 +1022,94 @@ def _apply_trace_path(doc: dict, det: dict, upload_id: str, manifest: dict) -> N
     except Exception as e:                                     # noqa: BLE001
         doc.setdefault("debug", {})["trace_path"] = {
             "ran": False, "reason": f"trace path failed safely: {type(e).__name__}: {e}"}
+
+
+# Vascular Tone from the live-frame traces (features/facial_perfusion.py,
+# 2026-09-23). The clip-based amplitude CV it replaces measured capture noise
+# (a pulse with zero amplitude variation read 16-20 through it; the same scan
+# read 45 from the clip and 100 from its traces). AFIB_TONE_SOURCE=clip keeps
+# the old card for an A/B; anything else computes the facial perfusion index.
+TONE_SOURCE = os.environ.get("AFIB_TONE_SOURCE", "traces").strip().lower()
+
+
+def _tone_hint_bpm(doc: dict, header: dict):
+    """The scan's live-frame heart rate: the SDK's own figure, else the
+    request's reference rate. Only a hint - the estimator locks onto the
+    traces' own pulse peak within +/- 15 bpm of it."""
+    sdk = ((doc.get("debug") or {}).get("shenai_input") or {}).get("sdk_hr_bpm")
+    ref = (header or {}).get("reference") if isinstance((header or {}).get("reference"), dict) else {}
+    for v in (sdk, (ref or {}).get("ref_hr")):
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(f):
+            return f
+    return None
+
+
+def _apply_vascular_tone(doc: dict, raw_traces, header: dict) -> None:
+    """Replace the Vascular Tone card with the facial perfusion index measured
+    on this scan's live-frame traces. Best effort: a scan returns whether or
+    not this works, and a failure leaves an explicit reason on the card, never
+    the old clip number presented as the new measurement."""
+    if TONE_SOURCE == "clip":
+        doc.setdefault("debug", {})["vascular_tone"] = {"source": "clip",
+                                                        "reason": "AFIB_TONE_SOURCE=clip"}
+        return
+    try:
+        from app.report_data import replace_biomarker
+        from features.facial_perfusion import facial_perfusion, vascular_tone_card
+        bio = doc.get("biomarkers")
+        if not isinstance(bio, dict) or not isinstance(bio.get("items"), list):
+            return
+        legacy = next((dict(it.get("details") or {}) for it in bio["items"]
+                       if isinstance(it, dict) and it.get("key") == "vascular_tone"), None)
+        if isinstance(raw_traces, dict):
+            fp = facial_perfusion(raw_traces, hr_hint_bpm=_tone_hint_bpm(doc, header))
+        else:
+            fp = {"available": False, "version": None,
+                  "reason": ("the live camera traces for this scan did not reach the "
+                             "service, so facial perfusion could not be measured")}
+        card = vascular_tone_card(fp, legacy=legacy)
+        doc["biomarkers"] = replace_biomarker(bio, "vascular_tone", card)
+        doc.setdefault("debug", {})["vascular_tone"] = {
+            "source": "live_frame_traces", "version": fp.get("version"),
+            "available": bool(fp.get("available")), "pi_percent": fp.get("pi_percent"),
+            "score": card.get("score"), "tier": card.get("tier"),
+            "ci95_percent": (fp.get("uncertainty") or {}).get("ci95_percent"),
+            "regions_used": fp.get("regions_used"), "windows": fp.get("windows"),
+            "seconds_used": fp.get("seconds_used"), "f0_source": fp.get("f0_source"),
+            "f0_bpm": (round(fp["f0_hz"] * 60.0, 1) if fp.get("f0_hz") else None),
+            "reason": fp.get("reason"),
+            "legacy_clip_score": (legacy or {}).get("score"),
+        }
+        print(f"[measure] vascular tone: pi={fp.get('pi_percent')} score={card.get('score')} "
+              f"tier={card.get('tier')} regions={fp.get('regions_used')} "
+              f"windows={fp.get('windows')} legacy_clip={(legacy or {}).get('score')} "
+              f"{fp.get('reason') or ''}", flush=True)
+    except Exception as e:                                     # noqa: BLE001
+        reason = f"vascular tone failed safely: {type(e).__name__}: {e}"
+        doc.setdefault("debug", {})["vascular_tone"] = {"source": "live_frame_traces",
+                                                        "reason": reason}
+        try:            # never leave the old clip number standing in for the new card
+            from app.report_data import replace_biomarker
+            from features.facial_perfusion import vascular_tone_card
+            doc["biomarkers"] = replace_biomarker(
+                doc.get("biomarkers"), "vascular_tone",
+                vascular_tone_card({"available": False, "reason": reason}))
+        except Exception:                                      # noqa: BLE001
+            pass
+
+
+def _held_traces(upload_id: str):
+    """The client's trace document for this job. The trace path has already
+    waited for it when it is enabled; otherwise wait here, just as long."""
+    raw = _peek_traces(upload_id)
+    if raw is None and not TRACE_PATH_ON:
+        from inference import shenai_route
+        raw, _ = shenai_route.wait_for(lambda: _peek_traces(upload_id), SHENAI_WAIT_S)
+    return raw if isinstance(raw, dict) else None
 
 
 def _hold_signals(upload_id: str, payload: dict) -> None:
@@ -2127,6 +2216,8 @@ class MeasureHandler(BaseHTTPRequestHandler):
                             part_dir=os.path.dirname(path), attachment=header)
         _apply_trace_path(doc, det, os.path.basename(os.path.dirname(path)),
                           MeasureHandler._build_manifest(header))
+        _apply_vascular_tone(doc, _held_traces(os.path.basename(os.path.dirname(path))),
+                             header)
         _apply_afib_result(doc, det)
         if header.get("reference"):
             doc["reference"] = header["reference"]
