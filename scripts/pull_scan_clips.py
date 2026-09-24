@@ -67,9 +67,7 @@ def main(argv=None) -> int:
     for c in clips:
         print(f"   {c['id']:44} {c['bytes']/1e6:7.1f} MB  {c['mtime']}"
               f"{'  +timestamps' if c.get('sidecar') else ''}"
-              f"{'  +shenai' if c.get('shenai') else ''}"
-              f"{'  +traces' if c.get('traces') else ''}"
-              f"{'  +response' if c.get('response') else ''}")
+              f"{'  +shenai' if c.get('shenai') else ''}")
     if not a.get:
         print("\nre-run with --get all (or --get <id>) to download")
         return 0
@@ -85,11 +83,7 @@ def main(argv=None) -> int:
         # what scripts/compare_shenai_signal.py auto-discovers beside the clip.
         for name in ([c["id"]]
                      + ([c["id"] + ".timestamps.json"] if c.get("sidecar") else [])
-                     + ([c["id"] + ".shenai.json"] if c.get("shenai") else [])
-                     # 2026-09-24: the live-frame traces the Vascular Tone card
-                     # is computed from, and the scan's final response.
-                     + ([c["id"] + ".traces.json"] if c.get("traces") else [])
-                     + ([c["id"] + ".response.json"] if c.get("response") else [])):
+                     + ([c["id"] + ".shenai.json"] if c.get("shenai") else [])):
             dst = out / name
             if dst.exists():
                 print(f"   have {name}")
