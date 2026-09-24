@@ -201,6 +201,64 @@ def _clips_enabled() -> bool:
     return _clips_gate_reason() is None
 
 
+# Live-frame trace retention WITHOUT any video (owner, 2026-09-24: "keep only
+# traces"). The Vascular Tone card is computed from the trace document the
+# phone posts to /api/scan-traces - four face regions' mean colour per frame,
+# no image - which was held in memory only, so a phone pair that read 0.35 %
+# and 0.81 % three minutes apart could not be examined. Its own switch, its
+# own directory, independent of clip retention (AFIB_KEEP_UPLOADS may stay
+# off); read back only with the same token as the clips. Newest N kept.
+TRACES_DIR = WORK_DIR / "traces"
+TRACES_KEEP = int(os.environ.get("AFIB_TRACES_KEEP", "50"))
+TRACE_FILE_SUFFIX = ".traces.json"
+
+
+def _traces_gate_reason():
+    """Why trace retention is OFF, or None when it is on (private log only)."""
+    keep = (os.environ.get("AFIB_KEEP_TRACES") or "").strip()
+    if keep.lower() not in _TRUTHY:
+        return f"AFIB_KEEP_TRACES is {keep!r} (need one of 1/true/yes/on)"
+    if not _clips_token():
+        return "AFIB_CLIPS_TOKEN is unset or empty"
+    return None
+
+
+def _traces_enabled() -> bool:
+    return _traces_gate_reason() is None
+
+
+def _retain_traces(upload_id: str, raw_traces, doc: dict) -> None:
+    """Store this scan's trace document, plus a short note (scan id, the SDK's
+    heart rate and quality, the Vascular Tone the service computed), as one
+    JSON file. Never video, never the clip. Best effort: a scan returns
+    whether or not this works."""
+    if not _traces_enabled() or not isinstance(raw_traces, dict):
+        return
+    try:
+        TRACES_DIR.mkdir(parents=True, exist_ok=True)
+        safe = "".join(c for c in str(upload_id) if c.isalnum() or c in "-_")[:40] or "scan"
+        stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+        dst = TRACES_DIR / f"{stamp}-{safe}{TRACE_FILE_SUFFIX}"
+        debug = (doc or {}).get("debug") or {}
+        shen = debug.get("shenai_input") or {}
+        ref = (doc or {}).get("reference") if isinstance((doc or {}).get("reference"), dict) else {}
+        note = {"upload_id": str(upload_id), "stored_at": stamp, "build": BUILD_SHA,
+                "sdk_hr_bpm": shen.get("sdk_hr_bpm"), "sdk_quality": shen.get("sdk_quality"),
+                "ref_hr": (ref or {}).get("ref_hr"), "outcome": (doc or {}).get("outcome"),
+                "vascular_tone": debug.get("vascular_tone")}
+        dst.write_text(json.dumps({"service": note, "trace_document": raw_traces}, default=str))
+        files = sorted(TRACES_DIR.glob("*" + TRACE_FILE_SUFFIX),
+                       key=lambda q: q.stat().st_mtime, reverse=True)
+        for q in files[max(TRACES_KEEP, 1):]:
+            try:
+                q.unlink()
+            except OSError:
+                pass
+        print(f"[traces] retained {dst.name} ({dst.stat().st_size / 1e3:.0f} kB)", flush=True)
+    except Exception as e:                                     # noqa: BLE001
+        print(f"[traces] retain failed: {type(e).__name__}: {e}", flush=True)
+
+
 def _retain_clip(video_path: str, sid: str):
     """Keep an untouched copy of the upload before prep rewrites it in place.
 
@@ -464,6 +522,8 @@ _STARTED_AT = time.time()
 # the oracle the token exists to deny.
 print("[clips] retention " + ("ON" if _clips_enabled()
                               else f"OFF: {_clips_gate_reason()}"), flush=True)
+print("[traces] retention " + ("ON (traces only, no video)" if _traces_enabled()
+                               else f"OFF: {_traces_gate_reason()}"), flush=True)
 BUILD_SHA = (os.environ.get("RAILWAY_GIT_COMMIT_SHA")      # set by Railway
              or os.environ.get("AFIB_BUILD_SHA") or "unknown")[:12]
 
@@ -1525,6 +1585,9 @@ class MeasureHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        if urlparse(self.path).path in ("/api/traces", "/api/trace"):
+            self._serve_traces()
+            return
         if urlparse(self.path).path in ("/healthz", "/api/healthz"):
             _RESULT_STORE.purge()
             self._json(200, {"ok": True, "service": "afib-measure",
@@ -1560,6 +1623,44 @@ class MeasureHandler(BaseHTTPRequestHandler):
             self._serve_clip()
             return
         self._json(404, {"error": "not found"})
+
+    def _serve_traces(self):
+        """List (/api/traces) or download (/api/trace?id=) a retained trace
+        document. Same rules as _serve_clip: 404 unless retention is on AND
+        the token matches (compared as bytes, in constant time), basename-only
+        ids, nothing outside TRACES_DIR."""
+        u = urlparse(self.path)
+        q = parse_qs(u.query)
+        token = (q.get("token") or [""])[0]
+        if not _traces_enabled() or not hmac.compare_digest(
+                token.encode("utf-8", "ignore"), _clips_token().encode("utf-8", "ignore")):
+            self._json(404, {"error": "not found"})
+            return
+        try:
+            TRACES_DIR.mkdir(parents=True, exist_ok=True)
+            files = sorted(TRACES_DIR.glob("*" + TRACE_FILE_SUFFIX),
+                           key=lambda f: f.stat().st_mtime, reverse=True)
+        except OSError as e:
+            self._json(500, {"error": f"traces unavailable: {e}"})
+            return
+        if u.path == "/api/traces":
+            self._json(200, {"traces": [
+                {"id": f.name, "bytes": f.stat().st_size,
+                 "mtime": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(f.stat().st_mtime))}
+                for f in files], "keep": TRACES_KEEP})
+            return
+        tid = os.path.basename((q.get("id") or [""])[0])
+        target = TRACES_DIR / tid
+        if not tid.endswith(TRACE_FILE_SUFFIX) or not target.is_file():
+            self._json(404, {"error": "no such trace", "id": tid})
+            return
+        data = target.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Content-Disposition", f'attachment; filename="{target.name}"')
+        self.end_headers()
+        self.wfile.write(data)
 
     def _serve_clip(self):
         """List or download a retained scan clip.
@@ -2229,7 +2330,10 @@ class MeasureHandler(BaseHTTPRequestHandler):
         # which ran before the job was even queued, will have missed it.
         _pair_shenai(os.path.dirname(path), doc)
         from app.afib_response import finalize_afib_response
-        return finalize_afib_response(doc)
+        out = finalize_afib_response(doc)
+        upload_id = os.path.basename(os.path.dirname(path))
+        _retain_traces(upload_id, _peek_traces(upload_id), out)
+        return out
 
     @staticmethod
     def _run(video_bytes: bytes, header: dict) -> dict:
