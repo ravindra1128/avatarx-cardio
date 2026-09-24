@@ -412,3 +412,38 @@ def test_gate_reason_names_the_failing_half_but_never_the_token(monkeypatch):
     assert "hunter2" not in r
     monkeypatch.setenv("AFIB_KEEP_UPLOADS", "yes")
     assert api._clips_gate_reason() is None
+
+
+def test_the_trace_document_and_response_ride_with_the_clip(monkeypatch, tmp_path):
+    """2026-09-24: the Vascular Tone card is computed from the live-frame
+    traces, which lived in memory only; a phone pair that disagreed could not
+    be examined. They are kept beside the retained clip, through the same
+    pointer as the ShenAI sidecar, flagged in the listing, never given a row
+    of their own, and pruned with their clip."""
+    _enable(monkeypatch)
+    src = tmp_path / "scan.webm"
+    src.write_bytes(b"video-bytes")
+    dst = api._retain_clip(str(src), "abcdef1234567890")
+    d = api._part_dir("upl-abcdef")
+    d.mkdir(parents=True)
+    (d / api.RETAINED_POINTER_NAME).write_text(dst.name)
+    traces = {"schema_version": 1, "t_s": [0.0, 0.033], "traces": {"nose": [[1, 2, 3], None]}}
+    api._retain_scan_json(str(d), ".traces.json", traces)
+    api._retain_scan_json(str(d), ".response.json", {"outcome": "ACCEPT"})
+    assert json.loads(pathlib.Path(str(dst) + ".traces.json").read_text()) == traces
+    assert json.loads(pathlib.Path(str(dst) + ".response.json").read_text()) == {"outcome": "ACCEPT"}
+    h = _handler("/api/clips?token=s3cret")
+    h._serve_clip()
+    code, doc = h.sent[-1]
+    assert code == 200 and [r["id"] for r in doc["clips"]] == [dst.name]
+    assert doc["clips"][0]["traces"] is True and doc["clips"][0]["response"] is True
+
+
+def test_trace_retention_writes_nothing_while_retention_is_off(monkeypatch, tmp_path):
+    d = tmp_path / "part"
+    d.mkdir()
+    (d / api.RETAINED_POINTER_NAME).write_text("x.webm")
+    api.CLIPS_DIR.mkdir(parents=True, exist_ok=True)
+    (api.CLIPS_DIR / "x.webm").write_bytes(b"v")
+    api._retain_scan_json(str(d), ".traces.json", {"t_s": [0.0]})
+    assert sorted(f.name for f in api.CLIPS_DIR.iterdir()) == ["x.webm"]

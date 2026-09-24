@@ -150,7 +150,8 @@ CLIPS_MAX_BYTES = int(os.environ.get("AFIB_CLIPS_MAX_MB", "600")) * 1024 * 1024
 # second suffix silently breaks all three: a 30 KB JSON would count as a clip,
 # take a slot in the newest-CLIPS_KEEP window and evict a real recording, and
 # pruning that recording would orphan its JSON forever on an ephemeral disk.
-CLIP_SIDECAR_SUFFIXES = (".timestamps.json", ".shenai.json")
+CLIP_SIDECAR_SUFFIXES = (".timestamps.json", ".shenai.json", ".traces.json",
+                         ".response.json")
 
 # ShenAI's own dense PPG waveform and beat train, posted to /api/scan-signals
 # as JSON and parked under this FIXED name inside the upload's part directory:
@@ -1102,6 +1103,30 @@ def _apply_vascular_tone(doc: dict, raw_traces, header: dict) -> None:
             pass
 
 
+def _retain_scan_json(part_dir, suffix: str, obj) -> None:
+    """Keep this scan's live-frame trace document (".traces.json") or its final
+    response (".response.json") beside its retained clip (2026-09-24). The
+    Vascular Tone card is computed from the traces, which were held in memory
+    only, so a phone pair that read 0.35 % and 0.81 % three minutes apart could
+    not be examined. Same gate and the same pointer as _pair_shenai; best
+    effort - a scan returns whether or not this works."""
+    if not _clips_enabled() or not isinstance(obj, dict):
+        return
+    try:
+        ptr = pathlib.Path(part_dir) / RETAINED_POINTER_NAME
+        if not ptr.exists():
+            return
+        name = os.path.basename(ptr.read_text().strip())
+        retained = CLIPS_DIR / name if name else None
+        if retained is None or not retained.exists():
+            return
+        dst = pathlib.Path(str(retained) + suffix)
+        if not dst.exists():
+            dst.write_text(json.dumps(obj, default=str))
+    except Exception as e:                                     # noqa: BLE001
+        print(f"[clips] {suffix} retain failed: {type(e).__name__}: {e}", flush=True)
+
+
 def _held_traces(upload_id: str):
     """The client's trace document for this job. The trace path has already
     waited for it when it is enabled; otherwise wait here, just as long."""
@@ -1607,7 +1632,11 @@ class MeasureHandler(BaseHTTPRequestHandler):
                  # Sidecars get no rows of their own (filtered out above);
                  # this is how scripts/pull_scan_clips.py knows to ask for
                  # "<id>.shenai.json" through the same gated /api/clip.
-                 "shenai": os.path.exists(str(f) + ".shenai.json")}
+                 "shenai": os.path.exists(str(f) + ".shenai.json"),
+                 # 2026-09-24: the live-frame trace document the Vascular Tone
+                 # card is computed from, and the final response.
+                 "traces": os.path.exists(str(f) + ".traces.json"),
+                 "response": os.path.exists(str(f) + ".response.json")}
                 for f in vids], "keep": CLIPS_KEEP})
             return
 
@@ -2229,7 +2258,11 @@ class MeasureHandler(BaseHTTPRequestHandler):
         # which ran before the job was even queued, will have missed it.
         _pair_shenai(os.path.dirname(path), doc)
         from app.afib_response import finalize_afib_response
-        return finalize_afib_response(doc)
+        out = finalize_afib_response(doc)
+        _retain_scan_json(os.path.dirname(path), ".traces.json",
+                          _peek_traces(os.path.basename(os.path.dirname(path))))
+        _retain_scan_json(os.path.dirname(path), ".response.json", out)
+        return out
 
     @staticmethod
     def _run(video_bytes: bytes, header: dict) -> dict:
