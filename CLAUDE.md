@@ -467,6 +467,27 @@ service first, webapp second - the old service does not read `/api/start`'s body
 different people) read off the new sheet columns; then PORT the gate + processor hook to
 `/beta/cardio`; a CPET/wearable-paired comparison is the only route to an accuracy claim.
 
+## Fitness card: three-way TEST comparison (owner, 2026-10-01)
+
+The card keeps its name ("VO2 Max / Cardiorespiratory Fitness Estimate"), its formula
+(`100*logistic((72-HR)/14)` on the live-frame rate) and its value - unchanged. Only TEST
+scans add a comparison, recorded for the sheet. On `/beta/cardio-staging?test=1` the page
+asks "Is this the same person or a different person?" before each scan (participants
+saved per device as P1, P2, ...), holds ShenAI in POSITIONING until it is answered, asks
+ShenAI for its AGE and BMI metrics, and sends in the `/api/start` BODY (never a URL):
+`test_profile` (id, label, age, sex, height, weight, activity 1-5) and `shenai_profile`
+(ShenAI's age/BMI/height/weight). Neither key is `participant`, so the card can never
+switch basis. `features/fitness_compare.py` reads the FINAL card and records, all on the
+card's own heart rate: the formula value; the Jurca 2005 equation on the typed profile;
+the same equation on ShenAI's age and BMI (sex and activity borrowed from the typed
+profile - ShenAI's SDK outputs no sex and no activity estimate); and ShenAI-minus-manual
+differences. Response: `fitness_comparison` (absent on normal scans). Sheet, last six
+columns: `Test Participant`, `Manual Profile`, `Manual VO2`, `ShenAI Profile`,
+`ShenAI VO2`, `Compare Note`. Verified on a retained clip: all three cards byte-identical
+with and without the profiles. Untested on a phone: whether ShenAI actually fills
+`age_years`/`bmi_kg_per_m2` once AGE/BMI are requested - the first test scan's
+`ShenAI Profile` cell answers it (blank + "ShenAI returned no age and BMI" if not).
+
 ## Owner decisions on record
 
 | date | decision | evidence |
