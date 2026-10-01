@@ -708,6 +708,60 @@ def _participant_block(doc):
     return out or None
 
 
+# Test scans (owner, 2026-10-01): two more profiles may ride in the same start
+# body, for the three-way comparison in features/fitness_compare.py. They are
+# RECORDED, never used: the card stays the resting-heart-rate formula, because
+# neither key is `participant` (the dormant profile basis above). Plain scalars
+# only, short strings only where a word is expected; anything else is dropped.
+TEST_PROFILE_KEYS = ("participant_id", "label", "age", "sex", "height_cm",
+                     "weight_kg", "activity_level")
+TEST_PROFILE_TEXT_KEYS = ("participant_id", "label", "sex")
+SHENAI_PROFILE_KEYS = ("age_years", "bmi_kg_per_m2", "height_cm", "weight_kg")
+
+
+def _scalar_block(raw, keys, text_keys=(), max_len=40):
+    if not isinstance(raw, dict):
+        return None
+    out = {}
+    for k in keys:
+        v = raw.get(k)
+        if v is None or isinstance(v, bool):
+            continue
+        if isinstance(v, (int, float)):
+            if math.isfinite(v):
+                out[k] = v
+        elif k in text_keys and isinstance(v, str) and v.strip() and len(v.strip()) <= max_len:
+            out[k] = v.strip()
+    return out or None
+
+
+def _test_profile_block(doc):
+    return _scalar_block(doc.get("test_profile") if isinstance(doc, dict) else None,
+                         TEST_PROFILE_KEYS, TEST_PROFILE_TEXT_KEYS)
+
+
+def _shenai_profile_block(doc):
+    return _scalar_block(doc.get("shenai_profile") if isinstance(doc, dict) else None,
+                         SHENAI_PROFILE_KEYS)
+
+
+def _apply_fitness_comparison(doc: dict, header: dict) -> None:
+    """On a test scan, record formula vs manual-profile vs ShenAI-profile
+    readings beside the card (doc["fitness_comparison"]). Runs after the card
+    is final - the ShenAI route can still move its rate - and only READS it.
+    Absent unless the client sent a test or ShenAI profile. Never raises."""
+    tp, sp = _test_profile_block(header), _shenai_profile_block(header)
+    if not tp and not sp:
+        return
+    try:
+        from features.fitness_compare import CARD_KEY, compare
+        items = (doc.get("biomarkers") or {}).get("items") or []
+        card = next((i for i in items if isinstance(i, dict) and i.get("key") == CARD_KEY), None)
+        doc["fitness_comparison"] = compare(card, tp, sp)
+    except Exception as e:                                     # noqa: BLE001
+        doc["fitness_comparison"] = {"error": f"comparison failed safely: {type(e).__name__}: {e}"}
+
+
 def measure_video(video_path: str, *, manifest=None,
                   client_timestamps_s=None, duration_ms=None,
                   config_overrides=None, window_s=None, scale=None,
@@ -2165,6 +2219,10 @@ class MeasureHandler(BaseHTTPRequestHandler):
             part = _participant_block(attachment)
             if part:
                 header["participant"] = part
+            for key, block in (("test_profile", _test_profile_block(attachment)),
+                               ("shenai_profile", _shenai_profile_block(attachment))):
+                if block:
+                    header[key] = block
             ext = str(header.get("ext") or "webm").lstrip(".")
             if _part_dir(upload_id).name != upload_id or not upload_id.isascii():
                 raise ValueError("upload_id must be an ASCII identifier of at most 80 characters")
@@ -2320,6 +2378,7 @@ class MeasureHandler(BaseHTTPRequestHandler):
         _apply_vascular_tone(doc, _held_traces(os.path.basename(os.path.dirname(path))),
                              header)
         _apply_afib_result(doc, det)
+        _apply_fitness_comparison(doc, header)
         if header.get("reference"):
             doc["reference"] = header["reference"]
         if header.get("client_capture"):

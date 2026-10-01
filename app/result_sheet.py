@@ -162,6 +162,14 @@ COLUMNS = [
     "Source Window Alignment", "Rhythm Diagnostic ms",
     "Spectral Strongest bpm", "Spectral Selection", "Spectral Peak Audit",
     "Video Interval Rejections", "Video SQI Exact",
+    # 2026-10-01 (owner): TEST scans read fitness three ways, side by side
+    # (features/fitness_compare.py). "Fitness" above stays the card's formula
+    # value, unchanged; these hold the tester's participant id/label, the
+    # details they typed and the equation's result on them, ShenAI's own age/BMI
+    # estimate and the equation's result on it, and where the two differ. Blank
+    # on every scan that is not a test scan.
+    "Test Participant", "Manual Profile", "Manual VO2", "ShenAI Profile", "ShenAI VO2",
+    "Compare Note",
 ]
 
 _POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sheet")
@@ -312,6 +320,24 @@ def _fit_profile(fit_d: dict) -> str:
             f"/PA {i.get('activity_level')}")
 
 
+def _comparison_cells(fc) -> dict:
+    """The test-scan comparison columns; {} (all blank) on a normal scan."""
+    if not isinstance(fc, dict):
+        return {}
+    if fc.get("error"):
+        return {"Compare Note": str(fc["error"])[:300]}
+    m = fc.get("manual") if isinstance(fc.get("manual"), dict) else {}
+    s = fc.get("shenai") if isinstance(fc.get("shenai"), dict) else {}
+    return {
+        "Test Participant": " · ".join(str(x) for x in (m.get("participant_id"), m.get("label")) if x),
+        "Manual Profile": str(m.get("summary") or "")[:200],
+        "Manual VO2": _num(m.get("vo2max_ml_kg_min"), 1),
+        "ShenAI Profile": str(s.get("summary") or "")[:200],
+        "ShenAI VO2": _num(s.get("vo2max_ml_kg_min"), 1),
+        "Compare Note": str(fc.get("note") or "")[:300],
+    }
+
+
 def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
     """Flatten one measure response into {column name: cell value}."""
     ev = _g(doc, "debug", "evidence", default={}) or {}
@@ -419,6 +445,7 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
         "Spectral Peak Audit": json.dumps(spectral, separators=(",", ":"), allow_nan=False) if spectral else "",
         "Video Interval Rejections": json.dumps(vd.get("interval_rejections"), separators=(",", ":"), allow_nan=False) if vd.get("interval_rejections") else "",
         "Video SQI Exact": _num(doc.get("signal_quality_index"), 8),
+        **_comparison_cells(doc.get("fitness_comparison")),
         "Timestamp (UTC)": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
         "Session": doc.get("session") or "",
         "Build": ex.get("build") or "",
