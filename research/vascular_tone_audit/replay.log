@@ -1,0 +1,133 @@
+[clips] retention OFF: AFIB_KEEP_UPLOADS is '' (need one of 1/true/yes/on)
+[measure] trim: 0.36s applied=True kept the last 44.6s from keyframe 82.23s; dropped 3.7s head + 78.5s hole (2 discontinuities); keyframe-seek
+[measure] downscale: 6.3s applied=True reason=None
+[measure] pipeline analysis: 16.55s outcome=NO_RESULT
+[tone-audit] 20260916T080712Z-1234567890-mu3th 48.7 
+[measure] trim: 0.25s applied=True kept the last 45.3s from keyframe 40.63s; dropped 3.4s head + 37.2s hole (2 discontinuities); keyframe-seek
+[measure] downscale: 3.51s applied=True reason=None
+[measure] pipeline analysis: 17.33s outcome=REPEAT_SCAN
+[tone-audit] 20260916T081255Z-1234567890-mu3tp 35.3 
+[measure] trim: 0.3s applied=True kept the last 44.9s from keyframe 23.70s; dropped 3.3s head + 20.4s hole (3 discontinuities); kept across 1 gap of 2.9s (segmented, not cut); keyframe-seek
+[measure] downscale: 3.96s applied=True reason=None
+[measure] pipeline analysis: 19.07s outcome=REPEAT_SCAN
+[tone-audit] 20260916T085327Z-1234567890-mu3v3 19.4 
+[measure] trim: 0.28s applied=True kept the last 42.2s from keyframe 51.75s; dropped 3.7s head + 48.1s hole (2 discontinuities); keyframe-seek
+[measure] downscale: 4.66s applied=True reason=None
+[measure] pipeline analysis: 12.2s outcome=REPEAT_SCAN
+[tone-audit] 20260916T100913Z-1234567890-mu3xu None 
+[measure] trim: 0.19s applied=True kept the last 46.6s from keyframe 37.13s; dropped 3.3s head + 33.8s hole (2 discontinuities); keyframe-seek
+[measure] downscale: 3.09s applied=True reason=None
+[measure] pipeline analysis: 13.33s outcome=REPEAT_SCAN
+[tone-audit] 20260916T101245Z-1234567890-mu3xz 72.3 
+[measure] trim: 0.18s applied=True kept the last 43.0s from keyframe 20.64s; dropped 3.3s head + 17.3s hole (2 discontinuities); keyframe-seek
+[measure] downscale: 2.86s applied=True reason=None
+[measure] pipeline analysis: 15.1s outcome=REPEAT_SCAN
+[tone-audit] 20260916T113355Z-1234567890-mu40v None 
+[measure] trim: 0.2s applied=True kept the last 45.7s from keyframe 41.19s; dropped 3.5s head + 37.7s hole (2 discontinuities); keyframe-seek
+[measure] downscale: 3.24s applied=True reason=None
+[measure] pipeline analysis: 11.98s outcome=REPEAT_SCAN
+[tone-audit] 20260916T114237Z-1234567890-mu416 53.3 
+[measure] trim: 0.13s applied=True kept the last 44.8s from keyframe 56.28s; dropped 3.4s head + 52.8s hole (2 discontinuities); keyframe-seek
+[measure] downscale: 2.76s applied=True reason=None
+[measure] pipeline analysis: 11.95s outcome=NO_RESULT
+[tone-audit] 20260916T114555Z-1234567890-mu41b None 
+[measure] trim: 0.19s applied=True kept the last 46.1s from keyframe 24.59s; dropped 3.3s head + 21.3s hole (1 discontinuity); keyframe-seek
+[measure] downscale: 2.88s applied=True reason=None
+[measure] pipeline analysis: 14.5s outcome=REPEAT_SCAN
+[tone-audit] 20260916T115045Z-1234567890-mu41h 42.0 
+[measure] trim: 0.19s applied=True kept the last 44.2s from keyframe 20.20s; dropped 3.3s head + 16.9s hole (2 discontinuities); keyframe-seek
+[measure] downscale: 5.51s applied=True reason=None
+[measure] pipeline analysis: 17.05s outcome=REPEAT_SCAN
+[tone-audit] 20260916T123737Z-1234567890-mu434 74.8 
+[measure] trim: 0.17s applied=True kept the last 45.4s from keyframe 58.31s; dropped 3.7s head + 54.6s hole (2 discontinuities); keyframe-seek
+[measure] downscale: 2.27s applied=True reason=None
+[measure] pipeline analysis: 7.49s outcome=REPEAT_SCAN
+[tone-audit] 20260916T124523Z-1234567890-mu43f 48.6 
+[measure] trim: 0.12s applied=True kept the last 43.7s from keyframe 57.49s; dropped 3.3s head + 54.2s hole (2 discontinuities); keyframe-seek
+[measure] downscale: 2.26s applied=True reason=None
+[measure] pipeline analysis: 3.54s outcome=NO_RESULT
+[tone-audit] 20260916T125032Z-1234567890-mu43l None 
+[measure] trim: 0.12s applied=True kept the last 44.6s from keyframe 115.94s; dropped 3.5s head + 112.5s hole (2 discontinuities); keyframe-seek
+[measure] downscale: 2.39s applied=True reason=None
+[measure] pipeline analysis: 9.31s outcome=REPEAT_SCAN
+[tone-audit] 20260917T061034Z-6332cf1b-31bf-43 43.9 
+[measure] trim: 0.14s applied=True kept the last 47.8s from keyframe 63.64s; dropped 3.4s head + 60.2s hole (1 discontinuity); keyframe-seek
+[measure] downscale: 2.56s applied=True reason=None
+[measure] pipeline analysis: 9.97s outcome=REPEAT_SCAN
+[tone-audit] 20260917T061454Z-b71e8228-fbe8-41 41.8 
+[measure] trim: 0.18s applied=True kept the last 44.9s from keyframe 48.56s; dropped 3.4s head + 45.2s hole (2 discontinuities); keyframe-seek
+[measure] downscale: 2.54s applied=True reason=None
+[measure] pipeline analysis: 9.16s outcome=REPEAT_SCAN
+[tone-audit] 20260917T061917Z-0d8c2c7a-6179-42 40.0 
+[measure] trim: 0.11s applied=True kept the last 45.3s from keyframe 65.28s; dropped 3.5s head + 61.8s hole (2 discontinuities); keyframe-seek
+[measure] downscale: 2.51s applied=True reason=None
+[measure] pipeline analysis: 9.57s outcome=ACCEPT
+[tone-audit] 20260917T062614Z-91bef2a7-f208-4b 43.6 
+[measure] trim: 0.08s applied=False clip is 31.4s — already within the window
+[measure] downscale: 0.01s applied=False reason=source 480x360 already within 480x360
+[measure] pipeline analysis: 12.27s outcome=REPEAT_SCAN
+[tone-audit] demo_3be50282471d 26.9 
+[measure] trim: 0.08s applied=False clip is 30.3s — already within the window
+[measure] downscale: 0.01s applied=False reason=source 480x360 already within 480x360
+[measure] pipeline analysis: 12.19s outcome=REPEAT_SCAN
+[tone-audit] demo_3e0d3144ad12 38.5 
+[measure] trim: 0.07s applied=False clip is 32.6s — already within the window
+[measure] downscale: 0.01s applied=False reason=source 480x360 already within 480x360
+[measure] pipeline analysis: 12.65s outcome=REPEAT_SCAN
+[tone-audit] demo_7f569c31c6db 88.8 
+[measure] trim: 0.07s applied=False clip is 32.0s — already within the window
+[measure] downscale: 0.01s applied=False reason=source 480x360 already within 480x360
+[measure] pipeline analysis: 17.2s outcome=REPEAT_SCAN
+[tone-audit] demo_90086c783b78 31.9 
+[measure] trim: 0.08s applied=False clip is 30.5s — already within the window
+[measure] downscale: 0.01s applied=False reason=source 480x360 already within 480x360
+[measure] pipeline analysis: 15.77s outcome=REPEAT_SCAN
+[tone-audit] demo_93407fcd7873 80.8 
+[measure] trim: 0.14s applied=False clip is 20.0s — already within the window
+[measure] downscale: 0.01s applied=False reason=source 480x360 already within 480x360
+[measure] pipeline analysis: 13.16s outcome=REPEAT_SCAN
+[tone-audit] demo_b4fd5b565662 49.2 
+[measure] trim: 0.06s applied=False clip is 29.5s — already within the window
+[measure] downscale: 0.01s applied=False reason=source 480x360 already within 480x360
+[measure] pipeline analysis: 17.94s outcome=REPEAT_SCAN
+[tone-audit] demo_c2af2e2f14cb 67.1 
+[measure] trim: 0.06s applied=False clip is 32.2s — already within the window
+[measure] downscale: 0.01s applied=False reason=source 480x360 already within 480x360
+[measure] pipeline analysis: 15.54s outcome=REPEAT_SCAN
+[tone-audit] demo_ca903e56ec5f 33.9 
+[measure] trim: 0.05s applied=False clip is 30.0s — already within the window
+[measure] downscale: 0.01s applied=False reason=source 480x360 already within 480x360
+[measure] pipeline analysis: 14.02s outcome=REPEAT_SCAN
+[tone-audit] demo_ec35f3950358 50.1 
+[measure] trim: 0.06s applied=False clip is 40.3s — already within the window
+[measure] downscale: 0.01s applied=False reason=source 480x360 already within 480x360
+[measure] pipeline analysis: 14.82s outcome=REPEAT_SCAN
+[tone-audit] webapp_1234567890-0fe54b.webm.scaled 37.2 
+[measure] trim: 0.05s applied=False clip is 40.3s — already within the window
+[measure] downscale: 0.01s applied=False reason=source 480x320 already within 480x360
+[measure] pipeline analysis: 12.69s outcome=NO_RESULT
+[tone-audit] webapp_1234567890-0ff908.webm.scaled None 
+[measure] trim: 0.07s applied=False clip is 42.3s — already within the window
+[measure] downscale: 0.01s applied=False reason=source 480x320 already within 480x360
+[measure] pipeline analysis: 15.15s outcome=REPEAT_SCAN
+[tone-audit] webapp_1234567890-95cc7e.webm.scaled 49.5 
+[measure] trim: 0.05s applied=False clip is 40.3s — already within the window
+[measure] downscale: 0.01s applied=False reason=source 480x320 already within 480x360
+[measure] pipeline analysis: 18.66s outcome=REPEAT_SCAN
+[tone-audit] webapp_1234567890-9b3023.webm.scaled 53.5 
+[measure] trim: 0.08s applied=False clip is 42.1s — already within the window
+[measure] downscale: 0.01s applied=False reason=source 480x320 already within 480x360
+[measure] pipeline analysis: 21.74s outcome=REPEAT_SCAN
+[tone-audit] webapp_1234567890-b45221.webm.scaled 54.9 
+[measure] trim: 0.24s applied=True kept the last 71.2s from keyframe 0.00s; keyframe-seek
+[measure] downscale: 9.4s applied=True reason=None
+[measure] pipeline analysis: 26.16s outcome=NO_RESULT
+[tone-audit] webapp_1234567890-d2da8e None 
+[measure] trim: 0.07s applied=False clip is 43.0s — already within the window
+[measure] downscale: 0.01s applied=False reason=source 480x360 already within 480x360
+[measure] pipeline analysis: 19.11s outcome=REPEAT_SCAN
+[tone-audit] webapp_1234567890-dbafd9.webm.scaled 38.8 
+[measure] trim: 0.14s applied=True kept the last 71.8s from keyframe 138.08s; dropped 3.3s head + 134.7s hole (2 discontinuities); keyframe-seek
+[measure] downscale: 7.12s applied=True reason=None
+[measure] pipeline analysis: 31.34s outcome=REPEAT_SCAN
+[tone-audit] webapp_1234567890-ebe749 51.8 

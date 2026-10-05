@@ -154,6 +154,20 @@ COLUMNS = [
     "Source Window Alignment", "Rhythm Diagnostic ms",
     "Spectral Strongest bpm", "Spectral Selection", "Spectral Peak Audit",
     "Video Interval Rejections", "Video SQI Exact",
+    # 2026-09-20 (owner: "record only"): the pulse's phase-locked 2nd harmonic
+    # (features/pulse_harmonics.py) from each signal source of the scan - the
+    # SDK's live-frame waveform, OUR live-frame traces, the compressed clip.
+    # r2 = amplitude relative to the fundamental, phi2 = phase in degrees
+    # relative to the fundamental's own, p = how likely blocks of the scan would
+    # agree this well on the harmonic if none were locked to the pulse (< 0.01
+    # reads as present). Read by nothing: no card, gate or decision.
+    # They exist to answer one question from real scans - does phi2 differ
+    # between PEOPLE (a real pulse shape) or is it the same for everyone
+    # (imposed by the producer)? Read rows with an irregular rhythm separately:
+    # the descriptor is not stable in atrial fibrillation.
+    "H2 SDK r2", "H2 SDK phi2", "H2 SDK p",
+    "H2 Traces r2", "H2 Traces phi2", "H2 Traces p",
+    "H2 Clip phi2", "H2 Clip p", "H2 Note",
 ]
 
 _POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sheet")
@@ -293,6 +307,29 @@ def _shenai_route_cell(r) -> str:
     if r.get("used"):
         return (why if why.startswith("used") else f"used: {why}")[:300]
     return (f"not used: {why}" if why else "not used")[:300]
+
+
+def _h2(doc: dict, source: str) -> dict:
+    """debug.pulse_harmonics_<source> when it holds a value, else {}."""
+    rec = _g(doc, "debug", f"pulse_harmonics_{source}")
+    return rec if isinstance(rec, dict) and rec.get("state") == "ok" else {}
+
+
+def _h2_note(doc: dict) -> str:
+    """Per source: its state, and for a value how far the two halves of the
+    scan disagree (degrees) and where the rate came from. Blank on a legacy doc."""
+    parts = []
+    for source in ("sdk", "traces", "clip"):
+        rec = _g(doc, "debug", f"pulse_harmonics_{source}")
+        if not isinstance(rec, dict):
+            continue
+        bit = f"{source} {rec.get('state') or '?'}"
+        if rec.get("state") == "ok":
+            if rec.get("half_split_dphi2_deg") is not None:
+                bit += f" halves {rec['half_split_dphi2_deg']:.0f}deg"
+            bit += f" f0 {rec.get('f0_hz')} ({rec.get('f0_source')})"
+        parts.append(bit)
+    return " | ".join(parts)[:300]
 
 
 def _fit_profile(fit_d: dict) -> str:
@@ -588,6 +625,15 @@ def row_from_doc(doc: dict, extra: dict | None = None) -> dict:
         "Video ROI Excluded Frames": vd.get("roi_excluded_frames_n") if vd.get("roi_excluded_frames_n") is not None else "",
         "Video ROI Edge Loss s": _num(vd.get("unobserved_edge_s"), 3),
         "ROI Step p99 ms": _num(vd.get("roi_step_p99_ms"), 3),
+        "H2 SDK r2": _num(_h2(doc, "sdk").get("r2"), 4),
+        "H2 SDK phi2": _num(_h2(doc, "sdk").get("phi2_deg"), 1),
+        "H2 SDK p": _num(_h2(doc, "sdk").get("p_value"), 4),
+        "H2 Traces r2": _num(_h2(doc, "traces").get("r2"), 4),
+        "H2 Traces phi2": _num(_h2(doc, "traces").get("phi2_deg"), 1),
+        "H2 Traces p": _num(_h2(doc, "traces").get("p_value"), 4),
+        "H2 Clip phi2": _num(_h2(doc, "clip").get("phi2_deg"), 1),
+        "H2 Clip p": _num(_h2(doc, "clip").get("p_value"), 4),
+        "H2 Note": _h2_note(doc),
     }
 
 

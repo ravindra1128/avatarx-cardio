@@ -1014,6 +1014,7 @@ def _apply_trace_path(doc: dict, det: dict, upload_id: str, manifest: dict) -> N
         rec["analysis_s"] = round(time.perf_counter() - t0, 2)
         rec["sampler"] = raw.get("sampler") if isinstance(raw.get("sampler"), dict) else None
         doc.setdefault("debug", {})["trace_path"] = rec
+        _record_pulse_harmonics(doc, "traces", (tdet or {}).get("ingest"))
         print(f"[measure] trace path: ok={rec.get('ingest_ok')} outcome={rec.get('outcome')} "
               f"class={rec.get('predicted_class')} result={rec.get('afib_result')} "
               f"coh={rec.get('coherence')} tp={rec.get('timing_ms')} n={rec.get('n_intervals')} "
@@ -1021,6 +1022,24 @@ def _apply_trace_path(doc: dict, det: dict, upload_id: str, manifest: dict) -> N
     except Exception as e:                                     # noqa: BLE001
         doc.setdefault("debug", {})["trace_path"] = {
             "ran": False, "reason": f"trace path failed safely: {type(e).__name__}: {e}"}
+
+
+def _record_pulse_harmonics(doc: dict, source: str, payload, ref_bpm=None) -> None:
+    """Recorded only (owner, 2026-09-20): the pulse's phase-locked 2nd harmonic
+    from ONE signal source ("sdk" | "traces" | "clip"), written to
+    debug.pulse_harmonics_<source> and the sheet's H2 columns. Nothing reads it:
+    no card, gate or decision (features/pulse_harmonics.py says why it may not).
+    The rate hint is the scan's live-frame rate - the SDK's, else the request's.
+    Best effort: a scan must return whether or not any of this works."""
+    try:
+        from app.scan_evidence import record_summary
+        from features import pulse_harmonics
+        hint = ((doc.get("debug") or {}).get("shenai_input") or {}).get("sdk_hr_bpm") or ref_bpm
+        record_summary(doc, f"pulse_harmonics_{source}", pulse_harmonics.describe,
+                       source, payload, hint)
+    except Exception as e:                                     # noqa: BLE001
+        doc.setdefault("debug", {})[f"pulse_harmonics_{source}"] = {
+            "version": 1, "state": "assessment_failed", "error_type": type(e).__name__}
 
 
 def _hold_signals(upload_id: str, payload: dict) -> None:
@@ -2127,6 +2146,14 @@ class MeasureHandler(BaseHTTPRequestHandler):
                             part_dir=os.path.dirname(path), attachment=header)
         _apply_trace_path(doc, det, os.path.basename(os.path.dirname(path)),
                           MeasureHandler._build_manifest(header))
+        # Recorded only: the same shape descriptor from the compressed clip and
+        # from the SDK's live-frame waveform (the trace path records its own).
+        ref_bpm = (header.get("reference") or {}).get("ref_hr") \
+            if isinstance(header.get("reference"), dict) else None
+        _record_pulse_harmonics(doc, "clip", (det or {}).get("ingest"), ref_bpm)
+        sdk_raw = (header.get("shenai_signals")
+                   or _peek_signals(os.path.basename(os.path.dirname(path))))
+        _record_pulse_harmonics(doc, "sdk", sdk_raw, ref_bpm)
         _apply_afib_result(doc, det)
         if header.get("reference"):
             doc["reference"] = header["reference"]

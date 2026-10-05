@@ -4,12 +4,12 @@
  "model": "logreg",
  "seed": 7,
  "split_seed": 20260814,
- "git_commit": "no-git",
+ "git_commit": "c86a3f3",
  "config_hash": "a2e538094d369212",
  "datasets": [
   {
    "id": "ds-51f7eda045623736",
-   "path": "/private/var/folders/rj/6lg276_n3vz64zk_t3kzbps00000gn/T/pytest-of-pg/pytest-610/m30/ds",
+   "path": "/private/var/folders/mw/c0dwh50d15q638c0thg88jmm0000gn/T/pytest-of-ravindrasinghbisht/pytest-103/m30/ds",
    "license_class": "internal_consented"
   }
  ],

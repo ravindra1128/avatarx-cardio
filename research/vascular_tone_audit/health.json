@@ -1,0 +1,50 @@
+{
+  "production": {
+    "ok": true,
+    "service": "afib-measure",
+    "build": "c956a4574110",
+    "uptime_s": 405372,
+    "inflight_jobs": 0,
+    "launch_overrides": {
+      "capture.ingest.MAX_COLLAPSED_INTERVAL_FRACTION": "0.02 -> 0.05"
+    },
+    "sheet": {
+      "configured": true,
+      "sheet_id": "1-CHxko3E4_xQBwxGbsUj-WjqY2_LFBVa3kKnkY3WaRo",
+      "gid": "140358874",
+      "queued": 15,
+      "written": 15,
+      "failed": 0,
+      "last_error": null,
+      "last_ok_at": "2026-09-18 15:13:47",
+      "worksheet": "cardio-data"
+    },
+    "max_concurrent": 2,
+    "max_upload_mb": 256
+  },
+  "staging": {
+    "ok": true,
+    "service": "afib-measure",
+    "build": "120edb41dbb2",
+    "uptime_s": 180780,
+    "inflight_jobs": 0,
+    "launch_overrides": {
+      "capture.ingest.MAX_COLLAPSED_INTERVAL_FRACTION": "0.02 -> 0.05",
+      "config.decision.classifier": "model_a",
+      "config.decision.model_a_path": "models/model_a_v02_45s.json"
+    },
+    "sheet": {
+      "configured": true,
+      "sheet_id": "1-CHxko3E4_xQBwxGbsUj-WjqY2_LFBVa3kKnkY3WaRo",
+      "gid": "342232654",
+      "queued": 30,
+      "written": 30,
+      "failed": 0,
+      "last_error": null,
+      "last_ok_at": "2026-09-19 08:48:58",
+      "worksheet": "cardio-staging"
+    },
+    "max_concurrent": 2,
+    "max_upload_mb": 256
+  }
+}
