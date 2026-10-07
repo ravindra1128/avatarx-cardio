@@ -38,3 +38,6 @@ data/eval_cache/
 credentials/
 *.sa.json
 .claude/owner-approved
+
+# Cloud Run upload bundle (rebuilt on demand, never committed)
+cardio-deploy.zip

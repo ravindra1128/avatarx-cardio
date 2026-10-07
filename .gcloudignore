@@ -1,0 +1,32 @@
+# Keep the Cloud Run upload to the code the Dockerfile builds from.
+# data/ and data_cache/ hold real face recordings and datasets (several GB):
+# they must never leave this machine.
+.gcloudignore
+.git
+.gitignore
+.github/
+data/
+data_cache/
+research/
+training/
+evaluation/
+tests/
+docs/
+scripts/
+.claude/
+.claude-flow/
+.codex/
+.agents/
+__pycache__/
+**/__pycache__/
+.pytest_cache/
+.DS_Store
+get-pip.py
+credentials/
+*.sa.json
+*.webm
+*.mp4
+*.avi
+*.mkv
+env.yaml
+*.zip

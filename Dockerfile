@@ -6,7 +6,7 @@
 #     -e AFIB_MAX_COLLAPSED_FRACTION=0.05 \
 #     avatarx-cardio-measure
 #
-# Serves POST /api/process-video and GET /healthz. Stateless: uploads are
+# Serves POST /api/process-video and GET /health. Stateless: uploads are
 # written to a temp dir, analysed, and deleted unless AFIB_KEEP_UPLOADS=1.
 #
 # PORT: honours $PORT if the host platform sets it (Railway, Render, Cloud
@@ -58,7 +58,7 @@ EXPOSE 8770
 # Shell form (not the usual exec-array JSON) so $PORT is substituted by the
 # shell at healthcheck time, using whatever the platform actually injected.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \
-  CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:${PORT:-8770}/healthz',timeout=4).status==200 else 1)"
+  CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:${PORT:-8770}/health',timeout=4).status==200 else 1)"
 
 # Shell form + `exec` so python replaces the shell as PID 1 and receives
 # signals directly (SIGTERM on deploy/restart) rather than the shell eating

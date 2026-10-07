@@ -1455,7 +1455,11 @@ class MeasureHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        if urlparse(self.path).path in ("/healthz", "/api/healthz"):
+        # /health is the Cloud Run path: Cloud Run reserves some paths ending
+        # in "z" and answers /healthz itself with a 404 before the request
+        # reaches the container. /healthz stays for older callers.
+        if urlparse(self.path).path in ("/health", "/api/health",
+                                        "/healthz", "/api/healthz"):
             _RESULT_STORE.purge()
             self._json(200, {"ok": True, "service": "afib-measure",
                              "build": BUILD_SHA,
@@ -2272,7 +2276,7 @@ def serve(host: str = "127.0.0.1", port: int = 8790):
     _maybe_reorder_sheet()
     httpd = _MeasureServer((host, port), MeasureHandler)
     print(f"[measure] afib measure API on http://{host}:{port}", flush=True)
-    print(f"[measure]   POST /api/process-video   GET /healthz", flush=True)
+    print(f"[measure]   POST /api/process-video   GET /health", flush=True)
     print(f"[measure]   allow-origin={ALLOW_ORIGIN} "
           f"max_concurrent={MAX_CONCURRENT}", flush=True)
     if LAUNCH_OVERRIDES:
